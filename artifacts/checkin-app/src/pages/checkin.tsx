@@ -217,20 +217,12 @@ export default function CheckInFlow() {
                   <p className="text-sm font-medium text-muted-foreground">
                     <strong>BONUS:</strong> There's a cool NK3 button for our volunteers!
                   </p>
-                  <div className="flex gap-3 pt-1">
-                    <button
-                      onClick={() => updateRole({ wantsToServeToday: true })}
-                      className={`flex-1 py-2 px-4 rounded-lg border-4 border-foreground font-display text-lg transition-all ${role.wantsToServeToday ? 'bg-primary text-white shadow-brutal-sm' : 'bg-white hover:bg-primary/10'}`}
-                    >
-                      Yes, I'm in!
-                    </button>
-                    <button
-                      onClick={() => updateRole({ wantsToServeToday: false })}
-                      className={`flex-1 py-2 px-4 rounded-lg border-4 border-foreground font-display text-lg transition-all ${!role.wantsToServeToday ? 'bg-foreground text-white shadow-brutal-sm' : 'bg-white hover:bg-gray-100'}`}
-                    >
-                      Not today
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => updateRole({ wantsToServeToday: !role.wantsToServeToday })}
+                    className={`w-full py-2 px-4 rounded-lg border-4 border-foreground font-display text-lg transition-all ${role.wantsToServeToday ? 'bg-primary text-white shadow-brutal-sm' : 'bg-white hover:bg-primary/10'}`}
+                  >
+                    {role.wantsToServeToday ? "✓ Yes, I'm in!" : "Yes, I'm in!"}
+                  </button>
                   <AnimatePresence>
                     {role.wantsToServeToday && (
                       <motion.p
