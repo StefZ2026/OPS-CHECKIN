@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, Smartphone } from "lucide-react";
+import { UserPlus, Mail, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, Smartphone, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,7 +34,7 @@ export default function CheckInFlow() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
-  type Step = 1 | 2 | 3 | 4;
+  type Step = 1 | "found" | 2 | 3 | 4;
   const [step, setStep] = useState<Step>(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -68,10 +68,15 @@ export default function CheckInFlow() {
           toast({ title: "Already Checked In!", description: "Looks like you're already on our list today.", variant: "destructive" });
           handleReset();
         } else if (data.found) {
-          toast({ title: "Found you!", description: "You are pre-registered on Mobilize.", variant: "success" });
           setPreRegistered(true);
           setMobilizeId(data.mobilizeId ?? null);
-          setStep(3); // Skip last name for pre-registered
+          setStep("found");
+          confetti({
+            particleCount: 200,
+            spread: 120,
+            origin: { y: 0.5 },
+            colors: ['#1d4ed8', '#e11d48', '#fbbf24', '#ffffff', '#10b981'],
+          });
         } else {
           setPreRegistered(false);
           setStep(2); // Ask for last name
@@ -115,6 +120,15 @@ export default function CheckInFlow() {
       }
     });
   };
+
+  // Auto-advance from "found" celebration to roles
+  useEffect(() => {
+    if (step === "found") {
+      const timer = setTimeout(() => setStep(3), 3000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [step]);
 
   // Auto-reset on success step
   useEffect(() => {
@@ -194,8 +208,8 @@ export default function CheckInFlow() {
         </div>
         <div className="flex items-center gap-4">
           <img src="/nk3-banner.png" alt="No Kings" className="h-12 md:h-14 w-auto object-contain flex-shrink-0" />
-          {step > 1 && step < 4 && (
-            <Button variant="outline" onClick={() => setStep(prev => Math.max(1, prev - 1) as Step)} size="sm" className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white">
+          {(step === 2 || step === 3) && (
+            <Button variant="outline" onClick={() => setStep(step === 3 ? (preRegistered ? 1 : 2) : 1)} size="sm" className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white">
               <ArrowLeft className="w-5 h-5 mr-2" /> Back
             </Button>
           )}
@@ -275,6 +289,53 @@ export default function CheckInFlow() {
               <p className="text-center text-muted-foreground font-medium text-base mt-3">
                 Pre-registered on Mobilize? Use the first button. New to the rally? Use the second.
               </p>
+            </motion.div>
+          )}
+
+          {/* FOUND: Pre-registration celebration */}
+          {step === "found" && (
+            <motion.div
+              key="found"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ type: "spring", bounce: 0.4 }}
+              className="w-full max-w-2xl mx-auto text-center space-y-8 py-8"
+            >
+              {/* Big smiley */}
+              <motion.div
+                initial={{ rotate: -20, scale: 0 }}
+                animate={{ rotate: [0, -10, 10, -5, 5, 0], scale: 1 }}
+                transition={{ type: "spring", bounce: 0.6, delay: 0.1, rotate: { repeat: 0 } }}
+                className="text-[8rem] md:text-[10rem] leading-none select-none"
+              >
+                😄
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="space-y-4"
+              >
+                <h2 className="font-display text-5xl md:text-7xl text-primary leading-none">
+                  WE FOUND YOU!
+                </h2>
+                <p className="font-display text-3xl md:text-5xl text-foreground leading-tight">
+                  WELCOME TO<br />NO KINGS 3, {firstName.toUpperCase()}!
+                </p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className="flex items-center justify-center gap-3 text-muted-foreground font-bold text-lg"
+              >
+                <PartyPopper className="w-6 h-6 text-primary" />
+                <span>You're pre-registered — continuing in a moment…</span>
+                <PartyPopper className="w-6 h-6 text-primary" />
+              </motion.div>
             </motion.div>
           )}
 
