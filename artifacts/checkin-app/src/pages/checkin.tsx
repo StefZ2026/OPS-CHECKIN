@@ -291,8 +291,13 @@ export default function CheckInFlow() {
                 <div className="inline-flex items-center justify-center w-20 h-20 bg-secondary rounded-full border-4 border-foreground shadow-brutal-sm mb-4">
                   <UserPlus className="w-10 h-10 text-foreground" />
                 </div>
-                <h2 className="font-display text-4xl md:text-5xl">Welcome Walk-in!</h2>
-                <p className="text-xl md:text-2xl font-medium text-muted-foreground">We didn't find a pre-registration. Let's add you right now.</p>
+                <h2 className="font-display text-4xl md:text-5xl">No worries, {firstName}!</h2>
+                <p className="text-xl md:text-2xl font-bold text-muted-foreground">
+                  We didn't find your pre-registration — but don't sweat it.
+                </p>
+                <p className="text-lg md:text-xl font-medium text-muted-foreground">
+                  We can get you checked in and ready to rally in about 2 seconds flat. 🎉
+                </p>
               </div>
 
               <div>
