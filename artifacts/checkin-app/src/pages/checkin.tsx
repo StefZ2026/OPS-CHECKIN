@@ -14,13 +14,14 @@ type RoleState = {
   roleName: AttendeeRoleRoleName;
   hasServed: boolean;
   isTrained: boolean;
+  wantsToServeToday: boolean;
 };
 
 const INITIAL_ROLES: RoleState[] = [
-  { roleName: "safety_marshal", hasServed: false, isTrained: false },
-  { roleName: "medic", hasServed: false, isTrained: false },
-  { roleName: "de_escalator", hasServed: false, isTrained: false },
-  { roleName: "chant_lead", hasServed: false, isTrained: false },
+  { roleName: "safety_marshal", hasServed: false, isTrained: false, wantsToServeToday: false },
+  { roleName: "medic", hasServed: false, isTrained: false, wantsToServeToday: false },
+  { roleName: "de_escalator", hasServed: false, isTrained: false, wantsToServeToday: false },
+  { roleName: "chant_lead", hasServed: false, isTrained: false, wantsToServeToday: false },
 ];
 
 function useIsMobile() {
@@ -104,7 +105,7 @@ export default function CheckInFlow() {
       email: email.trim(),
       preRegistered,
       mobilizeId,
-      roles: roles.filter(r => r.hasServed).map(r => ({ roleName: r.roleName, isTrained: r.isTrained }))
+      roles: roles.filter(r => r.wantsToServeToday).map(r => ({ roleName: r.roleName, isTrained: r.isTrained }))
     };
 
     submitMutation.mutate({ data: payload }, {
@@ -148,50 +149,90 @@ export default function CheckInFlow() {
     description: string
   ) => {
     const role = roles.find(r => r.roleName === id)!;
-    
+    const isEligible = role.hasServed || role.isTrained;
+
     const updateRole = (updates: Partial<RoleState>) => {
-      setRoles(prev => prev.map(r => r.roleName === id ? { ...r, ...updates } : r));
+      setRoles(prev => prev.map(r => {
+        if (r.roleName !== id) return r;
+        const next = { ...r, ...updates };
+        // Clear "serve today" if they uncheck both experience fields
+        if (!next.hasServed && !next.isTrained) next.wantsToServeToday = false;
+        return next;
+      }));
     };
 
     return (
-      <Card className="relative overflow-hidden transition-all duration-300">
-        <div className={`absolute top-0 left-0 w-3 h-full ${role.hasServed ? 'bg-primary' : 'bg-muted'}`} />
-        <CardContent className="pt-6 pl-10 pr-6 pb-6">
-          <div className="flex items-center gap-4 mb-6">
-            <div className={`p-4 rounded-xl border-4 border-foreground shadow-brutal-sm ${role.hasServed ? 'bg-secondary text-foreground' : 'bg-muted text-muted-foreground'}`}>
+      <Card className={`relative overflow-hidden transition-all duration-300 ${role.wantsToServeToday ? 'ring-4 ring-primary' : ''}`}>
+        <div className={`absolute top-0 left-0 w-3 h-full ${role.wantsToServeToday ? 'bg-primary' : isEligible ? 'bg-secondary' : 'bg-muted'}`} />
+        <CardContent className="pt-6 pl-10 pr-6 pb-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className={`p-4 rounded-xl border-4 border-foreground shadow-brutal-sm ${role.wantsToServeToday ? 'bg-primary text-white' : isEligible ? 'bg-secondary text-foreground' : 'bg-muted text-muted-foreground'}`}>
               <Icon className="w-8 h-8 md:w-10 md:h-10" />
             </div>
             <div>
               <h3 className="font-display text-2xl md:text-3xl">{title}</h3>
-              <p className="text-muted-foreground font-medium text-lg leading-tight mt-1">{description}</p>
+              <p className="text-muted-foreground font-medium text-base leading-tight mt-1">{description}</p>
             </div>
           </div>
-          
-          <div className="space-y-4 bg-gray-50 p-4 rounded-xl border-2 border-border/50">
-            <Checkbox 
-              label={`I have served as a ${title} before`}
+
+          <div className="space-y-3 bg-gray-50 p-4 rounded-xl border-2 border-border/50">
+            <Checkbox
+              label={`I've served as a ${title} before (with any group)`}
               checked={role.hasServed}
-              onChange={(e) => updateRole({ hasServed: e.target.checked, isTrained: !e.target.checked ? false : role.isTrained })}
+              onChange={(e) => updateRole({ hasServed: e.target.checked })}
             />
-            
-            <AnimatePresence>
-              {role.hasServed && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                  animate={{ opacity: 1, height: "auto", marginTop: 16 }}
-                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                  className="pl-12 overflow-hidden"
-                >
-                  <Checkbox 
-                    label="I have received formal training for this role"
-                    checked={role.isTrained}
-                    onChange={(e) => updateRole({ isTrained: e.target.checked })}
-                    className="border-primary/20"
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <Checkbox
+              label={`I've received training for this role`}
+              checked={role.isTrained}
+              onChange={(e) => updateRole({ isTrained: e.target.checked })}
+            />
           </div>
+
+          <AnimatePresence>
+            {isEligible && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="border-4 border-primary rounded-xl bg-primary/5 p-4 space-y-3">
+                  <p className="font-bold text-base leading-snug">
+                    Would you like to join us today as a <span className="text-primary">{title}</span>? We promise to take good care of you — and we'd love to have you on the team! 🎉
+                  </p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    <strong>BONUS:</strong> There's a cool NK3 button for our volunteers!
+                  </p>
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      onClick={() => updateRole({ wantsToServeToday: true })}
+                      className={`flex-1 py-2 px-4 rounded-lg border-4 border-foreground font-display text-lg transition-all ${role.wantsToServeToday ? 'bg-primary text-white shadow-brutal-sm' : 'bg-white hover:bg-primary/10'}`}
+                    >
+                      Yes, I'm in!
+                    </button>
+                    <button
+                      onClick={() => updateRole({ wantsToServeToday: false })}
+                      className={`flex-1 py-2 px-4 rounded-lg border-4 border-foreground font-display text-lg transition-all ${!role.wantsToServeToday ? 'bg-foreground text-white shadow-brutal-sm' : 'bg-white hover:bg-gray-100'}`}
+                    >
+                      Not today
+                    </button>
+                  </div>
+                  <AnimatePresence>
+                    {role.wantsToServeToday && (
+                      <motion.p
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="text-sm font-bold text-primary pt-1"
+                      >
+                        After check-in, please come up to the table and ask for a member of the safety team — they'll get you sorted!
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
       </Card>
     );
@@ -404,8 +445,8 @@ export default function CheckInFlow() {
               className="w-full space-y-8 pb-20"
             >
               <div className="text-center space-y-2 mb-8">
-                <h2 className="font-display text-4xl md:text-5xl">Volunteer Roles</h2>
-                <p className="text-xl font-medium text-muted-foreground">Are you able to help with any of these roles today?</p>
+                <h2 className="font-display text-4xl md:text-5xl">Volunteer Experience</h2>
+                <p className="text-xl font-medium text-muted-foreground">Have you served in or been trained for any of these roles? (Check all that apply)</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
