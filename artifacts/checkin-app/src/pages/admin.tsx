@@ -6,6 +6,7 @@ import {
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
+  Eye, EyeOff,
 } from "lucide-react";
 import { useAttendees } from "@/hooks/use-attendees";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
@@ -35,6 +36,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 
 function LoginGate({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -69,14 +71,24 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin password"
-                autoFocus
-                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  autoFocus
+                  className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                </button>
+              </div>
             </div>
             {error && (
               <p className="text-destructive font-bold text-base border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
