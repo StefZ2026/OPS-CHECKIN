@@ -37,7 +37,7 @@ function useIsMobile() {
   }, []);
 }
 
-type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | 4;
+type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4;
 
 export default function CheckInFlow() {
   const { toast } = useToast();
@@ -75,8 +75,7 @@ export default function CheckInFlow() {
     lookupMutation.mutate({ data: { firstName: firstName.trim(), email: email.trim() } }, {
       onSuccess: (data) => {
         if (data.alreadyCheckedIn) {
-          toast({ title: "Already Checked In!", description: "Looks like you're already on our list today.", variant: "destructive" });
-          handleReset();
+          setStep("duplicate");
         } else if (data.found) {
           setPreRegistered(true);
           setMobilizeId(data.mobilizeId ?? null);
@@ -121,7 +120,12 @@ export default function CheckInFlow() {
         }
       },
       onError: (err) => {
-        toast({ title: "Check-in failed", description: err.message || "Please try again.", variant: "destructive" });
+        const msg = (err as { message?: string })?.message ?? "";
+        if (msg.toLowerCase().includes("already")) {
+          setStep("duplicate");
+        } else {
+          toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
+        }
       }
     });
   };
@@ -129,6 +133,11 @@ export default function CheckInFlow() {
   // Auto-advance from "found" to experience step
   useEffect(() => {
     if (step === "found") { const t = setTimeout(() => setStep(3), 3000); return () => clearTimeout(t); }
+  }, [step]);
+
+  // Auto-reset after duplicate screen
+  useEffect(() => {
+    if (step === "duplicate") { const t = setTimeout(handleReset, 7000); return () => clearTimeout(t); }
   }, [step]);
 
   // Auto-advance from volunteer celebration to YOU'RE IN
@@ -406,6 +415,24 @@ export default function CheckInFlow() {
                   <p className="font-bold text-xl">Head over to the volunteer table and ask for a member of the safety team.</p>
                   <p className="font-bold text-xl text-primary">They'll get you your vest and your NK3 volunteer button! 🎉</p>
                 </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* DUPLICATE: Already checked in */}
+          {step === "duplicate" && (
+            <motion.div key="duplicate" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
+              <motion.div initial={{ rotate: -20, scale: 0 }} animate={{ rotate: [0,-10,10,-5,5,0], scale: 1 }}
+                transition={{ type: "spring", bounce: 0.6, delay: 0.1 }} className="text-[8rem] md:text-[10rem] leading-none select-none">👋</motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="space-y-4">
+                <h2 className="font-display text-5xl md:text-7xl text-primary leading-none">HEY {firstName.toUpperCase()}!</h2>
+                <p className="font-display text-3xl md:text-4xl text-foreground leading-snug">
+                  NO WORRIES —<br />WE ALREADY GOT YOU!
+                </p>
+                <p className="text-2xl font-bold text-muted-foreground">
+                  You're checked in and good to go. 💙<br />Go enjoy the rally!
+                </p>
               </motion.div>
             </motion.div>
           )}
