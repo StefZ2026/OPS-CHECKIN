@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ICU No Kings 3 Rally Check-In API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: checkin
+    description: Check-in operations
+  - name: attendees
+    description: Attendee list operations
 paths:
   /healthz:
     get:
@@ -24,6 +27,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /check-in/lookup:
+    post:
+      operationId: lookupAttendee
+      tags: [checkin]
+      summary: Look up attendee by first name and email
+      description: Checks Mobilize pre-registration for the given name and email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupRequest"
+      responses:
+        "200":
+          description: Lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupResult"
+
+  /check-in/submit:
+    post:
+      operationId: submitCheckIn
+      tags: [checkin]
+      summary: Submit a check-in
+      description: Saves the attendee and their selected roles to the database
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckInRequest"
+      responses:
+        "201":
+          description: Check-in saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckInResponse"
+        "409":
+          description: Already checked in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendees:
+    get:
+      operationId: listAttendees
+      tags: [attendees]
+      summary: List all checked-in attendees
+      description: Returns all attendees with their roles for admin review
+      responses:
+        "200":
+          description: List of attendees
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendeeListResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +98,137 @@ components:
       required:
         - status
 
+    LookupRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        email:
+          type: string
+      required:
+        - firstName
+        - email
+
+    LookupResult:
+      type: object
+      properties:
+        found:
+          type: boolean
+          description: Whether the person was found in Mobilize pre-registrations
+        mobilizeId:
+          type: string
+          nullable: true
+          description: Mobilize participant ID if found
+        alreadyCheckedIn:
+          type: boolean
+          description: Whether this person already checked in today
+      required:
+        - found
+        - alreadyCheckedIn
+
+    AttendeeRole:
+      type: object
+      properties:
+        roleName:
+          type: string
+          enum: [safety_marshal, medic, de_escalator, chant_lead]
+        isTrained:
+          type: boolean
+      required:
+        - roleName
+        - isTrained
+
+    CheckInRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        preRegistered:
+          type: boolean
+        mobilizeId:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendeeRole"
+      required:
+        - firstName
+        - lastName
+        - email
+        - preRegistered
+        - roles
+
+    CheckInResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        message:
+          type: string
+      required:
+        - id
+        - message
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    AttendeeWithRoles:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        preRegistered:
+          type: boolean
+        mobilizeId:
+          type: string
+          nullable: true
+        checkedInAt:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendeeRole"
+      required:
+        - id
+        - firstName
+        - lastName
+        - email
+        - preRegistered
+        - checkedInAt
+        - roles
+
+    AttendeeListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        preRegisteredCount:
+          type: integer
+        walkInCount:
+          type: integer
+        attendees:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendeeWithRoles"
+      required:
+        - total
+        - preRegisteredCount
+        - walkInCount
+        - attendees
