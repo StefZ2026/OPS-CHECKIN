@@ -458,9 +458,16 @@ export default function CheckInFlow() {
 
               <div className="fixed bottom-0 left-0 w-full p-6 bg-white border-t-4 border-foreground z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
                 <div className="max-w-5xl mx-auto flex justify-between items-center gap-4">
-                  <p className="hidden md:block font-display text-xl text-muted-foreground">
-                    Ready to go, {firstName}?
-                  </p>
+                  {roles.some(r => r.hasServed || r.isTrained) ? (
+                    <p className="hidden md:block font-display text-xl text-muted-foreground">
+                      Ready to go, {firstName}?
+                    </p>
+                  ) : (
+                    <p className="hidden md:block font-bold text-lg text-muted-foreground leading-snug">
+                      Not a volunteer role today? No worries —<br />
+                      <span className="text-foreground">we're SO glad you're here! Go have fun! 🎉</span>
+                    </p>
+                  )}
                   <Button 
                     size="xl" 
                     className="w-full md:w-auto md:min-w-[300px] shadow-none hover:-translate-y-1 hover:shadow-[0_10px_0_0_#000]" 
