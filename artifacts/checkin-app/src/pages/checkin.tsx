@@ -138,7 +138,7 @@ export default function CheckInFlow() {
 
   // Auto-advance from fun screen to YOU'RE IN
   useEffect(() => {
-    if (step === "fun") { const t = setTimeout(() => setStep(4), 6500); return () => clearTimeout(t); }
+    if (step === "fun") { const t = setTimeout(() => setStep(4), 5000); return () => clearTimeout(t); }
   }, [step]);
 
   // Auto-reset after success
