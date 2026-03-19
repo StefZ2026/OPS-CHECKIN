@@ -41,6 +41,7 @@ export default function CheckInFlow() {
   const [email, setEmail] = useState("");
   const [preRegistered, setPreRegistered] = useState(false);
   const [mobilizeId, setMobilizeId] = useState<string | null>(null);
+  const [walkinSource, setWalkinSource] = useState<"not_found" | "direct">("direct");
   const [roles, setRoles] = useState<RoleState[]>(INITIAL_ROLES);
 
   const lookupMutation = useAttendeeLookup();
@@ -79,7 +80,8 @@ export default function CheckInFlow() {
           });
         } else {
           setPreRegistered(false);
-          setStep(2); // Ask for last name
+          setWalkinSource("not_found");
+          setStep(2);
         }
       },
       onError: () => {
@@ -279,6 +281,7 @@ export default function CheckInFlow() {
                       return;
                     }
                     setPreRegistered(false);
+                    setWalkinSource("direct");
                     setStep(2);
                   }}
                 >
@@ -352,13 +355,24 @@ export default function CheckInFlow() {
                 <div className="inline-flex items-center justify-center w-20 h-20 bg-secondary rounded-full border-4 border-foreground shadow-brutal-sm mb-4">
                   <UserPlus className="w-10 h-10 text-foreground" />
                 </div>
-                <h2 className="font-display text-4xl md:text-5xl">No worries, {firstName}!</h2>
-                <p className="text-xl md:text-2xl font-bold text-muted-foreground">
-                  We didn't find your pre-registration — but don't sweat it.
-                </p>
-                <p className="text-lg md:text-xl font-medium text-muted-foreground">
-                  We can get you checked in and ready to rally in about 2 seconds flat. 🎉
-                </p>
+                {walkinSource === "direct" ? (
+                  <>
+                    <h2 className="font-display text-4xl md:text-5xl">Hi {firstName}, welcome!</h2>
+                    <p className="text-xl md:text-2xl font-medium text-muted-foreground">
+                      Just a little more info and you'll be all set.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="font-display text-4xl md:text-5xl">No worries, {firstName}!</h2>
+                    <p className="text-xl md:text-2xl font-bold text-muted-foreground">
+                      We didn't find your pre-registration — but don't sweat it.
+                    </p>
+                    <p className="text-lg md:text-xl font-medium text-muted-foreground">
+                      We can get you checked in and ready to rally in about 2 seconds flat. 🎉
+                    </p>
+                  </>
+                )}
               </div>
 
               <div>
