@@ -6,7 +6,7 @@ import {
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
-  Eye, EyeOff,
+  Eye, EyeOff, Trash2,
 } from "lucide-react";
 import { useAttendees } from "@/hooks/use-attendees";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
@@ -260,6 +260,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("checkedInAt");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [selectedRole, setSelectedRole] = useState<AttendeeRoleRoleName | null>(null);
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -286,6 +287,24 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const handleLogout = () => {
     clearAdminToken();
     onLogout();
+  };
+
+  const handleDelete = async (email: string, name: string) => {
+    if (!window.confirm(`Remove ${name} from the roster? This cannot be undone.`)) return;
+    try {
+      const res = await fetch("/api/admin/attendees", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAdminToken() ?? ""}`,
+        },
+        body: JSON.stringify({ emails: [email] }),
+      });
+      if (res.ok) refetch();
+      else alert("Delete failed — please try again.");
+    } catch {
+      alert("Delete failed — please try again.");
+    }
   };
 
   const filteredAndSorted = (data?.attendees ?? [])
@@ -401,12 +420,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         {/* Role Breakdown */}
         <div>
-          <h2 className="font-display text-2xl mb-4">Volunteer Role Breakdown</h2>
+          <h2 className="font-display text-2xl mb-4">Volunteer Role Breakdown <span className="font-sans text-sm font-medium text-muted-foreground normal-case">(click a role to see who's signed up)</span></h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {roleCounts.map(({ role, count, trained }) => {
               const meta = ROLE_META[role];
               return (
-                <Card key={role} className="border-2 border-foreground">
+                <Card key={role} className="border-2 border-foreground cursor-pointer hover:border-primary hover:shadow-brutal-sm transition-all"
+                  onClick={() => setSelectedRole(role)}>
                   <CardContent className="p-5">
                     <div className="flex items-center gap-2 mb-3">
                       <meta.Icon className="w-5 h-5" />
@@ -422,6 +442,50 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             })}
           </div>
         </div>
+
+        {/* Role volunteer modal */}
+        {selectedRole && (() => {
+          const meta = ROLE_META[selectedRole];
+          const volunteers = (data?.attendees ?? []).filter(a => a.roles.some(r => r.roleName === selectedRole));
+          return (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => setSelectedRole(null)}>
+              <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b-4 border-foreground">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg border-2 border-foreground ${meta.color}`}>
+                      <meta.Icon className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-display text-2xl">{meta.label}</h3>
+                    <span className="font-display text-xl text-muted-foreground">({volunteers.length})</span>
+                  </div>
+                  <button onClick={() => setSelectedRole(null)} className="text-muted-foreground hover:text-foreground text-2xl font-bold leading-none">×</button>
+                </div>
+                <div className="overflow-y-auto flex-1 p-4">
+                  {volunteers.length === 0 ? (
+                    <p className="text-center text-muted-foreground font-medium py-8">No volunteers signed up yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {volunteers.map(a => {
+                        const roleEntry = a.roles.find(r => r.roleName === selectedRole);
+                        return (
+                          <li key={a.id} className="flex items-center justify-between p-3 rounded-lg border-2 border-border hover:bg-muted/30">
+                            <div>
+                              <p className="font-bold">{a.firstName} {a.lastName}</p>
+                              <p className="text-sm text-muted-foreground">{a.email}</p>
+                            </div>
+                            {roleEntry?.isTrained && (
+                              <span className="text-xs font-bold text-primary border-2 border-primary rounded-full px-2 py-1">Trained ✓</span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Attendee Table */}
         <div className="space-y-4">
@@ -450,6 +514,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         { key: "type" as SortKey, label: "Type" },
                         { key: null, label: "Volunteer Roles" },
                         { key: "checkedInAt" as SortKey, label: "Check-in Time" },
+                        { key: null, label: "" },
                       ] as { key: SortKey | null; label: string }[]
                     ).map(({ key, label }) => (
                       <th
@@ -466,13 +531,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <tbody className="divide-y-2 divide-border">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="p-12 text-center text-xl font-bold text-muted-foreground">
+                      <td colSpan={6} className="p-12 text-center text-xl font-bold text-muted-foreground">
                         Loading roster...
                       </td>
                     </tr>
                   ) : filteredAndSorted.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-12 text-center text-xl font-bold text-muted-foreground">
+                      <td colSpan={6} className="p-12 text-center text-xl font-bold text-muted-foreground">
                         No attendees found.
                       </td>
                     </tr>
@@ -517,6 +582,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         </td>
                         <td className="p-5 text-muted-foreground font-medium whitespace-nowrap">
                           {format(new Date(attendee.checkedInAt), "h:mm a")}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => handleDelete(attendee.email, `${attendee.firstName} ${attendee.lastName}`)}
+                            className="p-2 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Remove attendee"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))
