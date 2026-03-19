@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft } from "lucide-react";
+import { UserPlus, Mail, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,8 +23,16 @@ const INITIAL_ROLES: RoleState[] = [
   { roleName: "chant_lead", hasServed: false, isTrained: false },
 ];
 
+function useIsMobile() {
+  return useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768 || /Mobi|Android|iPhone|iPod/.test(navigator.userAgent);
+  }, []);
+}
+
 export default function CheckInFlow() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   
   type Step = 1 | 2 | 3 | 4;
   const [step, setStep] = useState<Step>(1);
@@ -352,7 +360,7 @@ export default function CheckInFlow() {
               key="step4"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-2xl mx-auto text-center space-y-12 py-20"
+              className="w-full max-w-2xl mx-auto text-center space-y-10 py-12"
             >
               <motion.div 
                 initial={{ rotate: -180, scale: 0 }}
@@ -363,23 +371,47 @@ export default function CheckInFlow() {
                 <CheckCircle className="w-24 h-24 text-white" />
               </motion.div>
               
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <h2 className="font-display text-6xl md:text-8xl text-primary leading-none">
                   YOU'RE IN!
                 </h2>
                 <p className="text-3xl md:text-4xl font-bold">
-                  Thank you, <span className="text-accent underline decoration-8 underline-offset-8">{firstName}</span>.
+                  Welcome to the rally, <span className="text-accent underline decoration-8 underline-offset-8">{firstName}</span>!
                 </p>
                 <p className="text-xl md:text-2xl font-medium text-muted-foreground">
                   Your check-in has been recorded. Let's make our voices heard!
                 </p>
               </div>
 
-              <div className="pt-12">
-                <Button size="lg" variant="outline" onClick={handleReset} className="text-xl">
-                  Next Person (Auto-reset in 5s...)
-                </Button>
-              </div>
+              {/* Phone-specific call to action */}
+              {isMobile && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="border-4 border-foreground rounded-2xl bg-secondary p-8 shadow-brutal space-y-3"
+                >
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <Smartphone className="w-8 h-8" />
+                    <span className="font-display text-2xl">Next Step</span>
+                  </div>
+                  <p className="text-xl md:text-2xl font-bold leading-snug">
+                    Show this screen at the sign-in desk to pick up your welcome gift.
+                  </p>
+                  <p className="text-base font-medium text-muted-foreground italic">
+                    While supplies last — thank you for being here!
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Tablet/volunteer view — reset button */}
+              {!isMobile && (
+                <div className="pt-4">
+                  <Button size="lg" variant="outline" onClick={handleReset} className="text-xl">
+                    Next Person (Auto-reset in 6s...)
+                  </Button>
+                </div>
+              )}
             </motion.div>
           )}
 

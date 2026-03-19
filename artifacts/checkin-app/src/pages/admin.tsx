@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
+import QRCode from "qrcode";
 import {
   Search, Users, UserCheck, UserPlus, RefreshCw,
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
-  Download, LogOut, Lock,
+  Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
 } from "lucide-react";
 import { useAttendees } from "@/hooks/use-attendees";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
@@ -89,6 +90,156 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function CsvUploadSection() {
+  const [csvText, setCsvText] = useState("");
+  const [status, setStatus] = useState<null | { inserted: number; skipped: number; totalInDatabase: number }>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvText((ev.target?.result as string) ?? "");
+    reader.readAsText(file);
+  };
+
+  const handleUpload = async () => {
+    if (!csvText.trim()) { setError("Please select a CSV file first."); return; }
+    setError(""); setLoading(true); setStatus(null);
+    try {
+      const res = await fetch("/api/admin/upload-registrations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAdminToken() ?? ""}`,
+        },
+        body: JSON.stringify({ csv: csvText }),
+      });
+      if (!res.ok) {
+        const d = await res.json() as { error?: string };
+        throw new Error(d.error ?? "Upload failed");
+      }
+      const d = await res.json() as { inserted: number; skipped: number; totalInDatabase: number };
+      setStatus(d);
+      setCsvText("");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="border-2 border-foreground">
+      <CardContent className="p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <Upload className="w-6 h-6" />
+          <h3 className="font-display text-xl">Upload Pre-Registration List</h3>
+        </div>
+        <p className="text-muted-foreground font-medium text-sm">
+          Export your Mobilize attendee list as CSV and upload it here. The app will automatically mark matching attendees as pre-registered during check-in.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFile}
+            className="flex-1 text-sm border-2 border-foreground rounded-lg px-3 py-2 font-medium cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-bold file:bg-foreground file:text-white hover:file:bg-foreground/80"
+          />
+          <Button onClick={handleUpload} isLoading={loading} disabled={!csvText || loading}>
+            <Upload className="w-4 h-4 mr-2" /> Upload
+          </Button>
+        </div>
+        {error && <p className="text-destructive font-bold text-sm">{error}</p>}
+        {status && (
+          <div className="flex items-center gap-3 p-4 bg-green-50 border-2 border-green-600 rounded-xl">
+            <CheckCircle2 className="w-6 h-6 text-green-700 flex-shrink-0" />
+            <p className="font-bold text-green-800 text-sm">
+              Loaded {status.inserted} registrations ({status.skipped} skipped as duplicates) — {status.totalInDatabase} total pre-registrations on file.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QrCodeSection() {
+  const [url, setUrl] = useState(window.location.origin + "/");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  useEffect(() => {
+    if (!url) return;
+    QRCode.toDataURL(url, {
+      width: 400,
+      margin: 2,
+      color: { dark: "#000000", light: "#ffffff" },
+    }).then(setQrDataUrl).catch(console.error);
+  }, [url]);
+
+  const handlePrint = () => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`
+      <html><head><title>NK3 Check-In QR Code</title>
+      <style>
+        body { font-family: sans-serif; text-align: center; padding: 40px; }
+        h1 { font-size: 28px; margin-bottom: 8px; }
+        p { font-size: 16px; color: #555; margin-bottom: 24px; }
+        img { width: 300px; height: 300px; }
+        .url { font-size: 13px; color: #888; margin-top: 16px; word-break: break-all; }
+      </style></head>
+      <body>
+        <h1>No Kings 3 Rally — Check-In</h1>
+        <p>Scan to check in from your phone</p>
+        <img src="${qrDataUrl}" />
+        <div class="url">${url}</div>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  return (
+    <Card className="border-2 border-foreground">
+      <CardContent className="p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <QrCode className="w-6 h-6" />
+          <h3 className="font-display text-xl">Self-Check-In QR Code</h3>
+        </div>
+        <p className="text-muted-foreground font-medium text-sm">
+          Print this and place it on clipboards or at the entrance. Attendees scan it on their phones to check themselves in.
+        </p>
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Paste your published app URL here..."
+            className="flex-1 text-sm border-2 border-foreground rounded-lg px-3 py-2 font-medium focus:outline-none focus:border-primary"
+          />
+        </div>
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          {qrDataUrl && (
+            <img src={qrDataUrl} alt="QR Code" className="w-40 h-40 border-4 border-foreground rounded-xl" />
+          )}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground break-all">{url}</p>
+            <Button variant="outline" onClick={handlePrint} disabled={!qrDataUrl}>
+              <Printer className="w-4 h-4 mr-2" /> Print QR Code
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -228,6 +379,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               <UserPlus className="w-16 h-16 opacity-20" />
             </CardContent>
           </Card>
+        </div>
+
+        {/* Tools: CSV Upload + QR Code */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <CsvUploadSection />
+          <QrCodeSection />
         </div>
 
         {/* Role Breakdown */}
