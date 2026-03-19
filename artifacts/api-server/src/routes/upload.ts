@@ -10,17 +10,32 @@ interface CsvRow {
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string;
 }
 
 function parseHeader(header: string): string {
   return header.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
 }
 
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ""; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
 function parseCsv(text: string): CsvRow[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(",").map(parseHeader);
+  const headers = parseCsvLine(lines[0]).map(parseHeader);
 
   const col = (aliases: string[]) => {
     for (const a of aliases) {
@@ -33,15 +48,17 @@ function parseCsv(text: string): CsvRow[] {
   const firstIdx = col(["firstname", "givenname", "first"]);
   const lastIdx = col(["lastname", "familyname", "last"]);
   const emailIdx = col(["email", "emailaddress"]);
+  const phoneIdx = col(["mobilenumber", "phone", "mobile", "cellphone", "phonenumber"]);
 
   const rows: CsvRow[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(",").map((c) => c.replace(/^"|"$/g, "").trim());
-    const email = emailIdx >= 0 ? cells[emailIdx] : "";
-    const firstName = firstIdx >= 0 ? cells[firstIdx] : "";
-    const lastName = lastIdx >= 0 ? cells[lastIdx] : "";
+    const cells = parseCsvLine(lines[i]);
+    const email = emailIdx >= 0 ? cells[emailIdx]?.replace(/^"|"$/g, "").trim() ?? "" : "";
+    const firstName = firstIdx >= 0 ? cells[firstIdx]?.replace(/^"|"$/g, "").trim() ?? "" : "";
+    const lastName = lastIdx >= 0 ? cells[lastIdx]?.replace(/^"|"$/g, "").trim() ?? "" : "";
+    const phone = phoneIdx >= 0 ? cells[phoneIdx]?.replace(/^"|"$/g, "").replace(/\D/g, "").trim() || undefined : undefined;
     if (email && email.includes("@")) {
-      rows.push({ firstName, lastName, email: email.toLowerCase() });
+      rows.push({ firstName, lastName, email: email.toLowerCase(), phone });
     }
   }
   return rows;
@@ -73,6 +90,7 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
           set: {
             firstName: row.firstName,
             lastName: row.lastName,
+            phone: row.phone ?? null,
           },
         });
       inserted++;

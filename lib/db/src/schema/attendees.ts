@@ -31,6 +31,7 @@ export const preRegistrationsTable = pgTable("pre_registrations", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull().unique(),
+  phone: text("phone"),
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 
