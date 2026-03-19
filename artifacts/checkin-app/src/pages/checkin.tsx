@@ -437,16 +437,17 @@ export default function CheckInFlow() {
             </motion.div>
           )}
 
-          {/* FUN: No worries */}
+          {/* FUN: No worries - transitional */}
           {step === "fun" && (
             <motion.div key="fun" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
               transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
-              <motion.div initial={{ rotate: -20, scale: 0 }} animate={{ rotate: [0,-10,10,-5,5,0], scale: 1 }}
-                transition={{ type: "spring", bounce: 0.6, delay: 0.1 }} className="text-[8rem] md:text-[10rem] leading-none select-none">🎉</motion.div>
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="space-y-4">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-6">
                 <h2 className="font-display text-5xl md:text-7xl text-foreground leading-none">NO WORRIES!</h2>
-                <p className="font-display text-3xl md:text-4xl text-primary leading-snug">WE'RE SO GLAD<br />YOU'RE HERE!</p>
-                <p className="text-2xl font-bold text-muted-foreground">Go have fun, {firstName}! We'll catch you another time. 💙</p>
+                <p className="font-display text-3xl md:text-4xl text-primary leading-snug">WE'LL CATCH YOU<br />ANOTHER TIME, {firstName.toUpperCase()}!</p>
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
+                  className="text-2xl font-bold text-muted-foreground">
+                  Hold tight — we're finishing up your check-in… 💙
+                </motion.p>
               </motion.div>
             </motion.div>
           )}
