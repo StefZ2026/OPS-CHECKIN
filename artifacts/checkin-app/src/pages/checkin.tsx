@@ -328,15 +328,15 @@ export default function CheckInFlow() {
               </div>
 
               <div className="flex flex-col gap-4 pt-4">
-                {anyEligible && (
+                {anyEligible ? (
                   <Button size="xl" className="w-full group" onClick={() => setStep("invite")}>
                     Continue <ArrowRight className="ml-3 w-7 h-7 group-hover:translate-x-1 transition-transform" />
                   </Button>
+                ) : (
+                  <Button size="xl" className="w-full" onClick={() => submitCheckin(roles)} isLoading={submitMutation.isPending}>
+                    None of the above — let's go! →
+                  </Button>
                 )}
-                <Button size="xl" variant={anyEligible ? "outline" : "default"} className={`w-full ${!anyEligible ? '' : 'border-4 border-foreground'}`}
-                  onClick={() => submitCheckin(roles)} isLoading={submitMutation.isPending}>
-                  {anyEligible ? "None of the above — skip to check-in" : "None of the above — let's go! →"}
-                </Button>
               </div>
             </motion.div>
           )}
