@@ -35,7 +35,7 @@ export default function CheckInFlow() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
-  type Step = 1 | "found" | 2 | 3 | 4;
+  type Step = 1 | "found" | 2 | 3 | "fun" | 4;
   const [step, setStep] = useState<Step>(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -108,9 +108,11 @@ export default function CheckInFlow() {
       roles: roles.filter(r => r.wantsToServeToday).map(r => ({ roleName: r.roleName, isTrained: r.isTrained }))
     };
 
+    const hadExperienceButDeclined = roles.some(r => (r.hasServed || r.isTrained) && !r.wantsToServeToday);
+
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
-        setStep(4);
+        setStep(hadExperienceButDeclined ? "fun" : 4);
         confetti({
           particleCount: 150,
           spread: 80,
@@ -128,6 +130,15 @@ export default function CheckInFlow() {
   useEffect(() => {
     if (step === "found") {
       const timer = setTimeout(() => setStep(3), 3000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [step]);
+
+  // Auto-advance from "fun" screen to YOU'RE IN
+  useEffect(() => {
+    if (step === "fun") {
+      const timer = setTimeout(() => setStep(4), 3500);
       return () => clearTimeout(timer);
     }
     return undefined;
@@ -458,16 +469,9 @@ export default function CheckInFlow() {
 
               <div className="fixed bottom-0 left-0 w-full p-6 bg-white border-t-4 border-foreground z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
                 <div className="max-w-5xl mx-auto flex justify-between items-center gap-4">
-                  {roles.some(r => (r.hasServed || r.isTrained) && !r.wantsToServeToday) ? (
-                    <p className="hidden md:block font-bold text-lg text-muted-foreground leading-snug">
-                      No worries —<br />
-                      <span className="text-foreground">we're SO glad you're here! Go have fun! 🎉</span>
-                    </p>
-                  ) : (
-                    <p className="hidden md:block font-display text-xl text-muted-foreground">
-                      Ready to go, {firstName}?
-                    </p>
-                  )}
+                  <p className="hidden md:block font-display text-xl text-muted-foreground">
+                    Ready to go, {firstName}?
+                  </p>
                   <Button 
                     size="xl" 
                     className="w-full md:w-auto md:min-w-[300px] shadow-none hover:-translate-y-1 hover:shadow-[0_10px_0_0_#000]" 
@@ -479,6 +483,44 @@ export default function CheckInFlow() {
                   </Button>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* FUN: No worries celebration screen */}
+          {step === "fun" && (
+            <motion.div
+              key="fun"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ type: "spring", bounce: 0.4 }}
+              className="w-full max-w-2xl mx-auto text-center space-y-8 py-8"
+            >
+              <motion.div
+                initial={{ rotate: -20, scale: 0 }}
+                animate={{ rotate: [0, -10, 10, -5, 5, 0], scale: 1 }}
+                transition={{ type: "spring", bounce: 0.6, delay: 0.1 }}
+                className="text-[8rem] md:text-[10rem] leading-none select-none"
+              >
+                🎉
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="space-y-4"
+              >
+                <h2 className="font-display text-5xl md:text-7xl text-foreground leading-none">
+                  NO WORRIES!
+                </h2>
+                <p className="font-display text-3xl md:text-4xl text-primary leading-snug">
+                  WE'RE SO GLAD<br />YOU'RE HERE!
+                </p>
+                <p className="text-2xl font-bold text-muted-foreground">
+                  Go have fun, {firstName}! 🎊
+                </p>
+              </motion.div>
             </motion.div>
           )}
 
