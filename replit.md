@@ -16,12 +16,23 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Applications
+
+### ICU No Kings 3 Check-In App
+Tablet-optimized event check-in for the ICU (Indivisible Cherokee United) No Kings 3 rally (March 28th).
+- **Frontend**: `artifacts/checkin-app` — React + Vite, served at `/`
+- **Backend**: API routes in `artifacts/api-server/src/routes/checkin.ts` and `attendees.ts`
+- **DB**: `lib/db/src/schema/attendees.ts` — `attendees` + `attendee_roles` tables
+- **Mobilize**: Set `MOBILIZE_API_KEY` env var to enable pre-registration lookup; `MOBILIZE_EVENT_ID` defaults to `901026`
+- **Admin**: Visit `/admin` for the live attendee dashboard
+
 ## Structure
 
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
+│   ├── api-server/         # Express API server (shared backend)
+│   └── checkin-app/        # ICU check-in React + Vite frontend
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks

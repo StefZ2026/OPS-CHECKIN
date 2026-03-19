@@ -1,65 +1,51 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { cva, type VariantProps } from "class-variance-authority"
-
 import { cn } from "@/lib/utils"
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" +
-" hover-elevate active-elevate-2",
-  {
-    variants: {
-      variant: {
-        default:
-           // @replit: no hover, and add primary border
-           "bg-primary text-primary-foreground border border-primary-border",
-        destructive:
-          "bg-destructive text-destructive-foreground shadow-sm border-destructive-border",
-        outline:
-          // @replit Shows the background color of whatever card / sidebar / accent background it is inside of.
-          // Inherits the current text color. Uses shadow-xs. no shadow on active
-          // No hover state
-          " border [border-color:var(--button-outline)] shadow-xs active:shadow-none ",
-        secondary:
-          // @replit border, no hover, no shadow, secondary border.
-          "border bg-secondary text-secondary-foreground border border-secondary-border ",
-        // @replit no hover, transparent border
-        ghost: "border border-transparent",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        // @replit changed sizes
-        default: "min-h-9 px-4 py-2",
-        sm: "min-h-8 rounded-md px-3 text-xs",
-        lg: "min-h-10 rounded-md px-8",
-        icon: "h-9 w-9",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-)
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "default" | "secondary" | "destructive" | "outline" | "ghost";
+  size?: "default" | "sm" | "lg" | "xl" | "icon";
+  isLoading?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
+  ({ className, variant = "default", size = "default", isLoading, children, disabled, ...props }, ref) => {
     return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+      <button
         ref={ref}
+        disabled={disabled || isLoading}
+        className={cn(
+          "inline-flex items-center justify-center rounded-md font-bold transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none uppercase tracking-wide",
+          // Variants
+          variant === "default" && "bg-primary text-primary-foreground border-4 border-foreground shadow-brutal",
+          variant === "secondary" && "bg-secondary text-secondary-foreground border-4 border-foreground shadow-brutal",
+          variant === "destructive" && "bg-destructive text-destructive-foreground border-4 border-foreground shadow-brutal",
+          variant === "outline" && "border-4 border-foreground bg-background hover:bg-muted shadow-brutal",
+          variant === "ghost" && "hover:bg-muted text-foreground",
+          // Sizes
+          size === "default" && "h-12 px-6 py-2 text-lg",
+          size === "sm" && "h-10 px-4 text-base",
+          size === "lg" && "h-16 px-10 text-xl",
+          size === "xl" && "h-20 px-12 text-2xl border-[6px]", // Massive tablet button
+          size === "icon" && "h-12 w-12",
+          className
+        )}
         {...props}
-      />
+      >
+        {isLoading ? (
+          <span className="flex items-center gap-2">
+            <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Loading...
+          </span>
+        ) : (
+          children
+        )}
+      </button>
     )
   }
 )
 Button.displayName = "Button"
 
-export { Button, buttonVariants }
+export { Button }

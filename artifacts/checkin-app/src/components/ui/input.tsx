@@ -1,19 +1,34 @@
 import * as React from "react"
-
 import { cn } from "@/lib/utils"
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  icon?: React.ReactNode;
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, icon, ...props }, ref) => {
     return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
+      <div className="relative w-full group">
+        {icon && (
+          <div className="absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
+            {icon}
+          </div>
         )}
-        ref={ref}
-        {...props}
-      />
+        <input
+          type={type}
+          className={cn(
+            "flex w-full rounded-md border-[4px] border-foreground bg-white text-foreground shadow-brutal-sm transition-all",
+            "file:border-0 file:bg-transparent file:text-sm file:font-medium",
+            "placeholder:text-muted-foreground",
+            "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring focus-visible:border-primary",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            icon ? "pl-14 pr-6 py-5 text-xl lg:text-2xl" : "px-6 py-5 text-xl lg:text-2xl",
+            className
+          )}
+          ref={ref}
+          {...props}
+        />
+      </div>
     )
   }
 )
