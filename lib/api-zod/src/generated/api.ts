@@ -45,6 +45,7 @@ export const SubmitCheckInBody = zod.object({
   firstName: zod.string(),
   lastName: zod.string(),
   email: zod.string(),
+  phone: zod.string().optional().nullable(),
   preRegistered: zod.boolean(),
   mobilizeId: zod.string().nullish(),
   roles: zod.array(

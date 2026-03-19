@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, Smartphone, PartyPopper } from "lucide-react";
+import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, Smartphone, PartyPopper } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +40,7 @@ export default function CheckInFlow() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [preRegistered, setPreRegistered] = useState(false);
   const [mobilizeId, setMobilizeId] = useState<string | null>(null);
   const [walkinSource, setWalkinSource] = useState<"not_found" | "direct">("direct");
@@ -53,6 +54,7 @@ export default function CheckInFlow() {
     setFirstName("");
     setLastName("");
     setEmail("");
+    setPhone("");
     setPreRegistered(false);
     setMobilizeId(null);
     setRoles(INITIAL_ROLES);
@@ -101,8 +103,9 @@ export default function CheckInFlow() {
 
     const payload = {
       firstName: firstName.trim(),
-      lastName: lastName.trim() || "Unknown", // Handle edge cases if pre-registered lacked last name
+      lastName: lastName.trim() || "Unknown",
       email: email.trim(),
+      phone: phone.trim() || null,
       preRegistered,
       mobilizeId,
       roles: roles.filter(r => r.wantsToServeToday).map(r => ({ roleName: r.roleName, isTrained: r.isTrained }))
@@ -436,6 +439,20 @@ export default function CheckInFlow() {
                   onChange={(e) => setLastName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && setStep(3)}
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="font-display text-xl uppercase tracking-wider mb-2 block">
+                  Phone Number <span className="text-muted-foreground font-sans font-medium normal-case text-base">(optional)</span>
+                </label>
+                <Input 
+                  placeholder="Enter your phone number" 
+                  type="tel"
+                  icon={<Phone className="w-8 h-8" />}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && setStep(3)}
                 />
               </div>
 

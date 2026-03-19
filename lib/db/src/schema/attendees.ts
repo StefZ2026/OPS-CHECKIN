@@ -14,6 +14,7 @@ export const attendeesTable = pgTable("attendees", {
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
+  phone: text("phone"),
   preRegistered: boolean("pre_registered").notNull().default(false),
   mobilizeId: text("mobilize_id"),
   checkedInAt: timestamp("checked_in_at").notNull().defaultNow(),

@@ -117,7 +117,7 @@ router.post("/check-in/submit", async (req, res) => {
     return;
   }
 
-  const { firstName, lastName, email, preRegistered, mobilizeId, roles } = parsed.data;
+  const { firstName, lastName, email, phone, preRegistered, mobilizeId, roles } = parsed.data;
 
   const existing = await db
     .select()
@@ -136,6 +136,7 @@ router.post("/check-in/submit", async (req, res) => {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.toLowerCase().trim(),
+      phone: phone?.replace(/\D/g, "") || null,
       preRegistered,
       mobilizeId: mobilizeId ?? null,
     })
