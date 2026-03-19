@@ -9,8 +9,8 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(checkinRouter);
-router.use(requireAdminAuth, attendeesRouter);
 router.use(adminRouter);
 router.use(uploadRouter);
+router.use(requireAdminAuth, attendeesRouter);
 
 export default router;
