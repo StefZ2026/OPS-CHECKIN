@@ -178,7 +178,7 @@ export default function CheckInFlow() {
       {/* Header */}
       <header className="py-4 px-6 md:px-12 border-b-4 border-foreground bg-foreground flex items-center justify-between z-10 sticky top-0">
         <div className="flex items-center gap-4">
-          <img src="/icu-logo.jpg" alt="Indivisible Cherokee United" className="w-14 h-14 md:w-16 md:h-16 rounded-full object-cover" />
+          <img src="/icu-logo.jpg" alt="Indivisible Cherokee United" className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover" />
           <div>
             <h1 className="font-display text-xl md:text-3xl text-white leading-tight">No Kings 3 Rally</h1>
             <p className="text-white/70 text-sm font-medium hidden md:block">March 28th · ICU Check-In</p>
