@@ -185,7 +185,7 @@ export default function CheckInFlow() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <img src="/nk3-banner.png" alt="No Kings" className="h-10 md:h-12 w-auto object-contain flex-shrink-0" />
+          <img src="/nk3-banner.png" alt="No Kings" className="h-12 md:h-14 w-auto object-contain flex-shrink-0 mix-blend-screen" />
           {step > 1 && step < 4 && (
             <Button variant="outline" onClick={() => setStep(prev => Math.max(1, prev - 1) as Step)} size="sm" className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white">
               <ArrowLeft className="w-5 h-5 mr-2" /> Back

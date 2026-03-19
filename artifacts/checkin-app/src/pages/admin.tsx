@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { Search, Users, UserCheck, UserPlus, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, Shield, Activity, HeartHandshake, Megaphone } from "lucide-react";
+import {
+  Search, Users, UserCheck, UserPlus, RefreshCw,
+  ChevronUp, ChevronDown, ChevronsUpDown,
+  Shield, Activity, HeartHandshake, Megaphone,
+  Download, LogOut, Lock,
+} from "lucide-react";
 import { useAttendees } from "@/hooks/use-attendees";
+import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,19 +32,97 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
     : <ChevronDown className="w-4 h-4 inline ml-1" />;
 }
 
-export default function AdminDashboard() {
+function LoginGate({ onLogin }: { onLogin: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const token = await loginAdmin(password);
+      setAdminToken(token);
+      onLogin();
+    } catch {
+      setError("Incorrect password. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
+      <Card className="w-full max-w-md border-4 border-primary shadow-brutal-lg">
+        <CardContent className="p-10">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-4 bg-primary text-white rounded-xl border-4 border-foreground shadow-brutal">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div>
+              <h1 className="font-display text-3xl leading-tight">Admin Access</h1>
+              <p className="text-muted-foreground font-medium">ICU No Kings 3 Rally</p>
+            </div>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter admin password"
+                autoFocus
+                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
+              />
+            </div>
+            {error && (
+              <p className="text-destructive font-bold text-base border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
+                {error}
+              </p>
+            )}
+            <Button type="submit" size="lg" className="w-full" isLoading={loading}>
+              {loading ? "Checking..." : "Unlock Dashboard"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function Dashboard({ onLogout }: { onLogout: () => void }) {
   const { data, isLoading, isError, refetch, isRefetching } = useAttendees();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("checkedInAt");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const handleSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const handleExport = () => {
+    const token = getAdminToken();
+    const url = "/api/admin/export";
+    const a = document.createElement("a");
+    a.href = url;
+    a.setAttribute("download", "");
+    const fetchAndDownload = async () => {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token ?? ""}` } });
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      a.href = objectUrl;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    };
+    fetchAndDownload().catch(console.error);
+  };
+
+  const handleLogout = () => {
+    clearAdminToken();
+    onLogout();
   };
 
   const filteredAndSorted = (data?.attendees ?? [])
@@ -74,7 +158,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-foreground text-white py-6 px-6 md:px-12 sticky top-0 z-20 border-b-8 border-primary">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
@@ -84,7 +167,7 @@ export default function AdminDashboard() {
               <p className="text-lg text-gray-300 font-medium">ICU No Kings 3 Rally · March 28th</p>
             </div>
           </div>
-          <div className="flex gap-4 w-full md:w-auto">
+          <div className="flex gap-3 w-full md:w-auto flex-wrap">
             <Button
               variant="outline"
               className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white"
@@ -93,6 +176,22 @@ export default function AdminDashboard() {
             >
               <RefreshCw className={`w-5 h-5 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleExport}
+              disabled={isLoading}
+            >
+              <Download className="w-5 h-5 mr-2" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white"
+              onClick={handleLogout}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
             </Button>
           </div>
         </div>
@@ -261,4 +360,14 @@ export default function AdminDashboard() {
       </main>
     </div>
   );
+}
+
+export default function AdminDashboard() {
+  const [authed, setAuthed] = useState(() => !!getAdminToken());
+
+  if (!authed) {
+    return <LoginGate onLogin={() => setAuthed(true)} />;
+  }
+
+  return <Dashboard onLogout={() => setAuthed(false)} />;
 }
