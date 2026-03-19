@@ -48,4 +48,21 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 )
 Button.displayName = "Button"
 
+export function buttonVariants({ variant = "default", size = "default", className = "" }: { variant?: ButtonProps["variant"]; size?: ButtonProps["size"]; className?: string } = {}) {
+  return [
+    "inline-flex items-center justify-center rounded-md font-bold transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none uppercase tracking-wide",
+    variant === "default" && "bg-primary text-primary-foreground border-4 border-foreground shadow-brutal",
+    variant === "secondary" && "bg-secondary text-secondary-foreground border-4 border-foreground shadow-brutal",
+    variant === "destructive" && "bg-destructive text-destructive-foreground border-4 border-foreground shadow-brutal",
+    variant === "outline" && "border-4 border-foreground bg-background hover:bg-muted shadow-brutal",
+    variant === "ghost" && "hover:bg-muted text-foreground",
+    size === "default" && "h-12 px-6 py-2 text-lg",
+    size === "sm" && "h-10 px-4 text-base",
+    size === "lg" && "h-16 px-10 text-xl",
+    size === "xl" && "h-20 px-12 text-2xl border-[6px]",
+    size === "icon" && "h-12 w-12",
+    className,
+  ].filter(Boolean).join(" ");
+}
+
 export { Button }

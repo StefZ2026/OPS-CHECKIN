@@ -12,6 +12,21 @@ const router: IRouter = Router();
 const MOBILIZE_API_KEY = process.env.MOBILIZE_API_KEY;
 const MOBILIZE_EVENT_ID = process.env.MOBILIZE_EVENT_ID || "901026";
 
+interface MobilizePerson {
+  given_name?: string;
+  family_name?: string;
+  email_address?: string;
+}
+
+interface MobilizeParticipation {
+  id: number;
+  person?: MobilizePerson;
+}
+
+interface MobilizeResponse {
+  data?: MobilizeParticipation[];
+}
+
 async function lookupInMobilize(
   firstName: string,
   email: string
@@ -33,13 +48,12 @@ async function lookupInMobilize(
       return { found: false };
     }
 
-    const data = await res.json();
-    const participations = data.data || [];
+    const data = (await res.json()) as MobilizeResponse;
+    const participations = data.data ?? [];
 
-    const match = participations.find((p: any) => {
-      const person = p.person || {};
+    const match = participations.find((p) => {
       const nameMatch =
-        person.given_name?.toLowerCase() === firstName.toLowerCase();
+        p.person?.given_name?.toLowerCase() === firstName.toLowerCase();
       return nameMatch;
     });
 

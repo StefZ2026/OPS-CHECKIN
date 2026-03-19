@@ -26,7 +26,8 @@ const INITIAL_ROLES: RoleState[] = [
 export default function CheckInFlow() {
   const { toast } = useToast();
   
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  type Step = 1 | 2 | 3 | 4;
+  const [step, setStep] = useState<Step>(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -113,6 +114,7 @@ export default function CheckInFlow() {
       const timer = setTimeout(handleReset, 6000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [step]);
 
   const renderRoleCard = (
@@ -176,16 +178,16 @@ export default function CheckInFlow() {
       {/* Header */}
       <header className="py-4 px-6 md:px-12 border-b-4 border-foreground bg-foreground flex items-center justify-between z-10 sticky top-0">
         <div className="flex items-center gap-4">
-          <img src="/icu-logo.jpg" alt="Indivisible Cherokee United" className="w-14 h-14 md:w-16 md:h-16 rounded-full object-cover border-4 border-white" />
+          <img src="/icu-logo.jpg" alt="Indivisible Cherokee United" className="w-14 h-14 md:w-16 md:h-16 rounded-full object-cover" />
           <div>
             <h1 className="font-display text-xl md:text-3xl text-white leading-tight">No Kings 3 Rally</h1>
             <p className="text-white/70 text-sm font-medium hidden md:block">March 28th · ICU Check-In</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <img src="/nk3-logo.png" alt="No Kings 3" className="h-16 md:h-20 w-auto object-contain flex-shrink-0" />
+          <img src="/nk3-banner.png" alt="No Kings" className="h-10 md:h-12 w-auto object-contain flex-shrink-0" />
           {step > 1 && step < 4 && (
-            <Button variant="outline" onClick={() => setStep(prev => (prev - 1) as any)} size="sm" className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white">
+            <Button variant="outline" onClick={() => setStep(prev => Math.max(1, prev - 1) as Step)} size="sm" className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white">
               <ArrowLeft className="w-5 h-5 mr-2" /> Back
             </Button>
           )}
