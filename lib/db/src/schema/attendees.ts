@@ -26,6 +26,16 @@ export const attendeeRolesTable = pgTable("attendee_roles", {
   isTrained: boolean("is_trained").notNull().default(false),
 });
 
+export const preRegistrationsTable = pgTable("pre_registrations", {
+  id: serial("id").primaryKey(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull().unique(),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+});
+
+export type PreRegistration = typeof preRegistrationsTable.$inferSelect;
+
 export const insertAttendeeSchema = createInsertSchema(attendeesTable).omit({ id: true, checkedInAt: true });
 export const insertAttendeeRoleSchema = createInsertSchema(attendeeRolesTable).omit({ id: true });
 

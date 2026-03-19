@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { attendeesTable, attendeeRolesTable } from "@workspace/db/schema";
+import { attendeesTable, attendeeRolesTable, preRegistrationsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import {
   LookupAttendeeBody,
@@ -88,6 +88,19 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
+  // Check the uploaded pre-registration CSV list first
+  const preReg = await db
+    .select()
+    .from(preRegistrationsTable)
+    .where(eq(preRegistrationsTable.email, email.toLowerCase().trim()))
+    .limit(1);
+
+  if (preReg.length > 0) {
+    res.json({ found: true, alreadyCheckedIn: false });
+    return;
+  }
+
+  // Fall back to Mobilize API if key is available
   const mobilize = await lookupInMobilize(firstName, email);
 
   res.json({
