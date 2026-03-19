@@ -114,7 +114,6 @@ export default function CheckInFlow() {
           confetti({ particleCount: 250, spread: 140, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
           setStep("volunteer");
         } else if (declinedAll) {
-          confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 }, colors: ['#fbbf24','#ffffff','#10b981'] });
           setStep("fun");
         } else {
           confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff'] });
@@ -139,7 +138,7 @@ export default function CheckInFlow() {
 
   // Auto-advance from fun screen to YOU'RE IN
   useEffect(() => {
-    if (step === "fun") { const t = setTimeout(() => setStep(4), 3500); return () => clearTimeout(t); }
+    if (step === "fun") { const t = setTimeout(() => setStep(4), 6500); return () => clearTimeout(t); }
   }, [step]);
 
   // Auto-reset after success
