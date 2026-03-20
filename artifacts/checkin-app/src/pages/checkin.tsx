@@ -815,38 +815,34 @@ export default function CheckInFlow() {
             <motion.div key="dup_name_confirm" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
               className="w-full max-w-2xl mx-auto space-y-6">
               <div className="text-center space-y-3">
-                <div className="flex justify-center">
-                  <div className="p-4 rounded-2xl border-4 border-yellow-500 bg-yellow-50">
-                    <AlertCircle className="w-10 h-10 text-yellow-600" />
-                  </div>
-                </div>
-                <h2 className="font-display text-4xl md:text-5xl leading-tight">Quick check!</h2>
+                <div className="text-5xl">👋</div>
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">We've got you!</h2>
                 <p className="text-xl font-medium text-muted-foreground">
-                  We already have you checked in, but noticed two different spellings of your name. Which is correct?
+                  But we noticed your name is spelled a little differently than what we have on file. What's the correct spelling?
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {/* Option 1: What they typed — recommended */}
-                <button onClick={async () => {
-                  await correctStoredName(storedAttendeeId, firstName.trim(), lastName.trim());
+                {/* Option 1: What's stored — recommended (original registration, less likely to be a typo) */}
+                <button onClick={() => {
                   setStoredName(null); setStoredAttendeeId(null);
                   setStep("duplicate");
                 }} className="group w-full p-5 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/10 text-left transition-all space-y-1">
                   <div className="flex items-center justify-between">
-                    <p className="font-display text-2xl text-primary">{firstName} {lastName}</p>
+                    <p className="font-display text-2xl text-primary">{storedName.firstName} {storedName.lastName}</p>
                     <span className="text-xs font-bold bg-primary text-white px-2 py-1 rounded-full">RECOMMENDED</span>
                   </div>
-                  <p className="text-sm font-medium text-muted-foreground">What you entered today — you know your name best</p>
+                  <p className="text-sm font-medium text-muted-foreground">What we have on file from your original check-in</p>
                 </button>
 
-                {/* Option 2: What's stored */}
-                <button onClick={() => {
+                {/* Option 2: What they just typed — could be a typo */}
+                <button onClick={async () => {
+                  await correctStoredName(storedAttendeeId, firstName.trim(), lastName.trim());
                   setStoredName(null); setStoredAttendeeId(null);
                   setStep("duplicate");
                 }} className="w-full p-5 rounded-2xl border-4 border-foreground bg-white hover:bg-gray-50 text-left transition-all space-y-1">
-                  <p className="font-display text-2xl">{storedName.firstName} {storedName.lastName}</p>
-                  <p className="text-sm font-medium text-muted-foreground">What we have on file from your check-in</p>
+                  <p className="font-display text-2xl">{firstName} {lastName}</p>
+                  <p className="text-sm font-medium text-muted-foreground">What you entered today — choose this to correct the spelling</p>
                 </button>
               </div>
             </motion.div>
