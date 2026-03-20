@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { requireAdminAuth } from "./admin";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -83,21 +83,30 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
   const byPhone = new Map<string, CsvRow>();
   const byName = new Map<string, CsvRow>();
 
+  type NameConflict = {
+    email: string;
+    option1: { firstName: string; lastName: string; context: string };
+    option2: { firstName: string; lastName: string; context: string };
+    recommendation: 1 | 2;
+    recommendationReason: string;
+  };
+  const nameConflicts: NameConflict[] = [];
+
   function mergeRows(a: CsvRow, b: CsvRow): CsvRow {
-    // Fill in missing data only — never overwrite existing values
     return {
-      firstName: a.firstName || b.firstName,
-      lastName: a.lastName || b.lastName,
-      email: a.email || b.email,
+      firstName: b.firstName || a.firstName, // later entry (b) wins for name
+      lastName: b.lastName || a.lastName,
+      email: a.email || b.email,             // fill in missing for contact info
       phone: a.phone || b.phone,
     };
   }
 
-  function findExisting(r: CsvRow): CsvRow | undefined {
+  function findExisting(r: CsvRow): { record: CsvRow; byContact: boolean } | undefined {
     const nameKey = `${r.firstName.toLowerCase().trim()} ${r.lastName.toLowerCase().trim()}`;
-    if (r.email && byEmail.has(r.email.toLowerCase())) return byEmail.get(r.email.toLowerCase());
-    if (r.phone && byPhone.has(r.phone)) return byPhone.get(r.phone);
-    if (nameKey.trim() !== " ") return byName.get(nameKey);
+    if (r.email && byEmail.has(r.email.toLowerCase())) return { record: byEmail.get(r.email.toLowerCase())!, byContact: true };
+    if (r.phone && byPhone.has(r.phone)) return { record: byPhone.get(r.phone)!, byContact: true };
+    const rec = byName.get(nameKey);
+    if (rec) return { record: rec, byContact: false };
     return undefined;
   }
 
@@ -109,10 +118,24 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
   }
 
   for (const r of rawRows) {
-    const existing = findExisting(r);
-    if (existing) {
+    const found = findExisting(r);
+    if (found) {
+      const { record: existing, byContact } = found;
+      const existingName = `${existing.firstName} ${existing.lastName}`.trim().toLowerCase();
+      const newName = `${r.firstName} ${r.lastName}`.trim().toLowerCase();
+
+      // Same contact info, different name spelling → flag for admin review
+      if (byContact && existingName !== newName && existingName && newName) {
+        nameConflicts.push({
+          email: existing.email || r.email,
+          option1: { firstName: existing.firstName, lastName: existing.lastName, context: "Earlier entry in this file" },
+          option2: { firstName: r.firstName, lastName: r.lastName, context: "Later entry — more likely current" },
+          recommendation: 2,
+          recommendationReason: "The later entry is more likely to reflect the correct current spelling",
+        });
+      }
+
       const merged = mergeRows(existing, r);
-      // Remove old index entries and re-index with merged data
       const oldNameKey = `${existing.firstName.toLowerCase().trim()} ${existing.lastName.toLowerCase().trim()}`;
       byName.delete(oldNameKey);
       if (existing.email) byEmail.delete(existing.email.toLowerCase());
@@ -153,7 +176,20 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     .select({ count: sql<number>`count(*)` })
     .from(preRegistrationsTable);
 
-  res.json({ inserted, skipped, totalInDatabase: Number(total[0].count) });
+  res.json({ inserted, skipped, totalInDatabase: Number(total[0].count), nameConflicts });
+});
+
+// Admin picks the correct spelling for a name conflict
+router.post("/admin/upload-registrations/resolve-name", requireAdminAuth, async (req, res) => {
+  const { email, firstName, lastName } = req.body as { email?: string; firstName?: string; lastName?: string };
+  if (!email || !firstName || lastName === undefined) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+  await db.update(preRegistrationsTable)
+    .set({ firstName, lastName })
+    .where(eq(preRegistrationsTable.email, email));
+  res.json({ ok: true });
 });
 
 router.get("/admin/registrations/count", requireAdminAuth, async (_req, res) => {

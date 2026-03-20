@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info } from "lucide-react";
+import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,7 +46,7 @@ function useIsMobile() {
 }
 
 type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
-          | "vol_found" | "vol_not_found" | "vol_manual";
+          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
@@ -66,6 +66,7 @@ export default function CheckInFlow() {
   const [checkedInVolunteerRole, setCheckedInVolunteerRole] = useState<AttendeeRoleRoleName | null>(null);
   const [volunteerManualRole, setVolunteerManualRole] = useState<AttendeeRoleRoleName | null>(null);
   const [isVolunteerManual, setIsVolunteerManual] = useState(false);
+  const [preRegName, setPreRegName] = useState<{ firstName: string; lastName: string } | null>(null);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -84,6 +85,7 @@ export default function CheckInFlow() {
     setCheckedInVolunteerRole(null);
     setVolunteerManualRole(null);
     setIsVolunteerManual(false);
+    setPreRegName(null);
   };
 
   const handleLookup = () => {
@@ -120,8 +122,17 @@ export default function CheckInFlow() {
         if (data.found) {
           setPreRegistered(true);
           setMobilizeId(data.mobilizeId ?? null);
-          setStep("found");
-          confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
+          // Check if name on file differs from what they typed
+          const d = data as typeof data & { foundFirstName?: string; foundLastName?: string };
+          const foundFirst = (d.foundFirstName ?? "").trim().toLowerCase();
+          const typedFirst = firstName.trim().toLowerCase();
+          if (d.foundFirstName && foundFirst !== typedFirst) {
+            setPreRegName({ firstName: d.foundFirstName, lastName: d.foundLastName ?? "" });
+            setStep("name_confirm");
+          } else {
+            setStep("found");
+            confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
+          }
         } else {
           setPreRegistered(false);
           setWalkinSource("not_found");
@@ -726,7 +737,51 @@ export default function CheckInFlow() {
             </motion.div>
           )}
 
-          {/* DUPLICATE: Already checked in */}
+          {/* NAME_CONFIRM: Name on file differs from what they typed */}
+          {step === "name_confirm" && preRegName && (
+            <motion.div key="name_confirm" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-6">
+              <div className="text-center space-y-3">
+                <div className="flex justify-center">
+                  <div className="p-4 rounded-2xl border-4 border-yellow-500 bg-yellow-50">
+                    <AlertCircle className="w-10 h-10 text-yellow-600" />
+                  </div>
+                </div>
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">Quick check!</h2>
+                <p className="text-xl font-medium text-muted-foreground">
+                  We found your registration, but there are two different spellings of your name. Which is correct?
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {/* Option 1: What they typed — recommended */}
+                <button onClick={() => {
+                  setPreRegName(null);
+                  confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
+                  setStep("found");
+                }} className="group w-full p-5 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/10 text-left transition-all space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display text-2xl text-primary">{firstName} {lastName}</p>
+                    <span className="text-xs font-bold bg-primary text-white px-2 py-1 rounded-full">RECOMMENDED</span>
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">What you entered today — you know your name best</p>
+                </button>
+
+                {/* Option 2: What's on file */}
+                <button onClick={() => {
+                  setFirstName(preRegName.firstName);
+                  setLastName(preRegName.lastName);
+                  setPreRegName(null);
+                  confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
+                  setStep("found");
+                }} className="w-full p-5 rounded-2xl border-4 border-foreground bg-white hover:bg-gray-50 text-left transition-all space-y-1">
+                  <p className="font-display text-2xl">{preRegName.firstName} {preRegName.lastName}</p>
+                  <p className="text-sm font-medium text-muted-foreground">What we have on file from your registration</p>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {step === "duplicate" && (
             <motion.div key="duplicate" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
               transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">

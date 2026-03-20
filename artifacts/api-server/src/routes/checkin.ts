@@ -141,7 +141,12 @@ router.post("/check-in/lookup", async (req, res) => {
     .limit(1);
 
   if (preReg.length > 0) {
-    res.json({ found: true, alreadyCheckedIn: false });
+    res.json({
+      found: true,
+      alreadyCheckedIn: false,
+      foundFirstName: preReg[0].firstName,
+      foundLastName: preReg[0].lastName,
+    });
     return;
   }
 

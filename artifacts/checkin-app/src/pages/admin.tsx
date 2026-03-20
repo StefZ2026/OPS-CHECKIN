@@ -107,13 +107,19 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-type SuspectedDup = { a: { firstName: string; lastName: string; email: string; phone?: string }; b: { firstName: string; lastName: string; email: string; phone?: string }; similarity: number };
-type UploadStatus = { inserted: number; skipped: number; totalInDatabase: number; suspectedDuplicates?: SuspectedDup[] };
+type NameConflict = {
+  email: string;
+  option1: { firstName: string; lastName: string; context: string };
+  option2: { firstName: string; lastName: string; context: string };
+  recommendation: 1 | 2;
+  recommendationReason: string;
+};
+type UploadStatus = { inserted: number; skipped: number; totalInDatabase: number; nameConflicts?: NameConflict[] };
 
 function CsvUploadSection() {
   const [csvText, setCsvText] = useState("");
   const [status, setStatus] = useState<null | UploadStatus>(null);
-  const [suspects, setSuspects] = useState<SuspectedDup[]>([]);
+  const [nameConflicts, setNameConflicts] = useState<NameConflict[]>([]);
   const [resolving, setResolving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -129,7 +135,7 @@ function CsvUploadSection() {
 
   const handleUpload = async () => {
     if (!csvText.trim()) { setError("Please select a CSV file first."); return; }
-    setError(""); setLoading(true); setStatus(null); setSuspects([]);
+    setError(""); setLoading(true); setStatus(null); setNameConflicts([]);
     try {
       const res = await fetch("/api/admin/upload-registrations", {
         method: "POST",
@@ -142,7 +148,7 @@ function CsvUploadSection() {
       }
       const d = await res.json() as UploadStatus;
       setStatus(d);
-      setSuspects(d.suspectedDuplicates ?? []);
+      setNameConflicts(d.nameConflicts ?? []);
       setCsvText("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
@@ -152,23 +158,19 @@ function CsvUploadSection() {
     }
   };
 
-  const resolvePair = async (dup: SuspectedDup, keepRecord: SuspectedDup["a"] | SuspectedDup["b"], discardRecord: SuspectedDup["a"] | SuspectedDup["b"], chosenName: { firstName: string; lastName: string }) => {
-    const key = `${dup.a.email}|${dup.b.email}`;
-    setResolving(key);
+  const resolveConflict = async (conflict: NameConflict, chosen: 1 | 2) => {
+    setResolving(conflict.email);
+    const pick = chosen === 1 ? conflict.option1 : conflict.option2;
     try {
-      await fetch("/api/admin/upload-registrations/resolve", {
+      await fetch("/api/admin/upload-registrations/resolve-name", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
-        body: JSON.stringify({ keepEmail: keepRecord.email, discardEmail: discardRecord.email, correctFirstName: chosenName.firstName, correctLastName: chosenName.lastName }),
+        body: JSON.stringify({ email: conflict.email, firstName: pick.firstName, lastName: pick.lastName }),
       });
-      setSuspects(prev => prev.filter(d => !(d.a.email === dup.a.email && d.b.email === dup.b.email)));
+      setNameConflicts(prev => prev.filter(c => c.email !== conflict.email));
     } finally {
       setResolving(null);
     }
-  };
-
-  const dismissPair = (dup: SuspectedDup) => {
-    setSuspects(prev => prev.filter(d => !(d.a.email === dup.a.email && d.b.email === dup.b.email)));
   };
 
   return (
@@ -203,46 +205,40 @@ function CsvUploadSection() {
           </div>
         )}
 
-        {suspects.length > 0 && (
+        {nameConflicts.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 p-3 bg-yellow-50 border-2 border-yellow-500 rounded-xl">
               <AlertTriangle className="w-5 h-5 text-yellow-700 flex-shrink-0" />
               <p className="font-bold text-yellow-800 text-sm">
-                {suspects.length} possible name conflict{suspects.length !== 1 ? "s" : ""} — are these the same person?
+                {nameConflicts.length} name spelling conflict{nameConflicts.length !== 1 ? "s" : ""} — same contact info, different spellings. Which is correct?
               </p>
             </div>
-            {suspects.map((dup) => {
-              const key = `${dup.a.email}|${dup.b.email}`;
-              const isResolving = resolving === key;
+            {nameConflicts.map((conflict) => {
+              const isResolving = resolving === conflict.email;
               return (
-                <div key={key} className="border-2 border-yellow-400 rounded-xl p-4 bg-yellow-50 space-y-3">
-                  <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider">~{dup.similarity}% similar name</p>
+                <div key={conflict.email} className="border-2 border-yellow-400 rounded-xl p-4 bg-yellow-50 space-y-3">
+                  <p className="text-xs text-muted-foreground font-medium">Contact: {conflict.email}</p>
+                  <p className="text-xs font-bold text-yellow-700 italic">{conflict.recommendationReason}</p>
                   <div className="grid grid-cols-2 gap-3">
-                    {[dup.a, dup.b].map((rec, idx) => {
-                      const other = idx === 0 ? dup.b : dup.a;
+                    {([1, 2] as const).map((n) => {
+                      const opt = n === 1 ? conflict.option1 : conflict.option2;
+                      const isRecommended = conflict.recommendation === n;
                       return (
-                        <div key={rec.email} className="bg-white border-2 border-foreground rounded-lg p-3 space-y-1">
-                          <p className="font-display text-lg leading-tight">{rec.firstName} {rec.lastName}</p>
-                          <p className="text-xs text-muted-foreground break-all">{rec.email}</p>
-                          {rec.phone && <p className="text-xs text-muted-foreground">{rec.phone}</p>}
-                          <button
-                            disabled={isResolving}
-                            onClick={() => resolvePair(dup, rec, other, { firstName: rec.firstName, lastName: rec.lastName })}
-                            className="mt-2 w-full py-2 px-3 rounded-lg border-2 border-primary bg-primary text-white font-bold text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                          >
-                            ✓ This is correct
-                          </button>
-                        </div>
+                        <button key={n} disabled={isResolving}
+                          onClick={() => resolveConflict(conflict, n)}
+                          className={`text-left p-4 rounded-xl border-4 transition-all space-y-1 disabled:opacity-50
+                            ${isRecommended ? "border-primary bg-primary/5 hover:bg-primary/10" : "border-foreground bg-white hover:bg-gray-50"}`}>
+                          {isRecommended && (
+                            <span className="text-xs font-bold bg-primary text-white px-2 py-0.5 rounded-full">RECOMMENDED</span>
+                          )}
+                          <p className={`font-display text-xl leading-tight ${isRecommended ? "text-primary" : ""}`}>
+                            {opt.firstName} {opt.lastName}
+                          </p>
+                          <p className="text-xs text-muted-foreground font-medium">{opt.context}</p>
+                        </button>
                       );
                     })}
                   </div>
-                  <button
-                    disabled={isResolving}
-                    onClick={() => dismissPair(dup)}
-                    className="w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    These are different people — keep both
-                  </button>
                 </div>
               );
             })}
