@@ -6,8 +6,9 @@ import {
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
-  Eye, EyeOff, Trash2,
+  Eye, EyeOff, Trash2, Info, HardHat,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
 import { Input } from "@/components/ui/input";
@@ -19,13 +20,14 @@ type SortKey = "name" | "email" | "type" | "checkedInAt";
 type SortDir = "asc" | "desc";
 
 const ROLE_META: Record<AttendeeRoleRoleName, { label: string; Icon: React.ElementType; color: string }> = {
-  safety_marshal: { label: "Safety Marshal", Icon: Shield, color: "bg-blue-100 text-blue-800 border-blue-800" },
-  medic: { label: "Medic", Icon: Activity, color: "bg-red-100 text-red-800 border-red-800" },
-  de_escalator: { label: "De-escalator", Icon: HeartHandshake, color: "bg-purple-100 text-purple-800 border-purple-800" },
-  chant_lead: { label: "Chant Lead", Icon: Megaphone, color: "bg-yellow-100 text-yellow-800 border-yellow-800" },
+  safety_marshal:       { label: "Safety Marshal",       Icon: Shield,        color: "bg-blue-100 text-blue-800 border-blue-800" },
+  medic:                { label: "Medic",                Icon: Activity,      color: "bg-red-100 text-red-800 border-red-800" },
+  de_escalator:         { label: "De-escalator",         Icon: HeartHandshake,color: "bg-purple-100 text-purple-800 border-purple-800" },
+  chant_lead:           { label: "Chant Lead",           Icon: Megaphone,     color: "bg-yellow-100 text-yellow-800 border-yellow-800" },
+  information_services: { label: "Info Services",        Icon: Info,          color: "bg-green-100 text-green-800 border-green-800" },
 };
 
-const ALL_ROLES: AttendeeRoleRoleName[] = ["safety_marshal", "medic", "de_escalator", "chant_lead"];
+const ALL_ROLES: AttendeeRoleRoleName[] = ["safety_marshal", "medic", "de_escalator", "chant_lead", "information_services"];
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <ChevronsUpDown className="w-4 h-4 opacity-40 inline ml-1" />;
@@ -255,6 +257,112 @@ function QrCodeSection() {
   );
 }
 
+function VolunteerUploadSection() {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [status, setStatus] = useState<null | { inserted: number; skipped: number; totalInDatabase: number; invalidRows?: number[] }>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setError(""); setStatus(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const parsed = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
+        setRows(parsed);
+      } catch {
+        setError("Could not read file. Please make sure it's a valid Excel (.xlsx) file.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleUpload = async () => {
+    if (rows.length === 0) { setError("Please select an Excel file first."); return; }
+    setError(""); setLoading(true); setStatus(null);
+    try {
+      const res = await fetch("/api/admin/upload-volunteers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAdminToken() ?? ""}`,
+        },
+        body: JSON.stringify({ rows }),
+      });
+      const d = await res.json() as { inserted?: number; skipped?: number; totalInDatabase?: number; error?: string; invalidRows?: number[] };
+      if (!res.ok) throw new Error(d.error ?? "Upload failed");
+      setStatus({ inserted: d.inserted ?? 0, skipped: d.skipped ?? 0, totalInDatabase: d.totalInDatabase ?? 0, invalidRows: d.invalidRows });
+      setRows([]);
+      setFileName("");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="border-2 border-primary">
+      <CardContent className="p-6 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <HardHat className="w-6 h-6 text-primary" />
+          <h3 className="font-display text-xl text-primary">Upload Volunteer List</h3>
+        </div>
+        <p className="text-muted-foreground font-medium text-sm">
+          Upload your volunteer Excel sheet (.xlsx). Required columns: <strong>Name</strong> (full name) and <strong>Role</strong>. Optional: Email, Phone.
+          This replaces the existing volunteer list each time.
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Accepted roles: Safety Marshal, Medic, De-Escalator, Chant Lead, Information Services
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={handleFile}
+            className="flex-1 text-sm border-2 border-foreground rounded-lg px-3 py-2 font-medium cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-bold file:bg-primary file:text-white hover:file:bg-primary/80"
+          />
+          <Button onClick={handleUpload} isLoading={loading} disabled={rows.length === 0 || loading}
+            className="bg-primary hover:bg-primary/90">
+            <Upload className="w-4 h-4 mr-2" /> Upload
+          </Button>
+        </div>
+        {fileName && rows.length > 0 && !status && (
+          <p className="text-sm font-medium text-muted-foreground">
+            📄 {fileName} — {rows.length} rows ready to upload
+          </p>
+        )}
+        {error && <p className="text-destructive font-bold text-sm">{error}</p>}
+        {status && (
+          <div className="flex items-center gap-3 p-4 bg-green-50 border-2 border-green-600 rounded-xl">
+            <CheckCircle2 className="w-6 h-6 text-green-700 flex-shrink-0" />
+            <div>
+              <p className="font-bold text-green-800 text-sm">
+                Loaded {status.inserted} volunteers into the system — {status.totalInDatabase} total on file.
+              </p>
+              {status.skipped > 0 && (
+                <p className="text-yellow-700 text-xs font-medium mt-1">
+                  {status.skipped} rows skipped (missing name or unrecognized role).
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const { data, isLoading, isError, refetch, isRefetching } = useAttendees();
   const [search, setSearch] = useState("");
@@ -417,6 +525,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           <CsvUploadSection />
           <QrCodeSection />
         </div>
+
+        {/* Volunteer Upload */}
+        <VolunteerUploadSection />
 
         {/* Role Breakdown */}
         <div>

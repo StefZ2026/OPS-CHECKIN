@@ -6,6 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export interface VolunteerPreRegResult {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  roleName: string;
+}
+
 export interface LookupResult {
   /** Whether the person was found in Mobilize pre-registrations */
   found: boolean;
@@ -13,4 +22,6 @@ export interface LookupResult {
   mobilizeId?: string | null;
   /** Whether this person already checked in today */
   alreadyCheckedIn: boolean;
+  /** Volunteer pre-registration data if found */
+  volunteerPreReg?: VolunteerPreRegResult | null;
 }

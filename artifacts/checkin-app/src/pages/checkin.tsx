@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, Smartphone, PartyPopper } from "lucide-react";
+import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAttendeeLookup, useCheckInSubmit } from "@/hooks/use-checkin";
-import type { AttendeeRoleRoleName } from "@workspace/api-client-react";
+import type { AttendeeRoleRoleName, VolunteerPreRegResult } from "@workspace/api-client-react";
 
 type RoleState = {
   roleName: AttendeeRoleRoleName;
@@ -26,6 +26,14 @@ const ROLE_DEFS: Pick<RoleState, "roleName" | "title" | "Icon">[] = [
   { roleName: "chant_lead",     title: "Chant Lead",      Icon: Megaphone },
 ];
 
+const ROLE_META: Record<AttendeeRoleRoleName, { title: string; Icon: React.ElementType; hasVest: boolean }> = {
+  safety_marshal:      { title: "Safety Marshal",      Icon: Shield,        hasVest: true },
+  medic:               { title: "Medic",               Icon: Activity,      hasVest: true },
+  de_escalator:        { title: "De-escalator",        Icon: HeartHandshake, hasVest: true },
+  chant_lead:          { title: "Chant Lead",          Icon: Megaphone,     hasVest: true },
+  information_services:{ title: "Information Services", Icon: Info,          hasVest: false },
+};
+
 function makeInitialRoles(): RoleState[] {
   return ROLE_DEFS.map(d => ({ ...d, hasServed: false, isTrained: false, wantsToServeToday: null }));
 }
@@ -37,7 +45,8 @@ function useIsMobile() {
   }, []);
 }
 
-type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4;
+type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
+          | "vol_found" | "vol_not_found" | "vol_staff";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
@@ -52,6 +61,9 @@ export default function CheckInFlow() {
   const [mobilizeId, setMobilizeId] = useState<string | null>(null);
   const [walkinSource, setWalkinSource] = useState<"not_found" | "direct">("direct");
   const [roles, setRoles] = useState<RoleState[]>(makeInitialRoles());
+  const [isVolunteerMode, setIsVolunteerMode] = useState(false);
+  const [volunteerPreRegData, setVolunteerPreRegData] = useState<VolunteerPreRegResult | null>(null);
+  const [checkedInVolunteerRole, setCheckedInVolunteerRole] = useState<AttendeeRoleRoleName | null>(null);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -65,6 +77,9 @@ export default function CheckInFlow() {
     setPreRegistered(false); setMobilizeId(null);
     setWalkinSource("direct");
     setRoles(makeInitialRoles());
+    setIsVolunteerMode(false);
+    setVolunteerPreRegData(null);
+    setCheckedInVolunteerRole(null);
   };
 
   const handleLookup = () => {
@@ -72,11 +87,33 @@ export default function CheckInFlow() {
       toast({ title: "Hold up!", description: "We need both first name and email.", variant: "destructive" });
       return;
     }
-    lookupMutation.mutate({ data: { firstName: firstName.trim(), email: email.trim() } }, {
+    lookupMutation.mutate({ data: { firstName: firstName.trim(), email: email.trim(), isVolunteer: isVolunteerMode } }, {
       onSuccess: (data) => {
         if (data.alreadyCheckedIn) {
           setStep("duplicate");
-        } else if (data.found) {
+          return;
+        }
+
+        // Volunteer path
+        if (isVolunteerMode) {
+          if (data.volunteerPreReg) {
+            // Found in volunteer list
+            const vpr = data.volunteerPreReg;
+            setVolunteerPreRegData(vpr);
+            setFirstName(vpr.firstName);
+            setLastName(vpr.lastName);
+            if (vpr.email) setEmail(vpr.email);
+            if (vpr.phone) setPhone(vpr.phone);
+            setStep("vol_found");
+          } else {
+            // Not found in volunteer list
+            setStep("vol_not_found");
+          }
+          return;
+        }
+
+        // Regular attendee path
+        if (data.found) {
           setPreRegistered(true);
           setMobilizeId(data.mobilizeId ?? null);
           setStep("found");
@@ -130,6 +167,34 @@ export default function CheckInFlow() {
     });
   };
 
+  const submitVolunteerCheckin = () => {
+    const roleName = volunteerPreRegData!.roleName as AttendeeRoleRoleName;
+    const payload = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim() || "Volunteer",
+      email: email.trim(),
+      phone: phone.trim() || null,
+      preRegistered: false,
+      mobilizeId: null,
+      roles: [{ roleName, isTrained: false }],
+    };
+    submitMutation.mutate({ data: payload }, {
+      onSuccess: () => {
+        setCheckedInVolunteerRole(roleName);
+        confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
+        setStep(4);
+      },
+      onError: (err) => {
+        const msg = (err as { message?: string })?.message ?? "";
+        if (msg.toLowerCase().includes("already")) {
+          setStep("duplicate");
+        } else {
+          toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
+        }
+      }
+    });
+  };
+
   // Auto-advance from "found" to experience step
   useEffect(() => {
     if (step === "found") { const t = setTimeout(() => setStep(3), 3000); return () => clearTimeout(t); }
@@ -152,7 +217,12 @@ export default function CheckInFlow() {
 
   // Auto-reset after success
   useEffect(() => {
-    if (step === 4) { const t = setTimeout(handleReset, 6000); return () => clearTimeout(t); }
+    if (step === 4) { const t = setTimeout(handleReset, 8000); return () => clearTimeout(t); }
+  }, [step]);
+
+  // Auto-reset from vol_staff
+  useEffect(() => {
+    if (step === "vol_staff") { const t = setTimeout(handleReset, 8000); return () => clearTimeout(t); }
   }, [step]);
 
   const updateRole = (id: AttendeeRoleRoleName, updates: Partial<RoleState>) => {
@@ -163,6 +233,8 @@ export default function CheckInFlow() {
       return next;
     }));
   };
+
+  const showBackButton = step === 2 || step === 3 || step === "invite" || step === "vol_found" || step === "vol_not_found";
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary selection:text-white">
@@ -177,12 +249,13 @@ export default function CheckInFlow() {
         </div>
         <div className="flex items-center gap-4">
           <img src="/nk3-banner.png" alt="No Kings" className="h-12 md:h-14 w-auto object-contain flex-shrink-0" />
-          {(step === 2 || step === 3 || step === "invite") && (
+          {showBackButton && (
             <Button variant="outline" size="sm"
               className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white"
               onClick={() => {
                 if (step === "invite") setStep(3);
                 else if (step === 3) setStep(preRegistered ? 1 : 2);
+                else if (step === "vol_found" || step === "vol_not_found") { setVolunteerPreRegData(null); setStep(1); }
                 else setStep(1);
               }}
             >
@@ -199,10 +272,37 @@ export default function CheckInFlow() {
           {step === 1 && (
             <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-2xl mx-auto space-y-8">
-              <div className="text-center space-y-4 mb-12">
+              <div className="text-center space-y-4 mb-8">
                 <h2 className="font-display text-5xl md:text-7xl text-primary">Welcome!</h2>
                 <p className="text-2xl md:text-3xl font-medium text-muted-foreground">Let's get you checked in to the rally.</p>
               </div>
+
+              {/* Volunteer toggle */}
+              <button
+                onClick={() => setIsVolunteerMode(v => !v)}
+                className={`w-full flex items-center gap-4 p-5 rounded-2xl border-4 transition-all text-left
+                  ${isVolunteerMode
+                    ? 'border-primary bg-primary/10 shadow-brutal-sm'
+                    : 'border-foreground bg-white hover:bg-muted/30'}`}
+              >
+                <div className={`flex-shrink-0 w-12 h-12 rounded-xl border-4 border-foreground flex items-center justify-center transition-colors
+                  ${isVolunteerMode ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
+                  <HardHat className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className={`font-display text-xl leading-tight ${isVolunteerMode ? 'text-primary' : 'text-foreground'}`}>
+                    I'm checking in as a <strong>volunteer</strong> today
+                  </p>
+                  <p className="text-sm font-medium text-muted-foreground mt-1">
+                    {isVolunteerMode ? "✓ Volunteer mode ON — we'll look you up in our volunteer list" : "Tap to activate if you're on the volunteer team"}
+                  </p>
+                </div>
+                <div className={`flex-shrink-0 w-8 h-8 rounded-full border-4 border-foreground flex items-center justify-center
+                  ${isVolunteerMode ? 'bg-primary' : 'bg-white'}`}>
+                  {isVolunteerMode && <div className="w-3 h-3 rounded-full bg-white" />}
+                </div>
+              </button>
+
               <div className="space-y-6">
                 <div>
                   <label className="font-display text-xl uppercase tracking-wider mb-2 block">First Name</label>
@@ -215,22 +315,27 @@ export default function CheckInFlow() {
                     value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLookup()} />
                 </div>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
                 <Button size="xl" className="w-full group" onClick={handleLookup} isLoading={lookupMutation.isPending}>
-                  Find My Pre-Registration <ArrowRight className="ml-3 w-7 h-7 group-hover:translate-x-1 transition-transform" />
+                  {isVolunteerMode ? "Look Me Up →" : "Find My Pre-Registration"} <ArrowRight className="ml-3 w-7 h-7 group-hover:translate-x-1 transition-transform" />
                 </Button>
-                <Button size="xl" variant="secondary" className="w-full group border-4 border-foreground shadow-brutal"
-                  onClick={() => {
-                    if (!firstName.trim() || !email.trim()) {
-                      toast({ title: "Hold up!", description: "We need your first name and email first.", variant: "destructive" }); return;
-                    }
-                    setPreRegistered(false); setWalkinSource("direct"); setStep(2);
-                  }}>
-                  Register Me <UserPlus className="ml-3 w-7 h-7" />
-                </Button>
+                {!isVolunteerMode && (
+                  <Button size="xl" variant="secondary" className="w-full group border-4 border-foreground shadow-brutal"
+                    onClick={() => {
+                      if (!firstName.trim() || !email.trim()) {
+                        toast({ title: "Hold up!", description: "We need your first name and email first.", variant: "destructive" }); return;
+                      }
+                      setPreRegistered(false); setWalkinSource("direct"); setStep(2);
+                    }}>
+                    Register Me <UserPlus className="ml-3 w-7 h-7" />
+                  </Button>
+                )}
               </div>
               <p className="text-center text-muted-foreground font-medium text-base mt-3">
-                Pre-registered on Mobilize? Use the first button. New to the rally? Use the second.
+                {isVolunteerMode
+                  ? "We'll check our volunteer list — enter your first name and the email you registered with."
+                  : "Pre-registered on Mobilize? Use the first button. New to the rally? Use the second."}
               </p>
             </motion.div>
           )}
@@ -251,6 +356,124 @@ export default function CheckInFlow() {
                 <span>You're pre-registered — continuing in a moment…</span>
                 <PartyPopper className="w-6 h-6 text-primary" />
               </motion.div>
+            </motion.div>
+          )}
+
+          {/* VOL_FOUND: Volunteer found in pre-reg list */}
+          {step === "vol_found" && volunteerPreRegData && (
+            <motion.div key="vol_found" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-8">
+              <div className="text-center space-y-3">
+                <div className="text-6xl md:text-7xl">🙌</div>
+                <h2 className="font-display text-4xl md:text-6xl text-primary leading-none">WE'VE GOT YOU!</h2>
+                <p className="text-xl font-medium text-muted-foreground">We have you registered as:</p>
+              </div>
+
+              {/* Role badge */}
+              {(() => {
+                const roleName = volunteerPreRegData.roleName as AttendeeRoleRoleName;
+                const meta = ROLE_META[roleName] ?? { title: volunteerPreRegData.roleName, Icon: HardHat, hasVest: false };
+                return (
+                  <div className="flex items-center justify-center gap-4 p-6 bg-primary/10 border-4 border-primary rounded-2xl">
+                    <div className="p-4 bg-primary rounded-2xl border-4 border-foreground shadow-brutal-sm">
+                      <meta.Icon className="w-10 h-10 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-display text-4xl md:text-5xl text-primary">{meta.title}</p>
+                      <p className="font-bold text-muted-foreground">NK3 Volunteer</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Info confirmation */}
+              <Card className="border-2 border-foreground">
+                <CardContent className="p-6 space-y-4">
+                  <h3 className="font-display text-xl">Your Info</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-100 border-2 border-green-600 flex items-center justify-center flex-shrink-0">
+                        <span className="text-green-600 font-bold text-sm">✓</span>
+                      </div>
+                      <span className="font-bold text-lg">{firstName} {lastName}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-100 border-2 border-green-600 flex items-center justify-center flex-shrink-0">
+                        <span className="text-green-600 font-bold text-sm">✓</span>
+                      </div>
+                      <span className="font-medium text-muted-foreground">{email}</span>
+                    </div>
+                    {volunteerPreRegData.phone ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-green-100 border-2 border-green-600 flex items-center justify-center flex-shrink-0">
+                          <span className="text-green-600 font-bold text-sm">✓</span>
+                        </div>
+                        <span className="font-medium text-muted-foreground">{phone || volunteerPreRegData.phone}</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-yellow-100 border-2 border-yellow-600 flex items-center justify-center flex-shrink-0">
+                            <span className="text-yellow-600 font-bold text-sm">?</span>
+                          </div>
+                          <span className="font-medium text-muted-foreground">Phone number missing — add it below</span>
+                        </div>
+                        <Input placeholder="Phone number (optional)" type="tel" icon={<Phone className="w-6 h-6" />}
+                          value={phone} onChange={(e) => setPhone(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Button size="xl" className="w-full group" onClick={submitVolunteerCheckin} isLoading={submitMutation.isPending}>
+                That's me — check me in! <CheckCircle className="ml-4 w-8 h-8" />
+              </Button>
+            </motion.div>
+          )}
+
+          {/* VOL_NOT_FOUND: Volunteer not in pre-reg list */}
+          {step === "vol_not_found" && (
+            <motion.div key="vol_not_found" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-8 text-center">
+              <div className="text-6xl md:text-7xl">🤔</div>
+              <div className="space-y-3">
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">Hmm, we couldn't find you<br />in our volunteer list.</h2>
+                <p className="text-xl font-medium text-muted-foreground">Did you pre-register to be a volunteer?</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => setStep("vol_staff")}
+                  className="p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-muted/30 transition-all shadow-brutal text-left space-y-2">
+                  <div className="text-4xl">✋</div>
+                  <p className="font-display text-2xl">Yes, I pre-registered</p>
+                  <p className="text-sm font-medium text-muted-foreground">We'll get you sorted at the desk</p>
+                </button>
+                <button
+                  onClick={() => { setIsVolunteerMode(false); setWalkinSource("direct"); setStep(2); }}
+                  className="p-8 rounded-2xl border-4 border-primary bg-primary/10 hover:bg-primary/20 transition-all shadow-brutal text-left space-y-2">
+                  <div className="text-4xl">🙋</div>
+                  <p className="font-display text-2xl text-primary">No, but I'd love to volunteer!</p>
+                  <p className="text-sm font-medium text-muted-foreground">We'd love to have you — let's get you set up</p>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* VOL_STAFF: Please see staff */}
+          {step === "vol_staff" && (
+            <motion.div key="vol_staff" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.6 }}
+                className="text-[8rem] leading-none select-none">📋</motion.div>
+              <div className="space-y-4">
+                <h2 className="font-display text-4xl md:text-6xl text-primary leading-none">NO PROBLEM!</h2>
+                <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-3">
+                  <p className="font-bold text-2xl">Please check in with a staff member</p>
+                  <p className="font-bold text-xl text-primary">at the volunteer registration table</p>
+                  <p className="text-muted-foreground font-medium">We'll get you sorted out right away!</p>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -431,61 +654,61 @@ export default function CheckInFlow() {
                   NO WORRIES —<br />WE ALREADY GOT YOU!
                 </p>
                 <p className="text-2xl font-bold text-muted-foreground">
-                  You're checked in and good to go. 💙<br />Go enjoy the rally!
+                  You're already checked in. Go enjoy the rally! 🎉
                 </p>
               </motion.div>
             </motion.div>
           )}
 
-          {/* FUN: No worries - transitional */}
+          {/* FUN: Declined to volunteer */}
           {step === "fun" && (
             <motion.div key="fun" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
               transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-6">
-                <h2 className="font-display text-5xl md:text-7xl text-foreground leading-none">NO WORRIES!</h2>
-                <p className="font-display text-3xl md:text-4xl text-primary leading-snug">WE'LL CATCH YOU<br />ANOTHER TIME, {firstName.toUpperCase()}!</p>
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
-                  className="text-2xl font-bold text-muted-foreground">
-                  Hold tight — we're finishing up your check-in… 💙
-                </motion.p>
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.6 }}
+                className="text-[8rem] md:text-[10rem] leading-none select-none">🎊</motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="space-y-4">
+                <h2 className="font-display text-5xl md:text-7xl text-primary leading-none">TOTALLY COOL!</h2>
+                <p className="font-display text-3xl md:text-4xl text-foreground">Go enjoy the rally, {firstName.toUpperCase()}!</p>
+                <p className="text-xl font-medium text-muted-foreground">We appreciate you being here. 💙</p>
               </motion.div>
             </motion.div>
           )}
 
-          {/* STEP 4: YOU'RE IN! */}
+          {/* STEP 4: YOU'RE IN */}
           {step === 4 && (
-            <motion.div key="step4" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-2xl mx-auto text-center space-y-10 py-12">
-              <motion.div initial={{ rotate: -180, scale: 0 }} animate={{ rotate: 0, scale: 1 }}
-                transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
-                className="w-40 h-40 mx-auto bg-green-500 rounded-full border-8 border-foreground shadow-brutal flex items-center justify-center">
-                <CheckCircle className="w-24 h-24 text-white" />
+            <motion.div key="step4" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
+              <motion.div initial={{ rotate: -20, scale: 0 }} animate={{ rotate: [0,-10,10,-5,5,0], scale: 1 }}
+                transition={{ type: "spring", bounce: 0.6, delay: 0.1 }} className="text-[8rem] md:text-[10rem] leading-none select-none">
+                {checkedInVolunteerRole ? "🎉" : "✊"}
               </motion.div>
-              <div className="space-y-4">
-                <h2 className="font-display text-6xl md:text-8xl text-primary leading-none">YOU'RE IN!</h2>
-                <p className="text-3xl md:text-4xl font-bold">
-                  Welcome to the rally, <span className="text-accent underline decoration-8 underline-offset-8">{firstName}</span>!
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="space-y-4">
+                <h2 className="font-display text-5xl md:text-7xl text-primary leading-none">YOU'RE IN!</h2>
+                <p className="font-display text-3xl md:text-5xl text-foreground leading-tight">
+                  WELCOME TO NO KINGS 3,<br />{firstName.toUpperCase()}!
                 </p>
-                <p className="text-xl md:text-2xl font-medium text-muted-foreground">Your check-in has been recorded. Let's make our voices heard!</p>
-              </div>
-              {isMobile && (
-                <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
-                  className="border-4 border-foreground rounded-2xl bg-secondary p-8 shadow-brutal space-y-3">
-                  <div className="flex items-center justify-center gap-3 mb-2">
-                    <Smartphone className="w-8 h-8" />
-                    <span className="font-display text-2xl">Next Step</span>
+                {checkedInVolunteerRole ? (
+                  <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-2">
+                    <p className="font-bold text-xl text-primary">
+                      🎖️ Congrats, you're checked in as a {ROLE_META[checkedInVolunteerRole]?.title ?? checkedInVolunteerRole}!
+                    </p>
+                    {ROLE_META[checkedInVolunteerRole]?.hasVest ? (
+                      <>
+                        <p className="font-bold text-xl">Please see the safety team to pick up your</p>
+                        <p className="font-display text-2xl text-primary">VEST + NK3 Volunteer Button 🧡</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-bold text-xl">Please pick up your</p>
+                        <p className="font-display text-2xl text-primary">NK3 Volunteer Button 🧡</p>
+                        <p className="text-muted-foreground font-medium">at the info table</p>
+                      </>
+                    )}
                   </div>
-                  <p className="text-xl md:text-2xl font-bold leading-snug">Show this screen at the sign-in desk to pick up your welcome gift.</p>
-                  <p className="text-base font-medium text-muted-foreground italic">While supplies last — thank you for being here!</p>
-                </motion.div>
-              )}
-              {!isMobile && (
-                <div className="pt-4">
-                  <Button size="lg" variant="outline" onClick={handleReset} className="text-xl">
-                    Next Person (Auto-reset in 6s…)
-                  </Button>
-                </div>
-              )}
+                ) : (
+                  <p className="text-2xl font-bold text-muted-foreground">Go enjoy the rally! 🎉</p>
+                )}
+              </motion.div>
             </motion.div>
           )}
 

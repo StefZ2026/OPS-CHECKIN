@@ -14,4 +14,5 @@ export const AttendeeRoleRoleName = {
   medic: "medic",
   de_escalator: "de_escalator",
   chant_lead: "chant_lead",
+  information_services: "information_services",
 } as const;

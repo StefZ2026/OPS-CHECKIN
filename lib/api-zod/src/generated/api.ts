@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
 export const LookupAttendeeBody = zod.object({
   firstName: zod.string(),
   email: zod.string(),
+  isVolunteer: zod.boolean().optional(),
 });
 
 export const LookupAttendeeResponse = zod.object({
@@ -35,6 +36,17 @@ export const LookupAttendeeResponse = zod.object({
   alreadyCheckedIn: zod
     .boolean()
     .describe("Whether this person already checked in today"),
+  volunteerPreReg: zod
+    .object({
+      id: zod.number(),
+      firstName: zod.string(),
+      lastName: zod.string(),
+      email: zod.string().nullable().optional(),
+      phone: zod.string().nullable().optional(),
+      roleName: zod.string(),
+    })
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -55,6 +67,7 @@ export const SubmitCheckInBody = zod.object({
         "medic",
         "de_escalator",
         "chant_lead",
+        "information_services",
       ]),
       isTrained: zod.boolean(),
     }),
@@ -85,6 +98,7 @@ export const ListAttendeesResponse = zod.object({
             "medic",
             "de_escalator",
             "chant_lead",
+            "information_services",
           ]),
           isTrained: zod.boolean(),
         }),

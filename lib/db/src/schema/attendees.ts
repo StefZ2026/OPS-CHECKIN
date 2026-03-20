@@ -7,6 +7,7 @@ export const roleNameEnum = pgEnum("role_name", [
   "medic",
   "de_escalator",
   "chant_lead",
+  "information_services",
 ]);
 
 export const attendeesTable = pgTable("attendees", {
@@ -36,7 +37,18 @@ export const preRegistrationsTable = pgTable("pre_registrations", {
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 
+export const volunteerPreRegistrationsTable = pgTable("volunteer_pre_registrations", {
+  id: serial("id").primaryKey(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  roleName: text("role_name").notNull(),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+});
+
 export type PreRegistration = typeof preRegistrationsTable.$inferSelect;
+export type VolunteerPreRegistration = typeof volunteerPreRegistrationsTable.$inferSelect;
 
 export const insertAttendeeSchema = createInsertSchema(attendeesTable).omit({ id: true, checkedInAt: true });
 export const insertAttendeeRoleSchema = createInsertSchema(attendeeRolesTable).omit({ id: true });

@@ -12,6 +12,16 @@ export interface HealthStatus {
 export interface LookupRequest {
   firstName: string;
   email: string;
+  isVolunteer?: boolean;
+}
+
+export interface VolunteerPreRegResult {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  roleName: string;
 }
 
 export interface LookupResult {
@@ -21,6 +31,8 @@ export interface LookupResult {
   mobilizeId?: string | null;
   /** Whether this person already checked in today */
   alreadyCheckedIn: boolean;
+  /** Volunteer pre-registration data if found */
+  volunteerPreReg?: VolunteerPreRegResult | null;
 }
 
 export type AttendeeRoleRoleName =
@@ -31,6 +43,7 @@ export const AttendeeRoleRoleName = {
   medic: "medic",
   de_escalator: "de_escalator",
   chant_lead: "chant_lead",
+  information_services: "information_services",
 } as const;
 
 export interface AttendeeRole {
