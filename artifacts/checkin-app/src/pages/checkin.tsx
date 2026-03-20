@@ -508,8 +508,11 @@ export default function CheckInFlow() {
             <motion.div key="vol_manual" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-2xl mx-auto space-y-8">
               <div className="text-center space-y-3">
-                <h2 className="font-display text-4xl md:text-5xl leading-tight">We must be missing<br />a few details!</h2>
-                <p className="text-xl font-medium text-muted-foreground">No worries, {firstName} — let's fill them in and get you checked in.</p>
+                <div className="text-6xl md:text-7xl">🙌</div>
+                <h2 className="font-display text-4xl md:text-6xl text-primary leading-none">GOT YOU!</h2>
+                <p className="text-xl font-medium text-muted-foreground">
+                  Let's get you checked in, {firstName}. Just a couple quick things:
+                </p>
               </div>
 
               <div className="space-y-5">
@@ -526,23 +529,20 @@ export default function CheckInFlow() {
                     value={phone} onChange={(e) => setPhone(e.target.value)} />
                 </div>
                 <div>
-                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Your Volunteer Role</label>
-                  <div className="grid grid-cols-1 gap-3">
+                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Which role did you sign up for?</label>
+                  <div className="grid grid-cols-1 gap-2">
                     {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([roleName, meta]) => (
                       <button key={roleName} onClick={() => setVolunteerManualRole(roleName)}
-                        className={`flex items-center gap-4 p-4 rounded-xl border-4 transition-all text-left
+                        className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left
                           ${volunteerManualRole === roleName
-                            ? 'border-primary bg-primary/10 shadow-brutal-sm'
-                            : 'border-foreground bg-white hover:bg-muted/20'}`}>
-                        <div className={`p-3 rounded-lg border-2 border-foreground flex-shrink-0
-                          ${volunteerManualRole === roleName ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
-                          <meta.Icon className="w-5 h-5" />
-                        </div>
-                        <span className={`font-display text-xl ${volunteerManualRole === roleName ? 'text-primary' : ''}`}>
+                            ? 'border-primary bg-primary/10'
+                            : 'border-foreground/30 bg-white hover:bg-muted/20'}`}>
+                        <meta.Icon className={`w-4 h-4 flex-shrink-0 ${volunteerManualRole === roleName ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <span className={`font-bold text-base ${volunteerManualRole === roleName ? 'text-primary' : ''}`}>
                           {meta.title}
                         </span>
                         {volunteerManualRole === roleName && (
-                          <span className="ml-auto text-primary font-bold text-xl">✓</span>
+                          <span className="ml-auto text-primary font-bold">✓</span>
                         )}
                       </button>
                     ))}
@@ -554,10 +554,7 @@ export default function CheckInFlow() {
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                   className="p-5 bg-primary/10 border-4 border-primary rounded-2xl text-center space-y-1">
                   <p className="font-display text-2xl text-primary">
-                    What role are you in today? Let's check you in as a {ROLE_META[volunteerManualRole]?.title}!
-                  </p>
-                  <p className="font-bold text-muted-foreground">
-                    We're so glad to have you as a {ROLE_META[volunteerManualRole]?.title} today. 🙌
+                    Glad to have you on the {ROLE_META[volunteerManualRole]?.title} team! 🎉
                   </p>
                 </motion.div>
               )}
@@ -567,7 +564,7 @@ export default function CheckInFlow() {
                 Check Me In <CheckCircle className="ml-4 w-8 h-8" />
               </Button>
               {!volunteerManualRole && (
-                <p className="text-center text-sm text-muted-foreground font-medium">Please select your volunteer role above</p>
+                <p className="text-center text-sm text-muted-foreground font-medium">Select your role above to continue</p>
               )}
             </motion.div>
           )}
