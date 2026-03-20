@@ -176,16 +176,13 @@ router.post("/check-in/submit", async (req, res) => {
     .limit(1);
 
   if (existing.length > 0) {
-    // Silently correct the stored name if a better spelling was provided
     const stored = existing[0];
-    const newFirst = firstName.trim();
-    const newLast = lastName.trim() || "Unknown";
-    if (stored.firstName !== newFirst || stored.lastName !== newLast) {
-      await db.update(attendeesTable)
-        .set({ firstName: newFirst, lastName: newLast })
-        .where(eq(attendeesTable.id, stored.id));
-    }
-    res.status(409).json({ error: "This email has already been checked in." });
+    res.status(409).json({
+      error: "This email has already been checked in.",
+      storedFirstName: stored.firstName,
+      storedLastName: stored.lastName,
+      attendeeId: stored.id,
+    });
     return;
   }
 
@@ -212,6 +209,19 @@ router.post("/check-in/submit", async (req, res) => {
   }
 
   res.status(201).json({ id: newAttendee.id, message: "Check-in successful!" });
+});
+
+// Self-service name correction — called when a duplicate attendee confirms a better spelling
+router.post("/check-in/correct-name", async (req, res) => {
+  const { attendeeId, firstName, lastName } = req.body as { attendeeId?: number; firstName?: string; lastName?: string };
+  if (!attendeeId || !firstName) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+  await db.update(attendeesTable)
+    .set({ firstName: firstName.trim(), ...(lastName !== undefined ? { lastName: lastName.trim() } : {}) })
+    .where(eq(attendeesTable.id, attendeeId));
+  res.json({ ok: true });
 });
 
 export default router;

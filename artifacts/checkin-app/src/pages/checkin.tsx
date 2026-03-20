@@ -46,7 +46,7 @@ function useIsMobile() {
 }
 
 type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
-          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm";
+          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
@@ -67,6 +67,8 @@ export default function CheckInFlow() {
   const [volunteerManualRole, setVolunteerManualRole] = useState<AttendeeRoleRoleName | null>(null);
   const [isVolunteerManual, setIsVolunteerManual] = useState(false);
   const [preRegName, setPreRegName] = useState<{ firstName: string; lastName: string } | null>(null);
+  const [storedName, setStoredName] = useState<{ firstName: string; lastName: string } | null>(null);
+  const [storedAttendeeId, setStoredAttendeeId] = useState<number | null>(null);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -86,6 +88,16 @@ export default function CheckInFlow() {
     setVolunteerManualRole(null);
     setIsVolunteerManual(false);
     setPreRegName(null);
+    setStoredName(null);
+    setStoredAttendeeId(null);
+  };
+
+  const correctStoredName = async (attendeeId: number, newFirst: string, newLast: string) => {
+    await fetch("/api/check-in/correct-name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attendeeId, firstName: newFirst, lastName: newLast }),
+    });
   };
 
   const handleLookup = () => {
@@ -174,7 +186,17 @@ export default function CheckInFlow() {
       onError: (err) => {
         const msg = (err as { message?: string })?.message ?? "";
         if (msg.toLowerCase().includes("already")) {
-          setStep("duplicate");
+          const errData = (err as { data?: { storedFirstName?: string; storedLastName?: string; attendeeId?: number } }).data;
+          const sf = errData?.storedFirstName ?? "";
+          const sl = errData?.storedLastName ?? "";
+          const aid = errData?.attendeeId ?? null;
+          if (aid && sf.toLowerCase() !== firstName.trim().toLowerCase()) {
+            setStoredName({ firstName: sf, lastName: sl });
+            setStoredAttendeeId(aid);
+            setStep("dup_name_confirm");
+          } else {
+            setStep("duplicate");
+          }
         } else {
           toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
         }
@@ -202,7 +224,17 @@ export default function CheckInFlow() {
       onError: (err) => {
         const msg = (err as { message?: string })?.message ?? "";
         if (msg.toLowerCase().includes("already")) {
-          setStep("duplicate");
+          const errData = (err as { data?: { storedFirstName?: string; storedLastName?: string; attendeeId?: number } }).data;
+          const sf = errData?.storedFirstName ?? "";
+          const sl = errData?.storedLastName ?? "";
+          const aid = errData?.attendeeId ?? null;
+          if (aid && sf.toLowerCase() !== firstName.trim().toLowerCase()) {
+            setStoredName({ firstName: sf, lastName: sl });
+            setStoredAttendeeId(aid);
+            setStep("dup_name_confirm");
+          } else {
+            setStep("duplicate");
+          }
         } else {
           toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
         }
@@ -774,6 +806,47 @@ export default function CheckInFlow() {
                 }} className="w-full p-5 rounded-2xl border-4 border-foreground bg-white hover:bg-gray-50 text-left transition-all space-y-1">
                   <p className="font-display text-2xl">{preRegName.firstName} {preRegName.lastName}</p>
                   <p className="text-sm font-medium text-muted-foreground">What we have on file from your registration</p>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {step === "dup_name_confirm" && storedName && storedAttendeeId && (
+            <motion.div key="dup_name_confirm" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-6">
+              <div className="text-center space-y-3">
+                <div className="flex justify-center">
+                  <div className="p-4 rounded-2xl border-4 border-yellow-500 bg-yellow-50">
+                    <AlertCircle className="w-10 h-10 text-yellow-600" />
+                  </div>
+                </div>
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">Quick check!</h2>
+                <p className="text-xl font-medium text-muted-foreground">
+                  We already have you checked in, but noticed two different spellings of your name. Which is correct?
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {/* Option 1: What they typed — recommended */}
+                <button onClick={async () => {
+                  await correctStoredName(storedAttendeeId, firstName.trim(), lastName.trim());
+                  setStoredName(null); setStoredAttendeeId(null);
+                  setStep("duplicate");
+                }} className="group w-full p-5 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/10 text-left transition-all space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-display text-2xl text-primary">{firstName} {lastName}</p>
+                    <span className="text-xs font-bold bg-primary text-white px-2 py-1 rounded-full">RECOMMENDED</span>
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">What you entered today — you know your name best</p>
+                </button>
+
+                {/* Option 2: What's stored */}
+                <button onClick={() => {
+                  setStoredName(null); setStoredAttendeeId(null);
+                  setStep("duplicate");
+                }} className="w-full p-5 rounded-2xl border-4 border-foreground bg-white hover:bg-gray-50 text-left transition-all space-y-1">
+                  <p className="font-display text-2xl">{storedName.firstName} {storedName.lastName}</p>
+                  <p className="text-sm font-medium text-muted-foreground">What we have on file from your check-in</p>
                 </button>
               </div>
             </motion.div>
