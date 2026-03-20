@@ -12,6 +12,7 @@ export interface AttendeeWithRoles {
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string | null;
   preRegistered: boolean;
   mobilizeId?: string | null;
   checkedInAt: Date;

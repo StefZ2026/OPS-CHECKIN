@@ -509,6 +509,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedRole, setSelectedRole] = useState<AttendeeRoleRoleName | null>(null);
   const [roleFilter, setRoleFilter] = useState<"served" | "trained">("served");
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+  const [togglingRoleId, setTogglingRoleId] = useState<number | null>(null);
   const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "" });
   const [editSaving, setEditSaving] = useState(false);
@@ -519,20 +522,70 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const handleExport = () => {
-    const token = getAdminToken();
-    const url = "/api/admin/export";
-    const a = document.createElement("a");
-    a.href = url;
-    a.setAttribute("download", "");
-    const fetchAndDownload = async () => {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token ?? ""}` } });
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      a.href = objectUrl;
-      a.click();
-      URL.revokeObjectURL(objectUrl);
+    const attendees = data?.attendees ?? [];
+    const ROLE_LABEL: Record<string, string> = {
+      safety_marshal: "Safety Marshal",
+      medic: "Medic",
+      de_escalator: "De-escalator",
+      chant_lead: "Chant Lead",
+      information_services: "Info Services",
     };
-    fetchAndDownload().catch(console.error);
+    const rows = attendees.map((a) => {
+      const served = a.roles.map((r) => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
+      const trained = a.roles.filter((r) => r.isTrained).map((r) => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
+      return {
+        "First Name": a.firstName,
+        "Last Name": a.lastName,
+        "Email": a.email,
+        "Phone": a.phone ?? "",
+        "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
+        "Roles Served": served,
+        "Roles Trained": trained,
+        "Checked In At": new Date(a.checkedInAt).toLocaleString(),
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const colWidths = [
+      { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 }, { wch: 14 },
+      { wch: 30 }, { wch: 30 }, { wch: 22 },
+    ];
+    ws["!cols"] = colWidths;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Attendees");
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `nk3-attendees-${date}.xlsx`);
+  };
+
+  const handleBackfillTrained = async () => {
+    setBackfillLoading(true);
+    setBackfillMsg(null);
+    try {
+      const res = await fetch("/api/admin/backfill-trained", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
+      });
+      const json = await res.json() as { updated: number; message: string };
+      setBackfillMsg(json.message);
+      if (json.updated > 0) refetch();
+    } catch {
+      setBackfillMsg("Error running backfill.");
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
+
+  const handleToggleTrained = async (roleId: number, current: boolean) => {
+    setTogglingRoleId(roleId);
+    try {
+      await fetch(`/api/admin/attendee-roles/${roleId}/trained`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+        body: JSON.stringify({ isTrained: !current }),
+      });
+      refetch();
+    } finally {
+      setTogglingRoleId(null);
+    }
   };
 
   const handleLogout = () => {
@@ -640,7 +693,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
               disabled={isLoading}
             >
               <Download className="w-5 h-5 mr-2" />
-              Export CSV
+              Export Excel
             </Button>
             <Button
               variant="outline"
@@ -698,7 +751,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         {/* Role Breakdown */}
         <div>
-          <h2 className="font-display text-2xl mb-4">Volunteer Role Breakdown <span className="font-sans text-sm font-medium text-muted-foreground normal-case">(click a role to see who's signed up)</span></h2>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+            <h2 className="font-display text-2xl">Volunteer Role Breakdown <span className="font-sans text-sm font-medium text-muted-foreground normal-case">(click a role to see who's signed up)</span></h2>
+            <div className="flex items-center gap-3">
+              {backfillMsg && <p className="text-sm font-medium text-muted-foreground">{backfillMsg}</p>}
+              <Button variant="outline" size="sm" onClick={handleBackfillTrained} disabled={backfillLoading}>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                {backfillLoading ? "Running…" : "Sync Trained from Volunteer List"}
+              </Button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {roleCounts.map(({ role, count, trained }) => {
               const meta = ROLE_META[role];
@@ -763,15 +825,25 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                     <ul className="space-y-2">
                       {list.map(a => {
                         const roleEntry = a.roles.find(r => r.roleName === selectedRole);
+                        if (!roleEntry) return null;
+                        const toggling = togglingRoleId === roleEntry.id;
                         return (
-                          <li key={a.id} className="flex items-center justify-between p-3 rounded-lg border-2 border-border hover:bg-muted/30">
-                            <div>
+                          <li key={a.id} className="flex items-center justify-between p-3 rounded-lg border-2 border-border hover:bg-muted/30 gap-3">
+                            <div className="min-w-0">
                               <p className="font-bold">{a.firstName} {a.lastName}</p>
-                              <p className="text-sm text-muted-foreground">{a.email}</p>
+                              <p className="text-sm text-muted-foreground truncate">{a.email}</p>
                             </div>
-                            {roleEntry?.isTrained && roleFilter === "served" && (
-                              <span className="text-xs font-bold text-primary border-2 border-primary rounded-full px-2 py-1">Trained ✓</span>
-                            )}
+                            <button
+                              onClick={() => handleToggleTrained(roleEntry.id, roleEntry.isTrained)}
+                              disabled={toggling}
+                              className={`shrink-0 text-xs font-bold border-2 rounded-full px-3 py-1 transition-colors ${
+                                roleEntry.isTrained
+                                  ? "border-primary text-primary hover:bg-primary hover:text-white"
+                                  : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                              } ${toggling ? "opacity-50 cursor-wait" : ""}`}
+                            >
+                              {toggling ? "…" : roleEntry.isTrained ? "Trained ✓" : "Mark trained"}
+                            </button>
                           </li>
                         );
                       })}

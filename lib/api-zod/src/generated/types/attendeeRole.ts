@@ -8,6 +8,7 @@
 import type { AttendeeRoleRoleName } from "./attendeeRoleRoleName";
 
 export interface AttendeeRole {
+  id: number;
   roleName: AttendeeRoleRoleName;
   isTrained: boolean;
 }
