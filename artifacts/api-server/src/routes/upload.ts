@@ -71,11 +71,16 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     return;
   }
 
-  const rows = parseCsv(csv);
-  if (rows.length === 0) {
+  const rawRows = parseCsv(csv);
+  if (rawRows.length === 0) {
     res.status(400).json({ error: "No valid rows found in CSV. Ensure columns include email, first name, and last name." });
     return;
   }
+
+  // Deduplicate by email within the file — last occurrence wins (most recent data)
+  const seen = new Map<string, CsvRow>();
+  for (const r of rawRows) seen.set(r.email.toLowerCase(), r);
+  const rows = Array.from(seen.values());
 
   let inserted = 0;
   let skipped = 0;
@@ -187,11 +192,19 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
     return;
   }
 
+  // Deduplicate by full name (case-insensitive) — last occurrence wins
+  const volSeen = new Map<string, VolunteerRow>();
+  for (const v of volunteers) {
+    const key = `${v.firstName.toLowerCase().trim()} ${v.lastName.toLowerCase().trim()}`;
+    volSeen.set(key, v);
+  }
+  const deduped = Array.from(volSeen.values());
+
   // Clear existing volunteer pre-registrations and replace
   await db.delete(volunteerPreRegistrationsTable);
 
   await db.insert(volunteerPreRegistrationsTable).values(
-    volunteers.map(v => ({
+    deduped.map(v => ({
       firstName: v.firstName,
       lastName: v.lastName,
       email: v.email ?? null,
@@ -204,9 +217,12 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
     .select({ count: sql<number>`count(*)` })
     .from(volunteerPreRegistrationsTable);
 
+  const duplicatesRemoved = volunteers.length - deduped.length;
+
   res.json({
-    inserted: volunteers.length,
+    inserted: deduped.length,
     skipped: invalid.length,
+    duplicatesRemoved,
     invalidRows: invalid,
     totalInDatabase: Number(total[0].count),
   });

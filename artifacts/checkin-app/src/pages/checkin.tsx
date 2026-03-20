@@ -65,6 +65,7 @@ export default function CheckInFlow() {
   const [volunteerPreRegData, setVolunteerPreRegData] = useState<VolunteerPreRegResult | null>(null);
   const [checkedInVolunteerRole, setCheckedInVolunteerRole] = useState<AttendeeRoleRoleName | null>(null);
   const [volunteerManualRole, setVolunteerManualRole] = useState<AttendeeRoleRoleName | null>(null);
+  const [isVolunteerManual, setIsVolunteerManual] = useState(false);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -82,6 +83,7 @@ export default function CheckInFlow() {
     setVolunteerPreRegData(null);
     setCheckedInVolunteerRole(null);
     setVolunteerManualRole(null);
+    setIsVolunteerManual(false);
   };
 
   const handleLookup = () => {
@@ -239,6 +241,7 @@ export default function CheckInFlow() {
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
         setCheckedInVolunteerRole(volunteerManualRole);
+        setIsVolunteerManual(true);
         confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
         setStep(4);
       },
@@ -536,6 +539,18 @@ export default function CheckInFlow() {
                 </div>
               </div>
 
+              {volunteerManualRole && (
+                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                  className="p-5 bg-primary/10 border-4 border-primary rounded-2xl text-center space-y-1">
+                  <p className="font-display text-2xl text-primary">
+                    What role are you in today? Let's check you in as a {ROLE_META[volunteerManualRole]?.title}!
+                  </p>
+                  <p className="font-bold text-muted-foreground">
+                    We're so glad to have you as a {ROLE_META[volunteerManualRole]?.title} today. 🙌
+                  </p>
+                </motion.div>
+              )}
+
               <Button size="xl" className="w-full" onClick={submitVolunteerManualCheckin} isLoading={submitMutation.isPending}
                 disabled={!volunteerManualRole}>
                 Check Me In <CheckCircle className="ml-4 w-8 h-8" />
@@ -757,11 +772,17 @@ export default function CheckInFlow() {
                   WELCOME TO NO KINGS 3,<br />{firstName.toUpperCase()}!
                 </p>
                 {checkedInVolunteerRole ? (
-                  <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-2">
+                  <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-3">
                     <p className="font-bold text-xl text-primary">
                       🎖️ Congrats, you're checked in as a {ROLE_META[checkedInVolunteerRole]?.title ?? checkedInVolunteerRole}!
                     </p>
-                    {ROLE_META[checkedInVolunteerRole]?.hasVest ? (
+                    {isVolunteerManual ? (
+                      <>
+                        <p className="font-bold text-lg">Please make sure to let the <span className="text-primary">safety team</span> know we couldn't find your pre-registration details.</p>
+                        <p className="font-bold text-lg">You're registered as a <span className="text-primary">{ROLE_META[checkedInVolunteerRole]?.title}</span> — they'll get you your proper vest and assignment for today.</p>
+                        <p className="font-display text-xl text-primary mt-2">Welcome to No Kings 3!<br />We're so glad to have you as part of the team! 🧡</p>
+                      </>
+                    ) : ROLE_META[checkedInVolunteerRole]?.hasVest ? (
                       <>
                         <p className="font-bold text-xl">Please see the safety team to pick up your</p>
                         <p className="font-display text-2xl text-primary">VEST + NK3 Volunteer Button 🧡</p>

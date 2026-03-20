@@ -350,6 +350,11 @@ function VolunteerUploadSection() {
               <p className="font-bold text-green-800 text-sm">
                 Loaded {status.inserted} volunteers into the system — {status.totalInDatabase} total on file.
               </p>
+              {(status as { duplicatesRemoved?: number }).duplicatesRemoved > 0 && (
+                <p className="text-blue-700 text-xs font-medium mt-1">
+                  {(status as { duplicatesRemoved?: number }).duplicatesRemoved} duplicate name{(status as { duplicatesRemoved?: number }).duplicatesRemoved === 1 ? "" : "s"} removed automatically.
+                </p>
+              )}
               {status.skipped > 0 && (
                 <p className="text-yellow-700 text-xs font-medium mt-1">
                   {status.skipped} rows skipped (missing name or unrecognized role).
