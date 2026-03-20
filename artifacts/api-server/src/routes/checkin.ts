@@ -133,7 +133,39 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
-  // Regular attendee path: check the pre-registration CSV list
+  // Regular attendee path: FIRST check volunteer pre-reg list so volunteers
+  // don't accidentally get checked in as regular attendees
+  let volCheckMatch = await db
+    .select()
+    .from(volunteerPreRegistrationsTable)
+    .where(eq(volunteerPreRegistrationsTable.email, normalizedEmail))
+    .limit(1);
+
+  if (volCheckMatch.length === 0) {
+    const nameMatches = await db
+      .select()
+      .from(volunteerPreRegistrationsTable)
+      .where(ilike(volunteerPreRegistrationsTable.firstName, firstName.trim()));
+    if (nameMatches.length === 1) volCheckMatch = nameMatches;
+  }
+
+  if (volCheckMatch.length > 0) {
+    res.json({
+      found: false,
+      alreadyCheckedIn: false,
+      volunteerPreReg: {
+        id: volCheckMatch[0].id,
+        firstName: volCheckMatch[0].firstName,
+        lastName: volCheckMatch[0].lastName,
+        email: volCheckMatch[0].email ?? null,
+        phone: volCheckMatch[0].phone ?? null,
+        roleName: volCheckMatch[0].roleName,
+      },
+    });
+    return;
+  }
+
+  // Check the pre-registration CSV list
   const preReg = await db
     .select()
     .from(preRegistrationsTable)

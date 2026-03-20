@@ -130,7 +130,19 @@ export default function CheckInFlow() {
           return;
         }
 
-        // Regular attendee path
+        // Regular attendee path: catch volunteers who missed the volunteer button
+        if (data.volunteerPreReg) {
+          const vpr = data.volunteerPreReg;
+          setVolunteerPreRegData(vpr);
+          setFirstName(vpr.firstName);
+          setLastName(vpr.lastName);
+          if (vpr.email) setEmail(vpr.email);
+          if (vpr.phone) setPhone(vpr.phone);
+          setIsVolunteerMode(true);
+          setStep("vol_found");
+          return;
+        }
+
         if (data.found) {
           setPreRegistered(true);
           setMobilizeId(data.mobilizeId ?? null);
