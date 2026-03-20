@@ -199,13 +199,29 @@ router.post("/check-in/submit", async (req, res) => {
     .returning();
 
   if (roles && roles.length > 0) {
-    await db.insert(attendeeRolesTable).values(
-      roles.map((r) => ({
+    // Auto-set isTrained=true for any role where this person is on the volunteer pre-registration list
+    const volRegs = await db.select().from(volunteerPreRegistrationsTable);
+    const normalizedEmail = email.toLowerCase().trim();
+    const fn = firstName.trim().toLowerCase();
+    const ln = lastName.trim().toLowerCase();
+
+    const resolvedRoles = roles.map((r) => {
+      const onVolList = volRegs.some(
+        (v) =>
+          v.roleName === r.roleName &&
+          (
+            (v.email && v.email.toLowerCase() === normalizedEmail) ||
+            (v.firstName.toLowerCase() === fn && v.lastName.toLowerCase() === ln)
+          )
+      );
+      return {
         attendeeId: newAttendee.id,
         roleName: r.roleName as "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services",
-        isTrained: r.isTrained,
-      }))
-    );
+        isTrained: r.isTrained || onVolList,
+      };
+    });
+
+    await db.insert(attendeeRolesTable).values(resolvedRoles);
   }
 
   res.status(201).json({ id: newAttendee.id, message: "Check-in successful!" });

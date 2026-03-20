@@ -509,8 +509,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedRole, setSelectedRole] = useState<AttendeeRoleRoleName | null>(null);
   const [roleFilter, setRoleFilter] = useState<"served" | "trained">("served");
-  const [backfillLoading, setBackfillLoading] = useState(false);
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
   const [togglingRoleId, setTogglingRoleId] = useState<number | null>(null);
   const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "" });
@@ -554,24 +552,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     XLSX.utils.book_append_sheet(wb, ws, "Attendees");
     const date = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `nk3-attendees-${date}.xlsx`);
-  };
-
-  const handleBackfillTrained = async () => {
-    setBackfillLoading(true);
-    setBackfillMsg(null);
-    try {
-      const res = await fetch("/api/admin/backfill-trained", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
-      });
-      const json = await res.json() as { updated: number; message: string };
-      setBackfillMsg(json.message);
-      if (json.updated > 0) refetch();
-    } catch {
-      setBackfillMsg("Error running backfill.");
-    } finally {
-      setBackfillLoading(false);
-    }
   };
 
   const handleToggleTrained = async (roleId: number, current: boolean) => {
@@ -751,16 +731,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         {/* Role Breakdown */}
         <div>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-            <h2 className="font-display text-2xl">Volunteer Role Breakdown <span className="font-sans text-sm font-medium text-muted-foreground normal-case">(click a role to see who's signed up)</span></h2>
-            <div className="flex items-center gap-3">
-              {backfillMsg && <p className="text-sm font-medium text-muted-foreground">{backfillMsg}</p>}
-              <Button variant="outline" size="sm" onClick={handleBackfillTrained} disabled={backfillLoading}>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                {backfillLoading ? "Running…" : "Sync Trained from Volunteer List"}
-              </Button>
-            </div>
-          </div>
+          <h2 className="font-display text-2xl mb-4">Volunteer Role Breakdown <span className="font-sans text-sm font-medium text-muted-foreground normal-case">(click a role to see who's signed up)</span></h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {roleCounts.map(({ role, count, trained }) => {
               const meta = ROLE_META[role];
