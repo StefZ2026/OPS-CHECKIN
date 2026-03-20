@@ -77,10 +77,54 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     return;
   }
 
-  // Deduplicate by email within the file — last occurrence wins (most recent data)
-  const seen = new Map<string, CsvRow>();
-  for (const r of rawRows) seen.set(r.email.toLowerCase(), r);
-  const rows = Array.from(seen.values());
+  // Deduplicate within the file on a per-record basis:
+  // Same name, same email, OR same phone = same person. Merge to keep the best data.
+  const byEmail = new Map<string, CsvRow>();
+  const byPhone = new Map<string, CsvRow>();
+  const byName = new Map<string, CsvRow>();
+
+  function mergeRows(a: CsvRow, b: CsvRow): CsvRow {
+    return {
+      firstName: b.firstName || a.firstName,
+      lastName: b.lastName || a.lastName,
+      email: b.email || a.email,
+      phone: b.phone || a.phone,
+    };
+  }
+
+  function findExisting(r: CsvRow): CsvRow | undefined {
+    const nameKey = `${r.firstName.toLowerCase().trim()} ${r.lastName.toLowerCase().trim()}`;
+    if (r.email && byEmail.has(r.email.toLowerCase())) return byEmail.get(r.email.toLowerCase());
+    if (r.phone && byPhone.has(r.phone)) return byPhone.get(r.phone);
+    if (nameKey.trim() !== " ") return byName.get(nameKey);
+    return undefined;
+  }
+
+  function indexRow(r: CsvRow) {
+    const nameKey = `${r.firstName.toLowerCase().trim()} ${r.lastName.toLowerCase().trim()}`;
+    if (r.email) byEmail.set(r.email.toLowerCase(), r);
+    if (r.phone) byPhone.set(r.phone, r);
+    byName.set(nameKey, r);
+  }
+
+  for (const r of rawRows) {
+    const existing = findExisting(r);
+    if (existing) {
+      const merged = mergeRows(existing, r);
+      // Remove old index entries and re-index with merged data
+      const oldNameKey = `${existing.firstName.toLowerCase().trim()} ${existing.lastName.toLowerCase().trim()}`;
+      byName.delete(oldNameKey);
+      if (existing.email) byEmail.delete(existing.email.toLowerCase());
+      if (existing.phone) byPhone.delete(existing.phone);
+      Object.assign(existing, merged);
+      indexRow(existing);
+    } else {
+      indexRow(r);
+    }
+  }
+
+  // Final list: unique records that have at least an email
+  const rows = Array.from(byName.values()).filter(r => r.email && r.email.includes("@"));
 
   let inserted = 0;
   let skipped = 0;
