@@ -494,8 +494,8 @@ export default function CheckInFlow() {
             <motion.div key="vol_manual" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-2xl mx-auto space-y-8">
               <div className="text-center space-y-3">
-                <h2 className="font-display text-4xl md:text-5xl leading-tight">No problem, {firstName}!</h2>
-                <p className="text-xl font-medium text-muted-foreground">Let's get you checked in. Just fill in a couple of details.</p>
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">We must be missing<br />a few details!</h2>
+                <p className="text-xl font-medium text-muted-foreground">No worries, {firstName} — let's fill them in and get you checked in.</p>
               </div>
 
               <div className="space-y-5">
