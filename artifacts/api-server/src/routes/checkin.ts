@@ -176,6 +176,15 @@ router.post("/check-in/submit", async (req, res) => {
     .limit(1);
 
   if (existing.length > 0) {
+    // Silently correct the stored name if a better spelling was provided
+    const stored = existing[0];
+    const newFirst = firstName.trim();
+    const newLast = lastName.trim() || "Unknown";
+    if (stored.firstName !== newFirst || stored.lastName !== newLast) {
+      await db.update(attendeesTable)
+        .set({ firstName: newFirst, lastName: newLast })
+        .where(eq(attendeesTable.id, stored.id));
+    }
     res.status(409).json({ error: "This email has already been checked in." });
     return;
   }

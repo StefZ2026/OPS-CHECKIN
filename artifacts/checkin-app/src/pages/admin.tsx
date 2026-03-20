@@ -6,7 +6,7 @@ import {
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
-  Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle,
+  Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle, Pencil, X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
@@ -500,12 +500,17 @@ function VolunteerUploadSection() {
   );
 }
 
+type EditForm = { firstName: string; lastName: string; phone: string };
+
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const { data, isLoading, isError, refetch, isRefetching } = useAttendees();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("checkedInAt");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedRole, setSelectedRole] = useState<AttendeeRoleRoleName | null>(null);
+  const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "" });
+  const [editSaving, setEditSaving] = useState(false);
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -532,6 +537,30 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const handleLogout = () => {
     clearAdminToken();
     onLogout();
+  };
+
+  const handleEditOpen = (attendee: AttendeeWithRoles) => {
+    setEditingAttendee(attendee);
+    setEditForm({ firstName: attendee.firstName, lastName: attendee.lastName, phone: "" });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAttendee) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/admin/attendees/${editingAttendee.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+        body: JSON.stringify({ firstName: editForm.firstName, lastName: editForm.lastName, ...(editForm.phone ? { phone: editForm.phone } : {}) }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setEditingAttendee(null);
+      refetch();
+    } catch {
+      alert("Could not save — please try again.");
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleDelete = async (email: string, name: string) => {
@@ -832,13 +861,22 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                           {format(new Date(attendee.checkedInAt), "h:mm a")}
                         </td>
                         <td className="p-3 text-right">
-                          <button
-                            onClick={() => handleDelete(attendee.email, `${attendee.firstName} ${attendee.lastName}`)}
-                            className="p-2 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                            title="Remove attendee"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleEditOpen(attendee)}
+                              className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="Edit attendee"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(attendee.email, `${attendee.firstName} ${attendee.lastName}`)}
+                              className="p-2 rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="Remove attendee"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -849,6 +887,61 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           </Card>
         </div>
       </main>
+
+      {/* Edit Attendee Modal */}
+      {editingAttendee && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => setEditingAttendee(null)}>
+          <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b-4 border-foreground">
+              <div>
+                <h3 className="font-display text-2xl">Edit Attendee</h3>
+                <p className="text-sm text-muted-foreground font-medium mt-1">{editingAttendee.email}</p>
+              </div>
+              <button onClick={() => setEditingAttendee(null)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="font-display text-sm uppercase tracking-wider mb-1 block">First Name</label>
+                <input
+                  value={editForm.firstName}
+                  onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
+                  className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="font-display text-sm uppercase tracking-wider mb-1 block">Last Name</label>
+                <input
+                  value={editForm.lastName}
+                  onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
+                  className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="font-display text-sm uppercase tracking-wider mb-1 block">
+                  Phone <span className="font-sans font-medium normal-case text-muted-foreground text-xs">(leave blank to keep existing)</span>
+                </label>
+                <input
+                  value={editForm.phone}
+                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                  type="tel"
+                  placeholder="Enter phone number..."
+                  className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 pt-0">
+              <Button variant="outline" className="flex-1" onClick={() => setEditingAttendee(null)} disabled={editSaving}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={handleSaveEdit} isLoading={editSaving}>
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

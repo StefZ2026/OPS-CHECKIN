@@ -42,4 +42,17 @@ router.get("/attendees", async (_req, res) => {
   res.json({ total, preRegisteredCount, walkInCount, attendees: result });
 });
 
+router.patch("/admin/attendees/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { firstName, lastName, phone } = req.body as { firstName?: string; lastName?: string; phone?: string };
+  const updates: Record<string, string | null> = {};
+  if (firstName !== undefined) updates.firstName = firstName.trim();
+  if (lastName !== undefined) updates.lastName = lastName.trim();
+  if (phone !== undefined) updates.phone = phone.replace(/\D/g, "") || null;
+  if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+  await db.update(attendeesTable).set(updates).where(eq(attendeesTable.id, id));
+  res.json({ ok: true });
+});
+
 export default router;
