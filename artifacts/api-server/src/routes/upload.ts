@@ -256,11 +256,15 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   const invalid: number[] = [];
 
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i] as Record<string, string>;
-    const rawName = row.name ?? row.fullname ?? row.fullName ?? row["full name"] ?? row["Full Name"] ?? "";
-    const rawRole = row.role ?? row.Role ?? row["volunteer role"] ?? row["Volunteer Role"] ?? "";
-    const email = (row.email ?? row.Email ?? "").trim().toLowerCase() || undefined;
-    const rawPhone = (row.phone ?? row.Phone ?? row["phone number"] ?? "").trim();
+    const rawRow = rows[i] as Record<string, string>;
+    // Normalize all column keys to lowercase so any capitalization works
+    const row: Record<string, string> = {};
+    for (const k of Object.keys(rawRow)) row[k.toLowerCase().trim()] = rawRow[k];
+
+    const rawName = row.name ?? row.fullname ?? row["full name"] ?? "";
+    const rawRole = row.role ?? row["volunteer role"] ?? "";
+    const email = (row.email ?? "").trim().toLowerCase() || undefined;
+    const rawPhone = (row.phone ?? row["phone number"] ?? "").trim();
     const phone = rawPhone.replace(/\D/g, "") || undefined;
 
     const roleName = normalizeRole(rawRole);
