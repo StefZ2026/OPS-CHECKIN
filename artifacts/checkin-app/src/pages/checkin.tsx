@@ -504,6 +504,12 @@ export default function CheckInFlow() {
               <Button size="xl" className="w-full group" onClick={submitVolunteerCheckin} isLoading={submitMutation.isPending}>
                 That's me — check me in! <CheckCircle className="ml-4 w-8 h-8" />
               </Button>
+
+              <button
+                onClick={() => setStep("vol_manual")}
+                className="w-full text-center text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors py-2">
+                Something's not right — let me correct my info
+              </button>
             </motion.div>
           )}
 
