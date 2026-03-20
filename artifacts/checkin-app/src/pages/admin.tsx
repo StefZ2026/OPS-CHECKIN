@@ -350,7 +350,24 @@ function VolunteerUploadSection() {
         const data = new Uint8Array(ev.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const parsed = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: "" });
+        // Get raw rows as arrays so we can find the real header row
+        const raw = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
+        // Find the first row that contains both "name" and "role" (case-insensitive)
+        const headerRowIdx = raw.findIndex((row) => {
+          const lower = row.map((c) => String(c).toLowerCase().trim());
+          return lower.includes("name") && lower.includes("role");
+        });
+        if (headerRowIdx === -1) {
+          setError("Could not find Name and Role columns in this file.");
+          return;
+        }
+        const headers = raw[headerRowIdx].map((c) => String(c).toLowerCase().trim());
+        const dataRows = raw.slice(headerRowIdx + 1).filter((r) => r.some((c) => String(c).trim() !== ""));
+        const parsed = dataRows.map((row) => {
+          const obj: Record<string, string> = {};
+          headers.forEach((h, i) => { obj[h] = String(row[i] ?? ""); });
+          return obj;
+        });
         setRows(parsed);
       } catch {
         setError("Could not read file. Please make sure it's a valid Excel (.xlsx) file.");
