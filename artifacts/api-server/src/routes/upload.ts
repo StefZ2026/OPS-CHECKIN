@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { requireAdminAuth } from "./admin";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -201,6 +201,14 @@ router.get("/admin/registrations/count", requireAdminAuth, async (_req, res) => 
 
 type VolunteerRoleName = "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services";
 
+const ROLE_TITLES: Record<string, string> = {
+  safety_marshal: "Safety Marshal",
+  medic: "Medic",
+  de_escalator: "De-escalator",
+  chant_lead: "Chant Lead",
+  information_services: "Information Services",
+};
+
 const ROLE_MAP: Record<string, VolunteerRoleName> = {
   "safety marshal": "safety_marshal",
   "safetymarshal": "safety_marshal",
@@ -281,7 +289,35 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   }
   const deduped = Array.from(volSeen.values());
 
-  // Clear existing volunteer pre-registrations and replace
+  // Detect role changes vs existing list before replacing
+  const existingVols = await db.select().from(volunteerPreRegistrationsTable);
+
+  type RoleConflict = {
+    firstName: string;
+    lastName: string;
+    oldRole: { roleName: string; title: string };
+    newRole: { roleName: string; title: string };
+    recommendationReason: string;
+  };
+  const roleConflicts: RoleConflict[] = [];
+
+  for (const v of deduped) {
+    const nameKey = `${v.firstName.toLowerCase().trim()} ${v.lastName.toLowerCase().trim()}`;
+    const existing = existingVols.find(e =>
+      `${e.firstName.toLowerCase().trim()} ${e.lastName.toLowerCase().trim()}` === nameKey
+    );
+    if (existing && existing.roleName !== v.roleName) {
+      roleConflicts.push({
+        firstName: v.firstName,
+        lastName: v.lastName,
+        oldRole: { roleName: existing.roleName, title: ROLE_TITLES[existing.roleName] ?? existing.roleName },
+        newRole: { roleName: v.roleName, title: ROLE_TITLES[v.roleName] ?? v.roleName },
+        recommendationReason: "The new file's role is recommended as it reflects the most recent assignment",
+      });
+    }
+  }
+
+  // Clear existing and replace with new file (new file wins by default)
   await db.delete(volunteerPreRegistrationsTable);
 
   await db.insert(volunteerPreRegistrationsTable).values(
@@ -306,7 +342,24 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
     duplicatesRemoved,
     invalidRows: invalid,
     totalInDatabase: Number(total[0].count),
+    roleConflicts,
   });
+});
+
+// Admin picks the correct role when a volunteer's role changed between uploads
+router.post("/admin/upload-volunteers/resolve-role", requireAdminAuth, async (req, res) => {
+  const { firstName, lastName, roleName } = req.body as { firstName?: string; lastName?: string; roleName?: string };
+  if (!firstName || !lastName || !roleName) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+  await db.update(volunteerPreRegistrationsTable)
+    .set({ roleName: roleName as VolunteerRoleName })
+    .where(and(
+      eq(volunteerPreRegistrationsTable.firstName, firstName),
+      eq(volunteerPreRegistrationsTable.lastName, lastName)
+    ));
+  res.json({ ok: true });
 });
 
 router.get("/admin/volunteers/count", requireAdminAuth, async (_req, res) => {

@@ -321,10 +321,20 @@ function QrCodeSection() {
   );
 }
 
+type RoleConflict = {
+  firstName: string;
+  lastName: string;
+  oldRole: { roleName: string; title: string };
+  newRole: { roleName: string; title: string };
+  recommendationReason: string;
+};
+
 function VolunteerUploadSection() {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [fileName, setFileName] = useState("");
   const [status, setStatus] = useState<null | { inserted: number; skipped: number; totalInDatabase: number; invalidRows?: number[] }>(null);
+  const [roleConflicts, setRoleConflicts] = useState<RoleConflict[]>([]);
+  const [resolving, setResolving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -351,19 +361,17 @@ function VolunteerUploadSection() {
 
   const handleUpload = async () => {
     if (rows.length === 0) { setError("Please select an Excel file first."); return; }
-    setError(""); setLoading(true); setStatus(null);
+    setError(""); setLoading(true); setStatus(null); setRoleConflicts([]);
     try {
       const res = await fetch("/api/admin/upload-volunteers", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getAdminToken() ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ rows }),
       });
-      const d = await res.json() as { inserted?: number; skipped?: number; totalInDatabase?: number; error?: string; invalidRows?: number[] };
+      const d = await res.json() as { inserted?: number; skipped?: number; totalInDatabase?: number; error?: string; invalidRows?: number[]; roleConflicts?: RoleConflict[] };
       if (!res.ok) throw new Error(d.error ?? "Upload failed");
       setStatus({ inserted: d.inserted ?? 0, skipped: d.skipped ?? 0, totalInDatabase: d.totalInDatabase ?? 0, invalidRows: d.invalidRows });
+      setRoleConflicts(d.roleConflicts ?? []);
       setRows([]);
       setFileName("");
       if (fileRef.current) fileRef.current.value = "";
@@ -371,6 +379,21 @@ function VolunteerUploadSection() {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resolveRoleConflict = async (conflict: RoleConflict, chosenRoleName: string) => {
+    const key = `${conflict.firstName} ${conflict.lastName}`;
+    setResolving(key);
+    try {
+      await fetch("/api/admin/upload-volunteers/resolve-role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+        body: JSON.stringify({ firstName: conflict.firstName, lastName: conflict.lastName, roleName: chosenRoleName }),
+      });
+      setRoleConflicts(prev => prev.filter(c => !(c.firstName === conflict.firstName && c.lastName === conflict.lastName)));
+    } finally {
+      setResolving(null);
     }
   };
 
@@ -425,6 +448,51 @@ function VolunteerUploadSection() {
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {roleConflicts.length > 0 && (
+          <div className="space-y-3">
+            <p className="font-bold text-orange-700 text-sm">
+              ⚠️ {roleConflicts.length} role change{roleConflicts.length === 1 ? "" : "s"} detected — please confirm which role is correct:
+            </p>
+            {roleConflicts.map((conflict) => {
+              const key = `${conflict.firstName} ${conflict.lastName}`;
+              const isResolving = resolving === key;
+              return (
+                <div key={key} className="border-2 border-orange-400 rounded-xl p-4 bg-orange-50 space-y-3">
+                  <p className="font-bold text-sm">
+                    {conflict.firstName} {conflict.lastName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{conflict.recommendationReason}</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      disabled={isResolving}
+                      onClick={() => resolveRoleConflict(conflict, conflict.newRole.roleName)}
+                      className="flex-1 border-2 border-orange-500 rounded-lg p-3 text-left hover:bg-orange-100 transition-colors disabled:opacity-50"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground font-medium">New file (later entry)</p>
+                          <p className="font-bold text-sm">{conflict.newRole.title}</p>
+                        </div>
+                        <span className="text-xs font-bold text-orange-700 bg-orange-200 px-2 py-1 rounded-full shrink-0">RECOMMENDED</span>
+                      </div>
+                    </button>
+                    <button
+                      disabled={isResolving}
+                      onClick={() => resolveRoleConflict(conflict, conflict.oldRole.roleName)}
+                      className="flex-1 border-2 border-foreground/30 rounded-lg p-3 text-left hover:bg-muted transition-colors disabled:opacity-50"
+                    >
+                      <div>
+                        <p className="text-xs text-muted-foreground font-medium">Previous entry</p>
+                        <p className="font-bold text-sm">{conflict.oldRole.title}</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>
