@@ -508,6 +508,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [sortKey, setSortKey] = useState<SortKey>("checkedInAt");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedRole, setSelectedRole] = useState<AttendeeRoleRoleName | null>(null);
+  const [roleFilter, setRoleFilter] = useState<"served" | "trained">("served");
   const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "" });
   const [editSaving, setEditSaving] = useState(false);
@@ -723,9 +724,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         {/* Role volunteer modal */}
         {selectedRole && (() => {
           const meta = ROLE_META[selectedRole];
-          const volunteers = (data?.attendees ?? []).filter(a => a.roles.some(r => r.roleName === selectedRole));
+          const served = (data?.attendees ?? []).filter(a => a.roles.some(r => r.roleName === selectedRole));
+          const trained = served.filter(a => a.roles.some(r => r.roleName === selectedRole && r.isTrained));
+          const list = roleFilter === "trained" ? trained : served;
           return (
-            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => setSelectedRole(null)}>
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => { setSelectedRole(null); setRoleFilter("served"); }}>
               <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-6 border-b-4 border-foreground">
                   <div className="flex items-center gap-3">
@@ -733,16 +736,32 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                       <meta.Icon className="w-5 h-5" />
                     </div>
                     <h3 className="font-display text-2xl">{meta.label}</h3>
-                    <span className="font-display text-xl text-muted-foreground">({volunteers.length})</span>
                   </div>
-                  <button onClick={() => setSelectedRole(null)} className="text-muted-foreground hover:text-foreground text-2xl font-bold leading-none">×</button>
+                  <button onClick={() => { setSelectedRole(null); setRoleFilter("served"); }} className="text-muted-foreground hover:text-foreground text-2xl font-bold leading-none">×</button>
+                </div>
+                {/* Served / Trained tabs */}
+                <div className="flex border-b-4 border-foreground">
+                  <button
+                    onClick={() => setRoleFilter("served")}
+                    className={`flex-1 py-3 font-display text-lg transition-colors ${roleFilter === "served" ? "bg-foreground text-white" : "hover:bg-muted/30"}`}
+                  >
+                    Served ({served.length})
+                  </button>
+                  <button
+                    onClick={() => setRoleFilter("trained")}
+                    className={`flex-1 py-3 font-display text-lg transition-colors border-l-4 border-foreground ${roleFilter === "trained" ? "bg-primary text-white" : "hover:bg-muted/30"}`}
+                  >
+                    Trained ({trained.length})
+                  </button>
                 </div>
                 <div className="overflow-y-auto flex-1 p-4">
-                  {volunteers.length === 0 ? (
-                    <p className="text-center text-muted-foreground font-medium py-8">No volunteers signed up yet.</p>
+                  {list.length === 0 ? (
+                    <p className="text-center text-muted-foreground font-medium py-8">
+                      {roleFilter === "trained" ? "No trained volunteers on record for this role." : "No volunteers signed up yet."}
+                    </p>
                   ) : (
                     <ul className="space-y-2">
-                      {volunteers.map(a => {
+                      {list.map(a => {
                         const roleEntry = a.roles.find(r => r.roleName === selectedRole);
                         return (
                           <li key={a.id} className="flex items-center justify-between p-3 rounded-lg border-2 border-border hover:bg-muted/30">
@@ -750,7 +769,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                               <p className="font-bold">{a.firstName} {a.lastName}</p>
                               <p className="text-sm text-muted-foreground">{a.email}</p>
                             </div>
-                            {roleEntry?.isTrained && (
+                            {roleEntry?.isTrained && roleFilter === "served" && (
                               <span className="text-xs font-bold text-primary border-2 border-primary rounded-full px-2 py-1">Trained ✓</span>
                             )}
                           </li>

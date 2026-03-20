@@ -213,7 +213,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: false,
       mobilizeId: null,
-      roles: [{ roleName, isTrained: false }],
+      roles: [{ roleName, isTrained: true }],
     };
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
