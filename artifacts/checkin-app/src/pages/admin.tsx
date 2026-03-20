@@ -406,7 +406,7 @@ function VolunteerUploadSection() {
         </div>
         <p className="text-muted-foreground font-medium text-sm">
           Upload your volunteer Excel sheet (.xlsx). Required columns: <strong>Name</strong> (full name) and <strong>Role</strong>. Optional: Email, Phone.
-          This replaces the existing volunteer list each time.
+          New volunteers are added; existing entries are kept and duplicates are skipped.
         </p>
         <p className="text-muted-foreground text-xs">
           Accepted roles: Safety Marshal, Medic, De-Escalator, Chant Lead, Information Services

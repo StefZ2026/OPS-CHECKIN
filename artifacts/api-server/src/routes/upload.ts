@@ -281,7 +281,7 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
     return;
   }
 
-  // Deduplicate by full name (case-insensitive) — last occurrence wins
+  // Deduplicate within the uploaded file by name+role — last occurrence wins
   const volSeen = new Map<string, VolunteerRow>();
   for (const v of volunteers) {
     const key = `${v.firstName.toLowerCase().trim()} ${v.lastName.toLowerCase().trim()}`;
@@ -289,7 +289,7 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   }
   const deduped = Array.from(volSeen.values());
 
-  // Detect role changes vs existing list before replacing
+  // Load existing volunteers to merge against
   const existingVols = await db.select().from(volunteerPreRegistrationsTable);
 
   type RoleConflict = {
@@ -300,46 +300,54 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
     recommendationReason: string;
   };
   const roleConflicts: RoleConflict[] = [];
+  const toInsert: VolunteerRow[] = [];
+  let skippedDuplicates = 0;
 
   for (const v of deduped) {
     const nameKey = `${v.firstName.toLowerCase().trim()} ${v.lastName.toLowerCase().trim()}`;
     const existing = existingVols.find(e =>
       `${e.firstName.toLowerCase().trim()} ${e.lastName.toLowerCase().trim()}` === nameKey
     );
-    if (existing && existing.roleName !== v.roleName) {
-      roleConflicts.push({
-        firstName: v.firstName,
-        lastName: v.lastName,
-        oldRole: { roleName: existing.roleName, title: ROLE_TITLES[existing.roleName] ?? existing.roleName },
-        newRole: { roleName: v.roleName, title: ROLE_TITLES[v.roleName] ?? v.roleName },
-        recommendationReason: "The new file's role is recommended as it reflects the most recent assignment",
-      });
+
+    if (existing) {
+      if (existing.roleName === v.roleName) {
+        // Exact duplicate — already in the list, skip
+        skippedDuplicates++;
+      } else {
+        // Same person, different role — surface as a conflict for admin to resolve
+        roleConflicts.push({
+          firstName: v.firstName,
+          lastName: v.lastName,
+          oldRole: { roleName: existing.roleName, title: ROLE_TITLES[existing.roleName] ?? existing.roleName },
+          newRole: { roleName: v.roleName, title: ROLE_TITLES[v.roleName] ?? v.roleName },
+          recommendationReason: "The new file's role is recommended as it reflects the most recent assignment",
+        });
+      }
+    } else {
+      // New volunteer — add them
+      toInsert.push(v);
     }
   }
 
-  // Clear existing and replace with new file (new file wins by default)
-  await db.delete(volunteerPreRegistrationsTable);
-
-  await db.insert(volunteerPreRegistrationsTable).values(
-    deduped.map(v => ({
-      firstName: v.firstName,
-      lastName: v.lastName,
-      email: v.email ?? null,
-      phone: v.phone ?? null,
-      roleName: v.roleName,
-    }))
-  );
+  if (toInsert.length > 0) {
+    await db.insert(volunteerPreRegistrationsTable).values(
+      toInsert.map(v => ({
+        firstName: v.firstName,
+        lastName: v.lastName,
+        email: v.email ?? null,
+        phone: v.phone ?? null,
+        roleName: v.roleName,
+      }))
+    );
+  }
 
   const total = await db
     .select({ count: sql<number>`count(*)` })
     .from(volunteerPreRegistrationsTable);
 
-  const duplicatesRemoved = volunteers.length - deduped.length;
-
   res.json({
-    inserted: deduped.length,
-    skipped: invalid.length,
-    duplicatesRemoved,
+    inserted: toInsert.length,
+    skipped: skippedDuplicates,
     invalidRows: invalid,
     totalInDatabase: Number(total[0].count),
     roleConflicts,
