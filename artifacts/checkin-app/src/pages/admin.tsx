@@ -6,7 +6,7 @@ import {
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
-  Eye, EyeOff, Trash2, Info, HardHat,
+  Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
@@ -107,9 +107,14 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+type SuspectedDup = { a: { firstName: string; lastName: string; email: string; phone?: string }; b: { firstName: string; lastName: string; email: string; phone?: string }; similarity: number };
+type UploadStatus = { inserted: number; skipped: number; totalInDatabase: number; suspectedDuplicates?: SuspectedDup[] };
+
 function CsvUploadSection() {
   const [csvText, setCsvText] = useState("");
-  const [status, setStatus] = useState<null | { inserted: number; skipped: number; totalInDatabase: number }>(null);
+  const [status, setStatus] = useState<null | UploadStatus>(null);
+  const [suspects, setSuspects] = useState<SuspectedDup[]>([]);
+  const [resolving, setResolving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -124,22 +129,20 @@ function CsvUploadSection() {
 
   const handleUpload = async () => {
     if (!csvText.trim()) { setError("Please select a CSV file first."); return; }
-    setError(""); setLoading(true); setStatus(null);
+    setError(""); setLoading(true); setStatus(null); setSuspects([]);
     try {
       const res = await fetch("/api/admin/upload-registrations", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getAdminToken() ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ csv: csvText }),
       });
       if (!res.ok) {
         const d = await res.json() as { error?: string };
         throw new Error(d.error ?? "Upload failed");
       }
-      const d = await res.json() as { inserted: number; skipped: number; totalInDatabase: number };
+      const d = await res.json() as UploadStatus;
       setStatus(d);
+      setSuspects(d.suspectedDuplicates ?? []);
       setCsvText("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (err) {
@@ -147,6 +150,25 @@ function CsvUploadSection() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resolvePair = async (dup: SuspectedDup, keepRecord: SuspectedDup["a"] | SuspectedDup["b"], discardRecord: SuspectedDup["a"] | SuspectedDup["b"], chosenName: { firstName: string; lastName: string }) => {
+    const key = `${dup.a.email}|${dup.b.email}`;
+    setResolving(key);
+    try {
+      await fetch("/api/admin/upload-registrations/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+        body: JSON.stringify({ keepEmail: keepRecord.email, discardEmail: discardRecord.email, correctFirstName: chosenName.firstName, correctLastName: chosenName.lastName }),
+      });
+      setSuspects(prev => prev.filter(d => !(d.a.email === dup.a.email && d.b.email === dup.b.email)));
+    } finally {
+      setResolving(null);
+    }
+  };
+
+  const dismissPair = (dup: SuspectedDup) => {
+    setSuspects(prev => prev.filter(d => !(d.a.email === dup.a.email && d.b.email === dup.b.email)));
   };
 
   return (
@@ -178,6 +200,52 @@ function CsvUploadSection() {
             <p className="font-bold text-green-800 text-sm">
               Loaded {status.inserted} registrations ({status.skipped} skipped as duplicates) — {status.totalInDatabase} total pre-registrations on file.
             </p>
+          </div>
+        )}
+
+        {suspects.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 bg-yellow-50 border-2 border-yellow-500 rounded-xl">
+              <AlertTriangle className="w-5 h-5 text-yellow-700 flex-shrink-0" />
+              <p className="font-bold text-yellow-800 text-sm">
+                {suspects.length} possible name conflict{suspects.length !== 1 ? "s" : ""} — are these the same person?
+              </p>
+            </div>
+            {suspects.map((dup) => {
+              const key = `${dup.a.email}|${dup.b.email}`;
+              const isResolving = resolving === key;
+              return (
+                <div key={key} className="border-2 border-yellow-400 rounded-xl p-4 bg-yellow-50 space-y-3">
+                  <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider">~{dup.similarity}% similar name</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[dup.a, dup.b].map((rec, idx) => {
+                      const other = idx === 0 ? dup.b : dup.a;
+                      return (
+                        <div key={rec.email} className="bg-white border-2 border-foreground rounded-lg p-3 space-y-1">
+                          <p className="font-display text-lg leading-tight">{rec.firstName} {rec.lastName}</p>
+                          <p className="text-xs text-muted-foreground break-all">{rec.email}</p>
+                          {rec.phone && <p className="text-xs text-muted-foreground">{rec.phone}</p>}
+                          <button
+                            disabled={isResolving}
+                            onClick={() => resolvePair(dup, rec, other, { firstName: rec.firstName, lastName: rec.lastName })}
+                            className="mt-2 w-full py-2 px-3 rounded-lg border-2 border-primary bg-primary text-white font-bold text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                          >
+                            ✓ This is correct
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    disabled={isResolving}
+                    onClick={() => dismissPair(dup)}
+                    className="w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    These are different people — keep both
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>

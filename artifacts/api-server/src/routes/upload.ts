@@ -84,11 +84,12 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
   const byName = new Map<string, CsvRow>();
 
   function mergeRows(a: CsvRow, b: CsvRow): CsvRow {
+    // Fill in missing data only — never overwrite existing values
     return {
-      firstName: b.firstName || a.firstName,
-      lastName: b.lastName || a.lastName,
-      email: b.email || a.email,
-      phone: b.phone || a.phone,
+      firstName: a.firstName || b.firstName,
+      lastName: a.lastName || b.lastName,
+      email: a.email || b.email,
+      phone: a.phone || b.phone,
     };
   }
 
