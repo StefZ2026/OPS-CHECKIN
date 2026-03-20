@@ -46,7 +46,7 @@ function useIsMobile() {
 }
 
 type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
-          | "vol_found" | "vol_not_found" | "vol_staff";
+          | "vol_found" | "vol_not_found" | "vol_manual";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
@@ -64,6 +64,7 @@ export default function CheckInFlow() {
   const [isVolunteerMode, setIsVolunteerMode] = useState(false);
   const [volunteerPreRegData, setVolunteerPreRegData] = useState<VolunteerPreRegResult | null>(null);
   const [checkedInVolunteerRole, setCheckedInVolunteerRole] = useState<AttendeeRoleRoleName | null>(null);
+  const [volunteerManualRole, setVolunteerManualRole] = useState<AttendeeRoleRoleName | null>(null);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -80,6 +81,7 @@ export default function CheckInFlow() {
     setIsVolunteerMode(false);
     setVolunteerPreRegData(null);
     setCheckedInVolunteerRole(null);
+    setVolunteerManualRole(null);
   };
 
   const handleLookup = () => {
@@ -220,10 +222,36 @@ export default function CheckInFlow() {
     if (step === 4) { const t = setTimeout(handleReset, 8000); return () => clearTimeout(t); }
   }, [step]);
 
-  // Auto-reset from vol_staff
-  useEffect(() => {
-    if (step === "vol_staff") { const t = setTimeout(handleReset, 8000); return () => clearTimeout(t); }
-  }, [step]);
+  const submitVolunteerManualCheckin = () => {
+    if (!volunteerManualRole) {
+      toast({ title: "Hold up!", description: "Please select your volunteer role.", variant: "destructive" });
+      return;
+    }
+    const payload = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim() || "Volunteer",
+      email: email.trim(),
+      phone: phone.trim() || null,
+      preRegistered: false,
+      mobilizeId: null,
+      roles: [{ roleName: volunteerManualRole, isTrained: false }],
+    };
+    submitMutation.mutate({ data: payload }, {
+      onSuccess: () => {
+        setCheckedInVolunteerRole(volunteerManualRole);
+        confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
+        setStep(4);
+      },
+      onError: (err) => {
+        const msg = (err as { message?: string })?.message ?? "";
+        if (msg.toLowerCase().includes("already")) {
+          setStep("duplicate");
+        } else {
+          toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
+        }
+      }
+    });
+  };
 
   const updateRole = (id: AttendeeRoleRoleName, updates: Partial<RoleState>) => {
     setRoles(prev => prev.map(r => {
@@ -234,7 +262,7 @@ export default function CheckInFlow() {
     }));
   };
 
-  const showBackButton = step === 2 || step === 3 || step === "invite" || step === "vol_found" || step === "vol_not_found";
+  const showBackButton = step === 2 || step === 3 || step === "invite" || step === "vol_found" || step === "vol_not_found" || step === "vol_manual";
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary selection:text-white">
@@ -256,6 +284,7 @@ export default function CheckInFlow() {
                 if (step === "invite") setStep(3);
                 else if (step === 3) setStep(preRegistered ? 1 : 2);
                 else if (step === "vol_found" || step === "vol_not_found") { setVolunteerPreRegData(null); setStep(1); }
+                else if (step === "vol_manual") { setVolunteerManualRole(null); setStep("vol_not_found"); }
                 else setStep(1);
               }}
             >
@@ -443,11 +472,11 @@ export default function CheckInFlow() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <button
-                  onClick={() => setStep("vol_staff")}
+                  onClick={() => setStep("vol_manual")}
                   className="p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-muted/30 transition-all shadow-brutal text-left space-y-2">
                   <div className="text-4xl">✋</div>
                   <p className="font-display text-2xl">Yes, I pre-registered</p>
-                  <p className="text-sm font-medium text-muted-foreground">We'll get you sorted at the desk</p>
+                  <p className="text-sm font-medium text-muted-foreground">We'll check you in manually</p>
                 </button>
                 <button
                   onClick={() => { setIsVolunteerMode(false); setWalkinSource("direct"); setStep(2); }}
@@ -460,20 +489,60 @@ export default function CheckInFlow() {
             </motion.div>
           )}
 
-          {/* VOL_STAFF: Please see staff */}
-          {step === "vol_staff" && (
-            <motion.div key="vol_staff" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
-              transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
-              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.6 }}
-                className="text-[8rem] leading-none select-none">📋</motion.div>
-              <div className="space-y-4">
-                <h2 className="font-display text-4xl md:text-6xl text-primary leading-none">NO PROBLEM!</h2>
-                <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-3">
-                  <p className="font-bold text-2xl">Please check in with a staff member</p>
-                  <p className="font-bold text-xl text-primary">at the volunteer registration table</p>
-                  <p className="text-muted-foreground font-medium">We'll get you sorted out right away!</p>
+          {/* VOL_MANUAL: Pre-registered but not found — collect info and check in */}
+          {step === "vol_manual" && (
+            <motion.div key="vol_manual" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-8">
+              <div className="text-center space-y-3">
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">No problem, {firstName}!</h2>
+                <p className="text-xl font-medium text-muted-foreground">Let's get you checked in. Just fill in a couple of details.</p>
+              </div>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Last Name</label>
+                  <Input placeholder="Enter your last name" icon={<UserPlus className="w-8 h-8" />}
+                    value={lastName} onChange={(e) => setLastName(e.target.value)} autoFocus />
+                </div>
+                <div>
+                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">
+                    Phone <span className="text-muted-foreground font-sans font-medium normal-case text-base">(optional)</span>
+                  </label>
+                  <Input placeholder="Enter your phone number" type="tel" icon={<Phone className="w-8 h-8" />}
+                    value={phone} onChange={(e) => setPhone(e.target.value)} />
+                </div>
+                <div>
+                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Your Volunteer Role</label>
+                  <div className="grid grid-cols-1 gap-3">
+                    {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([roleName, meta]) => (
+                      <button key={roleName} onClick={() => setVolunteerManualRole(roleName)}
+                        className={`flex items-center gap-4 p-4 rounded-xl border-4 transition-all text-left
+                          ${volunteerManualRole === roleName
+                            ? 'border-primary bg-primary/10 shadow-brutal-sm'
+                            : 'border-foreground bg-white hover:bg-muted/20'}`}>
+                        <div className={`p-3 rounded-lg border-2 border-foreground flex-shrink-0
+                          ${volunteerManualRole === roleName ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
+                          <meta.Icon className="w-5 h-5" />
+                        </div>
+                        <span className={`font-display text-xl ${volunteerManualRole === roleName ? 'text-primary' : ''}`}>
+                          {meta.title}
+                        </span>
+                        {volunteerManualRole === roleName && (
+                          <span className="ml-auto text-primary font-bold text-xl">✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
+
+              <Button size="xl" className="w-full" onClick={submitVolunteerManualCheckin} isLoading={submitMutation.isPending}
+                disabled={!volunteerManualRole}>
+                Check Me In <CheckCircle className="ml-4 w-8 h-8" />
+              </Button>
+              {!volunteerManualRole && (
+                <p className="text-center text-sm text-muted-foreground font-medium">Please select your volunteer role above</p>
+              )}
             </motion.div>
           )}
 
