@@ -223,7 +223,7 @@ export default function CheckInFlow() {
       lastName: lastName.trim() || "Volunteer",
       email: email.trim(),
       phone: phone.trim() || null,
-      preRegistered: false,
+      preRegistered: true,
       mobilizeId: null,
       roles: [{ roleName, isTrained: true }],
     };
@@ -289,7 +289,7 @@ export default function CheckInFlow() {
       lastName: lastName.trim() || "Volunteer",
       email: email.trim(),
       phone: phone.trim() || null,
-      preRegistered: false,
+      preRegistered: true,
       mobilizeId: null,
       roles: [{ roleName: volunteerManualRole, isTrained: true }],
     };
