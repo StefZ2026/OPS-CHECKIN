@@ -1,4 +1,22 @@
 import app from "./app";
+import { pool } from "@workspace/db";
+
+// Safe idempotent migrations — run on every startup, safe to repeat
+async function runStartupMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS attendees_email_unique ON attendees (email);
+      CREATE INDEX IF NOT EXISTS attendee_roles_attendee_id_idx ON attendee_roles (attendee_id);
+      CREATE INDEX IF NOT EXISTS pre_registrations_email_idx ON pre_registrations (email);
+    `);
+    console.log("Startup migrations OK");
+  } catch (err) {
+    console.warn("Startup migration warning (non-fatal):", err);
+  } finally {
+    client.release();
+  }
+}
 
 const rawPort = process.env["PORT"];
 
@@ -14,6 +32,8 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
+runStartupMigrations().then(() => {
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
 });

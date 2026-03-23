@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, or, and } from "drizzle-orm";
 import {
   LookupAttendeeBody,
   SubmitCheckInBody,
@@ -201,51 +201,58 @@ router.post("/check-in/submit", async (req, res) => {
 
   const { firstName, lastName, email, phone, preRegistered, mobilizeId, roles } = parsed.data;
 
-  const existing = await db
-    .select()
-    .from(attendeesTable)
-    .where(eq(attendeesTable.email, email.toLowerCase().trim()))
-    .limit(1);
+  const normalizedEmailSubmit = email.toLowerCase().trim();
 
-  if (existing.length > 0) {
-    const stored = existing[0];
-    res.status(409).json({
-      error: "This email has already been checked in.",
-      storedFirstName: stored.firstName,
-      storedLastName: stored.lastName,
-      attendeeId: stored.id,
-    });
-    return;
-  }
-
+  // Use INSERT ... ON CONFLICT DO NOTHING to atomically prevent duplicates
+  // even under concurrent load — no race condition between check and insert
   const [newAttendee] = await db
     .insert(attendeesTable)
     .values({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmailSubmit,
       phone: phone?.replace(/\D/g, "") || null,
       preRegistered,
       mobilizeId: mobilizeId ?? null,
     })
+    .onConflictDoNothing()
     .returning();
 
+  if (!newAttendee) {
+    // Email already exists — fetch the stored record to return useful info
+    const [stored] = await db
+      .select()
+      .from(attendeesTable)
+      .where(eq(attendeesTable.email, normalizedEmailSubmit))
+      .limit(1);
+    res.status(409).json({
+      error: "This email has already been checked in.",
+      storedFirstName: stored?.firstName ?? "",
+      storedLastName: stored?.lastName ?? "",
+      attendeeId: stored?.id ?? null,
+    });
+    return;
+  }
+
   if (roles && roles.length > 0) {
-    // Auto-set isTrained=true for any role where this person is on the volunteer pre-registration list
-    const volRegs = await db.select().from(volunteerPreRegistrationsTable);
-    const normalizedEmail = email.toLowerCase().trim();
+    // Targeted query — only fetch volunteer records matching this person by email or full name
     const fn = firstName.trim().toLowerCase();
     const ln = lastName.trim().toLowerCase();
+    const volRegs = await db
+      .select()
+      .from(volunteerPreRegistrationsTable)
+      .where(
+        or(
+          eq(volunteerPreRegistrationsTable.email, normalizedEmailSubmit),
+          and(
+            ilike(volunteerPreRegistrationsTable.firstName, fn),
+            ilike(volunteerPreRegistrationsTable.lastName, ln)
+          )
+        )
+      );
 
     const resolvedRoles = roles.map((r) => {
-      const onVolList = volRegs.some(
-        (v) =>
-          v.roleName === r.roleName &&
-          (
-            (v.email && v.email.toLowerCase() === normalizedEmail) ||
-            (v.firstName.toLowerCase() === fn && v.lastName.toLowerCase() === ln)
-          )
-      );
+      const onVolList = volRegs.some((v) => v.roleName === r.roleName);
       return {
         attendeeId: newAttendee.id,
         roleName: r.roleName as "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services",

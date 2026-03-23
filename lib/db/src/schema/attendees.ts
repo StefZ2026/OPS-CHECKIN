@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, integer, pgEnum, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -14,7 +14,7 @@ export const attendeesTable = pgTable("attendees", {
   id: serial("id").primaryKey(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  email: text("email").notNull(),
+  email: text("email").notNull().unique(),
   phone: text("phone"),
   preRegistered: boolean("pre_registered").notNull().default(false),
   mobilizeId: text("mobilize_id"),
@@ -26,7 +26,9 @@ export const attendeeRolesTable = pgTable("attendee_roles", {
   attendeeId: integer("attendee_id").notNull().references(() => attendeesTable.id),
   roleName: roleNameEnum("role_name").notNull(),
   isTrained: boolean("is_trained").notNull().default(false),
-});
+}, (table) => ({
+  attendeeIdIdx: index("attendee_roles_attendee_id_idx").on(table.attendeeId),
+}));
 
 export const preRegistrationsTable = pgTable("pre_registrations", {
   id: serial("id").primaryKey(),
