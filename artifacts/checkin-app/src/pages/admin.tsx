@@ -332,7 +332,7 @@ type RoleConflict = {
 function VolunteerUploadSection() {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [fileName, setFileName] = useState("");
-  const [status, setStatus] = useState<null | { inserted: number; skipped: number; totalInDatabase: number; invalidRows?: number[] }>(null);
+  const [status, setStatus] = useState<null | { inserted: number; skipped: number; totalInDatabase: number; invalidRows?: number[]; duplicatesRemoved?: number }>(null);
   const [roleConflicts, setRoleConflicts] = useState<RoleConflict[]>([]);
   const [resolving, setResolving] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -454,9 +454,9 @@ function VolunteerUploadSection() {
               <p className="font-bold text-green-800 text-sm">
                 Loaded {status.inserted} volunteers into the system — {status.totalInDatabase} total on file.
               </p>
-              {(status as { duplicatesRemoved?: number }).duplicatesRemoved > 0 && (
+              {(status.duplicatesRemoved ?? 0) > 0 && (
                 <p className="text-blue-700 text-xs font-medium mt-1">
-                  {(status as { duplicatesRemoved?: number }).duplicatesRemoved} duplicate name{(status as { duplicatesRemoved?: number }).duplicatesRemoved === 1 ? "" : "s"} removed automatically.
+                  {status.duplicatesRemoved} duplicate name{status.duplicatesRemoved === 1 ? "" : "s"} removed automatically.
                 </p>
               )}
               {status.skipped > 0 && (

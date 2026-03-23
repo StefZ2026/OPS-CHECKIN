@@ -6,11 +6,32 @@ import { sql, eq, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+// ─── Shared types ────────────────────────────────────────────────────────────
+
 interface CsvRow {
   firstName: string;
   lastName: string;
   email: string;
   phone?: string;
+}
+
+type NameConflict = {
+  email: string;
+  option1: { firstName: string; lastName: string; context: string };
+  option2: { firstName: string; lastName: string; context: string };
+  recommendation: 1 | 2;
+  recommendationReason: string;
+};
+
+// Merges two CSV rows referring to the same person.
+// Later entry (b) wins for name; both contribute to contact info.
+function mergeRows(a: CsvRow, b: CsvRow): CsvRow {
+  return {
+    firstName: b.firstName || a.firstName,
+    lastName:  b.lastName  || a.lastName,
+    email: a.email || b.email,
+    phone: a.phone || b.phone,
+  };
 }
 
 function parseHeader(header: string): string {
@@ -83,23 +104,7 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
   const byPhone = new Map<string, CsvRow>();
   const byName = new Map<string, CsvRow>();
 
-  type NameConflict = {
-    email: string;
-    option1: { firstName: string; lastName: string; context: string };
-    option2: { firstName: string; lastName: string; context: string };
-    recommendation: 1 | 2;
-    recommendationReason: string;
-  };
   const nameConflicts: NameConflict[] = [];
-
-  function mergeRows(a: CsvRow, b: CsvRow): CsvRow {
-    return {
-      firstName: b.firstName || a.firstName, // later entry (b) wins for name
-      lastName: b.lastName || a.lastName,
-      email: a.email || b.email,             // fill in missing for contact info
-      phone: a.phone || b.phone,
-    };
-  }
 
   function findExisting(r: CsvRow): { record: CsvRow; byContact: boolean } | undefined {
     const nameKey = `${r.firstName.toLowerCase().trim()} ${r.lastName.toLowerCase().trim()}`;
@@ -171,14 +176,14 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     const newName = `${row.firstName} ${row.lastName}`.trim().toLowerCase();
 
     // 1. Email match
-    const byEmail = dbByEmail.get(emailKey);
-    if (byEmail) {
-      const dbName = `${byEmail.firstName} ${byEmail.lastName}`.trim().toLowerCase();
+    const emailMatch = dbByEmail.get(emailKey);
+    if (emailMatch) {
+      const dbName = `${emailMatch.firstName} ${emailMatch.lastName}`.trim().toLowerCase();
       if (dbName !== newName) {
         // Same email, different name — flag for admin to pick correct one
         nameConflicts.push({
           email: row.email,
-          option1: { firstName: byEmail.firstName, lastName: byEmail.lastName, context: "Currently in our database" },
+          option1: { firstName: emailMatch.firstName, lastName: emailMatch.lastName, context: "Currently in our database" },
           option2: { firstName: row.firstName, lastName: row.lastName, context: "New Mobilize upload" },
           recommendation: 2,
           recommendationReason: "The Mobilize upload is more recent — but if you manually corrected this name, keep option 1",
@@ -190,13 +195,13 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     }
 
     // 2. Phone match (same person, email may have changed)
-    const byPhone = phoneKey ? dbByPhone.get(phoneKey) : undefined;
-    if (byPhone) {
-      const dbName = `${byPhone.firstName} ${byPhone.lastName}`.trim().toLowerCase();
-      if (dbName !== newName || byPhone.email.toLowerCase() !== emailKey) {
+    const phoneMatch = phoneKey ? dbByPhone.get(phoneKey) : undefined;
+    if (phoneMatch) {
+      const dbName = `${phoneMatch.firstName} ${phoneMatch.lastName}`.trim().toLowerCase();
+      if (dbName !== newName || phoneMatch.email.toLowerCase() !== emailKey) {
         nameConflicts.push({
-          email: byPhone.email, // use existing email as the key for resolution
-          option1: { firstName: byPhone.firstName, lastName: byPhone.lastName, context: `In our database (${byPhone.email})` },
+          email: phoneMatch.email, // use existing email as the key for resolution
+          option1: { firstName: phoneMatch.firstName, lastName: phoneMatch.lastName, context: `In our database (${phoneMatch.email})` },
           option2: { firstName: row.firstName, lastName: row.lastName, context: `New Mobilize upload (${row.email})` },
           recommendation: 2,
           recommendationReason: "The Mobilize upload is more recent",
@@ -208,12 +213,12 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     }
 
     // 3. Name match (same person, contact info may have changed)
-    const byName = dbByName.get(nameKey);
-    if (byName) {
-      if (byName.email.toLowerCase() !== emailKey) {
+    const nameMatch = dbByName.get(nameKey);
+    if (nameMatch) {
+      if (nameMatch.email.toLowerCase() !== emailKey) {
         nameConflicts.push({
-          email: byName.email,
-          option1: { firstName: byName.firstName, lastName: byName.lastName, context: `In our database (${byName.email})` },
+          email: nameMatch.email,
+          option1: { firstName: nameMatch.firstName, lastName: nameMatch.lastName, context: `In our database (${nameMatch.email})` },
           option2: { firstName: row.firstName, lastName: row.lastName, context: `New Mobilize upload (${row.email})` },
           recommendation: 2,
           recommendationReason: "The Mobilize upload is more recent",
@@ -273,6 +278,9 @@ const ROLE_TITLES: Record<string, string> = {
   information_services: "Information Services",
 };
 
+// Used to validate incoming roleName values before writing to the database
+const VALID_ROLE_NAMES = new Set<string>(Object.keys(ROLE_TITLES));
+
 const ROLE_MAP: Record<string, VolunteerRoleName> = {
   "safety marshal": "safety_marshal",
   "safetymarshal": "safety_marshal",
@@ -308,6 +316,14 @@ interface VolunteerRow {
   phone?: string;
   roleName: VolunteerRoleName;
 }
+
+type RoleConflict = {
+  firstName: string;
+  lastName: string;
+  oldRole: { roleName: string; title: string };
+  newRole: { roleName: string; title: string };
+  recommendationReason: string;
+};
 
 router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   const { rows } = req.body as { rows?: unknown[] };
@@ -360,13 +376,6 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   // Load existing volunteers to merge against
   const existingVols = await db.select().from(volunteerPreRegistrationsTable);
 
-  type RoleConflict = {
-    firstName: string;
-    lastName: string;
-    oldRole: { roleName: string; title: string };
-    newRole: { roleName: string; title: string };
-    recommendationReason: string;
-  };
   const roleConflicts: RoleConflict[] = [];
   const toInsert: VolunteerRow[] = [];
   let skippedDuplicates = 0;
@@ -421,8 +430,6 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
     roleConflicts,
   });
 });
-
-const VALID_ROLE_NAMES = new Set<string>(["safety_marshal", "medic", "de_escalator", "chant_lead", "information_services"]);
 
 // Admin picks the correct role when a volunteer's role changed between uploads
 router.post("/admin/upload-volunteers/resolve-role", requireAdminAuth, async (req, res) => {

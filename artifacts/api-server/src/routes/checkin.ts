@@ -9,6 +9,26 @@ import {
 
 const router: IRouter = Router();
 
+// Looks up a volunteer pre-registration by email first, then falls back to
+// first-name match — but only if it's unambiguous (exactly one result).
+async function findVolunteerPreReg(email: string, firstName: string) {
+  let matches = await db
+    .select()
+    .from(volunteerPreRegistrationsTable)
+    .where(eq(volunteerPreRegistrationsTable.email, email))
+    .limit(1);
+
+  if (matches.length === 0) {
+    const nameMatches = await db
+      .select()
+      .from(volunteerPreRegistrationsTable)
+      .where(ilike(volunteerPreRegistrationsTable.firstName, firstName.trim()));
+    if (nameMatches.length === 1) matches = nameMatches;
+  }
+
+  return matches[0] ?? null;
+}
+
 const MOBILIZE_API_KEY = process.env.MOBILIZE_API_KEY;
 const MOBILIZE_EVENT_ID = process.env.MOBILIZE_EVENT_ID || "901026";
 
@@ -90,77 +110,27 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
-  // Volunteer path: look up in volunteer pre-registrations
+  // Volunteer path AND regular-attendee path both check the volunteer pre-reg list.
+  // For volunteers: surface their pre-reg details so they can confirm.
+  // For regular attendees: catch people who forgot to tap "I'm a volunteer".
+  const volPreReg = await findVolunteerPreReg(normalizedEmail, firstName);
+
   if (isVolunteer) {
-    // First try email match
-    let volMatch = await db
-      .select()
-      .from(volunteerPreRegistrationsTable)
-      .where(eq(volunteerPreRegistrationsTable.email, normalizedEmail))
-      .limit(1);
-
-    // Fall back to first-name match if no email match
-    if (volMatch.length === 0) {
-      const nameMatches = await db
-        .select()
-        .from(volunteerPreRegistrationsTable)
-        .where(ilike(volunteerPreRegistrationsTable.firstName, firstName.trim()));
-
-      // Only use name match if exactly one result (unambiguous)
-      if (nameMatches.length === 1) {
-        volMatch = nameMatches;
-      }
-    }
-
-    if (volMatch.length > 0) {
-      res.json({
-        found: false,
-        alreadyCheckedIn: false,
-        volunteerPreReg: {
-          id: volMatch[0].id,
-          firstName: volMatch[0].firstName,
-          lastName: volMatch[0].lastName,
-          email: volMatch[0].email ?? null,
-          phone: volMatch[0].phone ?? null,
-          roleName: volMatch[0].roleName,
-        },
-      });
-      return;
-    }
-
-    // Not found in volunteer list
-    res.json({ found: false, alreadyCheckedIn: false, volunteerPreReg: null });
-    return;
-  }
-
-  // Regular attendee path: FIRST check volunteer pre-reg list so volunteers
-  // don't accidentally get checked in as regular attendees
-  let volCheckMatch = await db
-    .select()
-    .from(volunteerPreRegistrationsTable)
-    .where(eq(volunteerPreRegistrationsTable.email, normalizedEmail))
-    .limit(1);
-
-  if (volCheckMatch.length === 0) {
-    const nameMatches = await db
-      .select()
-      .from(volunteerPreRegistrationsTable)
-      .where(ilike(volunteerPreRegistrationsTable.firstName, firstName.trim()));
-    if (nameMatches.length === 1) volCheckMatch = nameMatches;
-  }
-
-  if (volCheckMatch.length > 0) {
     res.json({
       found: false,
       alreadyCheckedIn: false,
-      volunteerPreReg: {
-        id: volCheckMatch[0].id,
-        firstName: volCheckMatch[0].firstName,
-        lastName: volCheckMatch[0].lastName,
-        email: volCheckMatch[0].email ?? null,
-        phone: volCheckMatch[0].phone ?? null,
-        roleName: volCheckMatch[0].roleName,
-      },
+      volunteerPreReg: volPreReg
+        ? { id: volPreReg.id, firstName: volPreReg.firstName, lastName: volPreReg.lastName, email: volPreReg.email ?? null, phone: volPreReg.phone ?? null, roleName: volPreReg.roleName }
+        : null,
+    });
+    return;
+  }
+
+  if (volPreReg) {
+    res.json({
+      found: false,
+      alreadyCheckedIn: false,
+      volunteerPreReg: { id: volPreReg.id, firstName: volPreReg.firstName, lastName: volPreReg.lastName, email: volPreReg.email ?? null, phone: volPreReg.phone ?? null, roleName: volPreReg.roleName },
     });
     return;
   }

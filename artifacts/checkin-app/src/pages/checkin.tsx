@@ -92,6 +92,27 @@ export default function CheckInFlow() {
     setStoredAttendeeId(null);
   };
 
+  // Shared error handler for check-in submission failures.
+  // Handles the "already checked in under a different name" case across all submit paths.
+  const handleCheckinError = (err: unknown) => {
+    const msg = (err as { message?: string })?.message ?? "";
+    if (msg.toLowerCase().includes("already")) {
+      const errData = (err as { data?: { storedFirstName?: string; storedLastName?: string; attendeeId?: number } }).data;
+      const sf = errData?.storedFirstName ?? "";
+      const sl = errData?.storedLastName ?? "";
+      const aid = errData?.attendeeId ?? null;
+      if (aid && sf.toLowerCase() !== firstName.trim().toLowerCase()) {
+        setStoredName({ firstName: sf, lastName: sl });
+        setStoredAttendeeId(aid);
+        setStep("dup_name_confirm");
+      } else {
+        setStep("duplicate");
+      }
+    } else {
+      toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
+    }
+  };
+
   const correctStoredName = async (attendeeId: number, newFirst: string, newLast: string) => {
     await fetch("/api/check-in/correct-name", {
       method: "POST",
@@ -195,24 +216,7 @@ export default function CheckInFlow() {
           setStep(4);
         }
       },
-      onError: (err) => {
-        const msg = (err as { message?: string })?.message ?? "";
-        if (msg.toLowerCase().includes("already")) {
-          const errData = (err as { data?: { storedFirstName?: string; storedLastName?: string; attendeeId?: number } }).data;
-          const sf = errData?.storedFirstName ?? "";
-          const sl = errData?.storedLastName ?? "";
-          const aid = errData?.attendeeId ?? null;
-          if (aid && sf.toLowerCase() !== firstName.trim().toLowerCase()) {
-            setStoredName({ firstName: sf, lastName: sl });
-            setStoredAttendeeId(aid);
-            setStep("dup_name_confirm");
-          } else {
-            setStep("duplicate");
-          }
-        } else {
-          toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
-        }
-      }
+      onError: handleCheckinError,
     });
   };
 
@@ -233,24 +237,7 @@ export default function CheckInFlow() {
         confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
         setStep(4);
       },
-      onError: (err) => {
-        const msg = (err as { message?: string })?.message ?? "";
-        if (msg.toLowerCase().includes("already")) {
-          const errData = (err as { data?: { storedFirstName?: string; storedLastName?: string; attendeeId?: number } }).data;
-          const sf = errData?.storedFirstName ?? "";
-          const sl = errData?.storedLastName ?? "";
-          const aid = errData?.attendeeId ?? null;
-          if (aid && sf.toLowerCase() !== firstName.trim().toLowerCase()) {
-            setStoredName({ firstName: sf, lastName: sl });
-            setStoredAttendeeId(aid);
-            setStep("dup_name_confirm");
-          } else {
-            setStep("duplicate");
-          }
-        } else {
-          toast({ title: "Check-in failed", description: msg || "Please try again.", variant: "destructive" });
-        }
-      }
+      onError: handleCheckinError,
     });
   };
 
