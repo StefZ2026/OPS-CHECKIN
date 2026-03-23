@@ -150,8 +150,7 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
   // Final list: unique records that have at least an email
   const rows = Array.from(byName.values()).filter(r => r.email && r.email.includes("@"));
 
-  // Load all existing DB records so we can match by email → phone → name
-  // This ensures re-uploads update stale data rather than creating duplicates
+  // Load existing DB records to cross-reference — never auto-update, always flag conflicts
   const existingRecs = await db.select().from(preRegistrationsTable);
   const dbByEmail = new Map(existingRecs.map(r => [r.email.toLowerCase(), r]));
   const dbByPhone = new Map(
@@ -162,48 +161,70 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
   );
 
   let inserted = 0;
-  let updated = 0;
+  let skipped = 0;
   const toInsert: CsvRow[] = [];
 
   for (const row of rows) {
     const emailKey = row.email.toLowerCase();
     const phoneKey = row.phone?.replace(/\D/g, "");
     const nameKey = `${row.firstName.toLowerCase().trim()} ${row.lastName.toLowerCase().trim()}`;
+    const newName = `${row.firstName} ${row.lastName}`.trim().toLowerCase();
 
-    // 1. Match by email (most reliable)
+    // 1. Email match
     const byEmail = dbByEmail.get(emailKey);
     if (byEmail) {
-      await db.update(preRegistrationsTable)
-        .set({ firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? null })
-        .where(eq(preRegistrationsTable.id, byEmail.id));
-      updated++;
+      const dbName = `${byEmail.firstName} ${byEmail.lastName}`.trim().toLowerCase();
+      if (dbName !== newName) {
+        // Same email, different name — flag for admin to pick correct one
+        nameConflicts.push({
+          email: row.email,
+          option1: { firstName: byEmail.firstName, lastName: byEmail.lastName, context: "Currently in our database" },
+          option2: { firstName: row.firstName, lastName: row.lastName, context: "New Mobilize upload" },
+          recommendation: 2,
+          recommendationReason: "The Mobilize upload is more recent — but if you manually corrected this name, keep option 1",
+        });
+      } else {
+        skipped++; // Exact match — already up to date
+      }
       continue;
     }
 
-    // 2. Match by phone (same person, possibly updated email)
+    // 2. Phone match (same person, email may have changed)
     const byPhone = phoneKey ? dbByPhone.get(phoneKey) : undefined;
     if (byPhone) {
-      await db.update(preRegistrationsTable)
-        .set({ firstName: row.firstName, lastName: row.lastName, email: row.email, phone: row.phone ?? null })
-        .where(eq(preRegistrationsTable.id, byPhone.id));
-      updated++;
-      // Update our in-memory email index so later rows don't create a false duplicate
-      dbByEmail.set(emailKey, { ...byPhone, email: row.email });
+      const dbName = `${byPhone.firstName} ${byPhone.lastName}`.trim().toLowerCase();
+      if (dbName !== newName || byPhone.email.toLowerCase() !== emailKey) {
+        nameConflicts.push({
+          email: byPhone.email, // use existing email as the key for resolution
+          option1: { firstName: byPhone.firstName, lastName: byPhone.lastName, context: `In our database (${byPhone.email})` },
+          option2: { firstName: row.firstName, lastName: row.lastName, context: `New Mobilize upload (${row.email})` },
+          recommendation: 2,
+          recommendationReason: "The Mobilize upload is more recent",
+        });
+      } else {
+        skipped++;
+      }
       continue;
     }
 
-    // 3. Match by full name (same person, possibly updated contact info)
+    // 3. Name match (same person, contact info may have changed)
     const byName = dbByName.get(nameKey);
     if (byName) {
-      await db.update(preRegistrationsTable)
-        .set({ email: row.email || byName.email, phone: row.phone ?? byName.phone ?? null })
-        .where(eq(preRegistrationsTable.id, byName.id));
-      updated++;
-      dbByEmail.set(emailKey, { ...byName, email: row.email });
+      if (byName.email.toLowerCase() !== emailKey) {
+        nameConflicts.push({
+          email: byName.email,
+          option1: { firstName: byName.firstName, lastName: byName.lastName, context: `In our database (${byName.email})` },
+          option2: { firstName: row.firstName, lastName: row.lastName, context: `New Mobilize upload (${row.email})` },
+          recommendation: 2,
+          recommendationReason: "The Mobilize upload is more recent",
+        });
+      } else {
+        skipped++;
+      }
       continue;
     }
 
-    // 4. Genuinely new person
+    // 4. Genuinely new person — queue for insert
     toInsert.push(row);
   }
 
@@ -219,7 +240,7 @@ router.post("/admin/upload-registrations", requireAdminAuth, async (req, res) =>
     .select({ count: sql<number>`count(*)` })
     .from(preRegistrationsTable);
 
-  res.json({ inserted, updated, totalInDatabase: Number(total[0].count), nameConflicts });
+  res.json({ inserted, skipped, totalInDatabase: Number(total[0].count), nameConflicts });
 });
 
 // Admin picks the correct spelling for a name conflict
@@ -348,7 +369,6 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   };
   const roleConflicts: RoleConflict[] = [];
   const toInsert: VolunteerRow[] = [];
-  const toUpdate: { id: number; email?: string; phone?: string }[] = [];
   let skippedDuplicates = 0;
 
   for (const v of deduped) {
@@ -359,18 +379,8 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
 
     if (existing) {
       if (existing.roleName === v.roleName) {
-        // Same name, same role — update contact info if the new file has fresher data
-        const emailChanged = v.email !== undefined && v.email !== (existing.email ?? undefined);
-        const phoneChanged = v.phone !== undefined && v.phone !== (existing.phone ?? undefined);
-        if (emailChanged || phoneChanged) {
-          toUpdate.push({
-            id: existing.id,
-            email: v.email ?? existing.email ?? undefined,
-            phone: v.phone ?? existing.phone ?? undefined,
-          });
-        } else {
-          skippedDuplicates++;
-        }
+        // Exact duplicate — already in the list, skip
+        skippedDuplicates++;
       } else {
         // Same person, different role — surface as a conflict for admin to resolve
         roleConflicts.push({
@@ -385,13 +395,6 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
       // New volunteer — add them
       toInsert.push(v);
     }
-  }
-
-  // Apply contact info updates
-  for (const u of toUpdate) {
-    await db.update(volunteerPreRegistrationsTable)
-      .set({ email: u.email ?? null, phone: u.phone ?? null })
-      .where(eq(volunteerPreRegistrationsTable.id, u.id));
   }
 
   if (toInsert.length > 0) {
@@ -412,7 +415,6 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
 
   res.json({
     inserted: toInsert.length,
-    updated: toUpdate.length,
     skipped: skippedDuplicates,
     invalidRows: invalid,
     totalInDatabase: Number(total[0].count),
