@@ -96,7 +96,7 @@ export default function CheckInFlow() {
     await fetch("/api/check-in/correct-name", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ attendeeId, firstName: newFirst, lastName: newLast }),
+      body: JSON.stringify({ attendeeId, email, firstName: newFirst, lastName: newLast }),
     });
   };
 

@@ -266,16 +266,40 @@ router.post("/check-in/submit", async (req, res) => {
   res.status(201).json({ id: newAttendee.id, message: "Check-in successful!" });
 });
 
-// Self-service name correction — called when a duplicate attendee confirms a better spelling
+// Self-service name correction — requires attendeeId + email so a random ID alone cannot update anyone
 router.post("/check-in/correct-name", async (req, res) => {
-  const { attendeeId, firstName, lastName } = req.body as { attendeeId?: number; firstName?: string; lastName?: string };
-  if (!attendeeId || !firstName) {
+  const { attendeeId, email, firstName, lastName } = req.body as {
+    attendeeId?: number;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+
+  if (!attendeeId || typeof attendeeId !== "number" || !email || !firstName) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
+
+  const normalizedEmail = email.toLowerCase().trim().slice(0, 255);
+  const safeFirst = firstName.trim().slice(0, 100);
+  const safeLast = lastName !== undefined ? lastName.trim().slice(0, 100) : undefined;
+
+  // Verify the email matches the record being updated
+  const [record] = await db
+    .select({ id: attendeesTable.id })
+    .from(attendeesTable)
+    .where(eq(attendeesTable.email, normalizedEmail))
+    .limit(1);
+
+  if (!record || record.id !== attendeeId) {
+    res.status(403).json({ error: "Email does not match the record." });
+    return;
+  }
+
   await db.update(attendeesTable)
-    .set({ firstName: firstName.trim(), ...(lastName !== undefined ? { lastName: lastName.trim() } : {}) })
+    .set({ firstName: safeFirst, ...(safeLast !== undefined ? { lastName: safeLast } : {}) })
     .where(eq(attendeesTable.id, attendeeId));
+
   res.json({ ok: true });
 });
 

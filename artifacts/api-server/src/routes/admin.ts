@@ -1,5 +1,6 @@
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -14,14 +15,32 @@ function expectedToken(): string {
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!token || token !== expectedToken()) {
+  const expected = expectedToken();
+  let valid = false;
+  try {
+    valid = token.length === expected.length &&
+      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
   next();
 }
 
-router.post("/admin/login", (req, res) => {
+// 20 failed attempts per IP per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: "Too many login attempts. Please wait 15 minutes and try again." },
+});
+
+router.post("/admin/login", loginLimiter, (req, res) => {
   const { password } = req.body as { password?: string };
   if (!password || !process.env.ADMIN_PASSWORD) {
     res.status(401).json({ error: "Invalid password" });

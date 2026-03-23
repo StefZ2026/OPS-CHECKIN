@@ -422,11 +422,17 @@ router.post("/admin/upload-volunteers", requireAdminAuth, async (req, res) => {
   });
 });
 
+const VALID_ROLE_NAMES = new Set<string>(["safety_marshal", "medic", "de_escalator", "chant_lead", "information_services"]);
+
 // Admin picks the correct role when a volunteer's role changed between uploads
 router.post("/admin/upload-volunteers/resolve-role", requireAdminAuth, async (req, res) => {
   const { firstName, lastName, roleName } = req.body as { firstName?: string; lastName?: string; roleName?: string };
   if (!firstName || !lastName || !roleName) {
     res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+  if (!VALID_ROLE_NAMES.has(roleName)) {
+    res.status(400).json({ error: "Invalid role name" });
     return;
   }
   await db.update(volunteerPreRegistrationsTable)
