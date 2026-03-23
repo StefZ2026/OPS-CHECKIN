@@ -907,7 +907,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         <td className="p-5">
                           {attendee.preRegistered ? (
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-green-100 text-green-800 border-2 border-green-800">
-                              Mobilize
+                              Pre-Registered
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-yellow-100 text-yellow-800 border-2 border-yellow-800">
