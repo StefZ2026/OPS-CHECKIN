@@ -34,8 +34,13 @@ export const preRegistrationsTable = pgTable("pre_registrations", {
   id: serial("id").primaryKey(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  email: text("email").notNull().unique(),
+  // Not unique — two people can share an email (couples, families).
+  // When admin resolves a conflict as "accept both", a second record is inserted
+  // with needsEmailUpdate=true so the second arrival is prompted to update at check-in.
+  email: text("email").notNull(),
   phone: text("phone"),
+  needsEmailUpdate: boolean("needs_email_update").notNull().default(false),
+  sharedEmailWith: text("shared_email_with"),
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 

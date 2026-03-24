@@ -106,6 +106,31 @@ router.post("/check-in/lookup", async (req, res) => {
     .limit(1);
 
   if (existing.length > 0) {
+    // Email is taken — but check if this is a different person sharing the same email.
+    // A shared-email pre-reg record has needsEmailUpdate=true and firstName matching who just arrived.
+    const sharedPreReg = await db
+      .select()
+      .from(preRegistrationsTable)
+      .where(
+        and(
+          eq(preRegistrationsTable.email, normalizedEmail),
+          ilike(preRegistrationsTable.firstName, firstName.trim()),
+          eq(preRegistrationsTable.needsEmailUpdate, true)
+        )
+      )
+      .limit(1);
+
+    if (sharedPreReg.length > 0) {
+      // This is the second person — they need to supply a new email before checking in
+      res.json({
+        found: false,
+        alreadyCheckedIn: false,
+        sharedEmail: true,
+        sharedEmailWith: `${existing[0].firstName} ${existing[0].lastName}`,
+      });
+      return;
+    }
+
     res.json({ found: existing[0].preRegistered, alreadyCheckedIn: true });
     return;
   }
@@ -135,19 +160,24 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
-  // Check the pre-registration CSV list
-  const preReg = await db
+  // Check the pre-registration CSV list.
+  // Multiple records can share one email (shared-email couples), so fetch all and
+  // prefer the one whose first name matches what was typed.
+  const preRegs = await db
     .select()
     .from(preRegistrationsTable)
-    .where(eq(preRegistrationsTable.email, normalizedEmail))
-    .limit(1);
+    .where(eq(preRegistrationsTable.email, normalizedEmail));
 
-  if (preReg.length > 0) {
+  if (preRegs.length > 0) {
+    const nameMatch = preRegs.find(
+      r => r.firstName.toLowerCase().trim() === firstName.toLowerCase().trim()
+    ) ?? preRegs[0];
+
     res.json({
       found: true,
       alreadyCheckedIn: false,
-      foundFirstName: preReg[0].firstName,
-      foundLastName: preReg[0].lastName,
+      foundFirstName: nameMatch.firstName,
+      foundLastName: nameMatch.lastName,
     });
     return;
   }

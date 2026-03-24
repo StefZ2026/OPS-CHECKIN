@@ -261,6 +261,54 @@ router.post("/admin/upload-registrations/resolve-name", requireAdminAuth, async 
   res.json({ ok: true });
 });
 
+// Admin confirms two people genuinely share an email address.
+// option1 keeps the email as-is; option2 is stored alongside them and will
+// be prompted to provide a new email when they check in.
+router.post("/admin/upload-registrations/accept-both", requireAdminAuth, async (req, res) => {
+  const { email, option1, option2 } = req.body as {
+    email?: string;
+    option1?: { firstName: string; lastName: string };
+    option2?: { firstName: string; lastName: string };
+  };
+  if (!email || !option1?.firstName || !option2?.firstName) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Ensure option1's record exists and is correct (upsert by email)
+  const existing = await db
+    .select()
+    .from(preRegistrationsTable)
+    .where(eq(preRegistrationsTable.email, normalizedEmail));
+
+  if (existing.length === 0) {
+    // Neither in DB yet (in-file conflict) — insert option1
+    await db.insert(preRegistrationsTable).values({
+      firstName: option1.firstName,
+      lastName: option1.lastName,
+      email: normalizedEmail,
+    });
+  } else {
+    // Update the primary record to ensure option1's name is stored
+    await db.update(preRegistrationsTable)
+      .set({ firstName: option1.firstName, lastName: option1.lastName, needsEmailUpdate: false, sharedEmailWith: null })
+      .where(eq(preRegistrationsTable.email, normalizedEmail));
+  }
+
+  // Insert option2 with the shared-email flag — they'll be prompted at check-in
+  await db.insert(preRegistrationsTable).values({
+    firstName: option2.firstName,
+    lastName: option2.lastName,
+    email: normalizedEmail,
+    needsEmailUpdate: true,
+    sharedEmailWith: `${option1.firstName} ${option1.lastName}`,
+  });
+
+  res.json({ ok: true });
+});
+
 router.get("/admin/registrations/count", requireAdminAuth, async (_req, res) => {
   const total = await db
     .select({ count: sql<number>`count(*)` })

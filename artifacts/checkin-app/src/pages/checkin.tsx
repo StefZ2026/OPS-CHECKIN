@@ -39,7 +39,8 @@ function makeInitialRoles(): RoleState[] {
 }
 
 type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
-          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm";
+          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm"
+          | "shared_email";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
@@ -61,6 +62,9 @@ export default function CheckInFlow() {
   const [preRegName, setPreRegName] = useState<{ firstName: string; lastName: string } | null>(null);
   const [storedName, setStoredName] = useState<{ firstName: string; lastName: string } | null>(null);
   const [storedAttendeeId, setStoredAttendeeId] = useState<number | null>(null);
+  const [sharedEmailWith, setSharedEmailWith] = useState<string | null>(null);
+  const [newEmailForShared, setNewEmailForShared] = useState("");
+  const [isSharedEmailUpdater, setIsSharedEmailUpdater] = useState(false);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -82,6 +86,9 @@ export default function CheckInFlow() {
     setPreRegName(null);
     setStoredName(null);
     setStoredAttendeeId(null);
+    setSharedEmailWith(null);
+    setNewEmailForShared("");
+    setIsSharedEmailUpdater(false);
   };
 
   // Shared error handler for check-in submission failures.
@@ -120,6 +127,17 @@ export default function CheckInFlow() {
     }
     lookupMutation.mutate({ data: { firstName: firstName.trim(), email: email.trim(), isVolunteer: isVolunteerMode } }, {
       onSuccess: (data) => {
+        // Shared-email path: backend detected this person is the second of a couple
+        // who share one email — the first has already checked in. Must capture a new email.
+        const d = data as typeof data & { sharedEmail?: boolean; sharedEmailWith?: string };
+        if (d.sharedEmail) {
+          setSharedEmailWith(d.sharedEmailWith ?? "another attendee");
+          setNewEmailForShared("");
+          setPreRegistered(true);
+          setStep("shared_email");
+          return;
+        }
+
         if (data.alreadyCheckedIn) {
           setStep("duplicate");
           return;
@@ -840,6 +858,71 @@ export default function CheckInFlow() {
             </motion.div>
           )}
 
+          {/* SHARED EMAIL: two people, one email address */}
+          {step === "shared_email" && (
+            <motion.div key="shared_email" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
+              className="w-full max-w-2xl mx-auto space-y-8 py-4">
+              <div className="text-center space-y-3">
+                <div className="text-[6rem] leading-none select-none">📧</div>
+                <h2 className="font-display text-4xl md:text-6xl text-primary leading-none">ONE MORE THING</h2>
+                <p className="text-xl font-bold text-foreground">
+                  <span className="text-primary">{sharedEmailWith}</span> already checked in with that email.
+                </p>
+                <p className="text-lg text-muted-foreground font-medium">
+                  No problem — you're both on the list! Please enter your own email so we can register you separately.
+                </p>
+              </div>
+
+              <div className="bg-green-50 border-4 border-green-600 rounded-2xl p-5 text-center space-y-1">
+                <p className="font-display text-2xl text-green-800">🎁 FREE "No ICE" BUTTON</p>
+                <p className="text-green-700 font-medium">As a thank-you for updating your email, grab a free No ICE button at the info table!</p>
+              </div>
+
+              <div className="space-y-4">
+                <label className="block text-sm font-bold text-foreground uppercase tracking-wide">Your Email</label>
+                <input
+                  type="email"
+                  value={newEmailForShared}
+                  onChange={e => setNewEmailForShared(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full border-4 border-foreground rounded-2xl px-6 py-5 text-2xl font-bold focus:outline-none focus:border-primary transition-colors"
+                />
+                <Button
+                  size="lg"
+                  className="w-full text-2xl py-8 font-display"
+                  disabled={!newEmailForShared.trim() || submitMutation.isPending}
+                  onClick={() => {
+                    const updatedEmail = newEmailForShared.trim().toLowerCase();
+                    submitMutation.mutate(
+                      {
+                        data: {
+                          firstName: firstName.trim(),
+                          lastName: lastName.trim(),
+                          email: updatedEmail,
+                          phone: phone.trim() || undefined,
+                          preRegistered: true,
+                          walkinSource: undefined,
+                          mobilizeId: mobilizeId ?? undefined,
+                          roles: [],
+                        },
+                      },
+                      {
+                        onSuccess: () => {
+                          setEmail(updatedEmail);
+                          setIsSharedEmailUpdater(true);
+                          setStep(4);
+                        },
+                        onError: handleCheckinError,
+                      }
+                    );
+                  }}
+                >
+                  {submitMutation.isPending ? "Checking in…" : "CHECK IN"}
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
           {step === "duplicate" && (
             <motion.div key="duplicate" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
               transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">
@@ -906,6 +989,11 @@ export default function CheckInFlow() {
                         <p className="text-muted-foreground font-medium">at the info table</p>
                       </>
                     )}
+                  </div>
+                ) : isSharedEmailUpdater ? (
+                  <div className="border-4 border-green-600 rounded-2xl bg-green-50 p-6 mt-4 space-y-2">
+                    <p className="font-display text-2xl text-green-800">🎁 FREE "No ICE" BUTTON</p>
+                    <p className="font-bold text-lg text-green-700">Please stop by the info table to pick up your free No ICE button — thank you for updating your email! 💙</p>
                   </div>
                 ) : (
                   <p className="text-2xl font-bold text-muted-foreground">Go enjoy the rally! 🎉</p>

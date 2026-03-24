@@ -173,6 +173,20 @@ function CsvUploadSection() {
     }
   };
 
+  const resolveAsBoth = async (conflict: NameConflict) => {
+    setResolving(conflict.email);
+    try {
+      await fetch("/api/admin/upload-registrations/accept-both", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+        body: JSON.stringify({ email: conflict.email, option1: conflict.option1, option2: conflict.option2 }),
+      });
+      setNameConflicts(prev => prev.filter(c => c.email !== conflict.email));
+    } finally {
+      setResolving(null);
+    }
+  };
+
   return (
     <Card className="border-2 border-foreground">
       <CardContent className="p-6 space-y-4">
@@ -239,6 +253,14 @@ function CsvUploadSection() {
                       );
                     })}
                   </div>
+                  <button disabled={isResolving}
+                    onClick={() => resolveAsBoth(conflict)}
+                    className="w-full p-4 rounded-xl border-4 border-green-600 bg-green-50 hover:bg-green-100 transition-all text-left space-y-1 disabled:opacity-50">
+                    <p className="font-display text-lg text-green-800">✅ These are two different people sharing this email</p>
+                    <p className="text-xs text-green-700 font-medium">
+                      Both will be accepted. {conflict.option2.firstName} {conflict.option2.lastName} will be asked to update their email at check-in and receive a free No ICE button as a thank-you.
+                    </p>
+                  </button>
                 </div>
               );
             })}
