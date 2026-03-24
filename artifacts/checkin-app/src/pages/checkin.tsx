@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle } from "lucide-react";
@@ -38,19 +38,11 @@ function makeInitialRoles(): RoleState[] {
   return ROLE_DEFS.map(d => ({ ...d, hasServed: false, isTrained: false, wantsToServeToday: null }));
 }
 
-function useIsMobile() {
-  return useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 768 || /Mobi|Android|iPhone|iPod/.test(navigator.userAgent);
-  }, []);
-}
-
 type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
           | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
-  const isMobile = useIsMobile();
 
   const [step, setStep] = useState<Step>(1);
   const [firstName, setFirstName] = useState("");
@@ -764,8 +756,8 @@ export default function CheckInFlow() {
                 <h2 className="font-display text-5xl md:text-7xl text-primary leading-none">HOORAY!</h2>
                 <p className="font-display text-3xl md:text-4xl text-foreground leading-snug">YOU'RE AMAZING,<br />{firstName.toUpperCase()}!</p>
                 <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-2">
-                  <p className="font-bold text-xl">Head over to the volunteer table and ask for a member of the safety team.</p>
-                  <p className="font-bold text-xl text-primary">They'll get you your vest and your NK3 volunteer button! 🎉</p>
+                  <p className="font-bold text-xl">Welcome to the team!</p>
+                  <p className="font-bold text-xl text-primary">Let the safety team know your role — they'll get you your proper vest, NK3 volunteer button and assignment. 🧡</p>
                 </div>
               </motion.div>
             </motion.div>
@@ -899,19 +891,18 @@ export default function CheckInFlow() {
                     </p>
                     {isVolunteerManual ? (
                       <>
-                        <p className="font-bold text-lg">Please make sure to let the <span className="text-primary">safety team</span> know we couldn't find your pre-registration details.</p>
-                        <p className="font-bold text-lg">You're registered as a <span className="text-primary">{ROLE_META[checkedInVolunteerRole]?.title}</span> — they'll get you your proper vest and assignment for today.</p>
-                        <p className="font-display text-xl text-primary mt-2">Welcome to No Kings 3!<br />We're so glad to have you as part of the team! 🧡</p>
+                        <p className="font-bold text-lg">Let the <span className="text-primary">safety team</span> know we couldn't find your pre-registration details.</p>
+                        <p className="font-bold text-lg">They'll get you your proper vest, NK3 volunteer button and assignment. 🧡</p>
                       </>
                     ) : ROLE_META[checkedInVolunteerRole]?.hasVest ? (
                       <>
                         <p className="font-bold text-xl">Please see the safety team to pick up your</p>
-                        <p className="font-display text-2xl text-primary">VEST + NK3 Volunteer Button 🧡</p>
+                        <p className="font-display text-2xl text-primary">VEST + NK3 Volunteer Button + Assignment 🧡</p>
                       </>
                     ) : (
                       <>
                         <p className="font-bold text-xl">Please pick up your</p>
-                        <p className="font-display text-2xl text-primary">NK3 Volunteer Button 🧡</p>
+                        <p className="font-display text-2xl text-primary">NK3 Volunteer Button + Assignment 🧡</p>
                         <p className="text-muted-foreground font-medium">at the info table</p>
                       </>
                     )}
