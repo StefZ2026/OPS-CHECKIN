@@ -26,6 +26,7 @@ export const attendeeRolesTable = pgTable("attendee_roles", {
   attendeeId: integer("attendee_id").notNull().references(() => attendeesTable.id),
   roleName: roleNameEnum("role_name").notNull(),
   isTrained: boolean("is_trained").notNull().default(false),
+  hasServed: boolean("has_served").notNull().default(false),
   // null = pre-reg volunteer (no explicit ask); true = chose to serve today; false = has experience but declined
   wantsToServeToday: boolean("wants_to_serve_today"),
 }, (table) => ({

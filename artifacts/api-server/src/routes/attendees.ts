@@ -38,6 +38,7 @@ router.get("/attendees", async (_req, res) => {
       id: r.id,
       roleName: r.roleName,
       isTrained: r.isTrained,
+      hasServed: r.hasServed,
       wantsToServeToday: r.wantsToServeToday ?? null,
     })),
   }));

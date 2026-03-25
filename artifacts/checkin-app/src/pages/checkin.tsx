@@ -215,7 +215,7 @@ export default function CheckInFlow() {
       // false means they have experience but declined to serve today, null = pre-reg assigned.
       roles: rolesToSubmit
         .filter(r => r.hasServed || r.isTrained || r.wantsToServeToday === true)
-        .map(r => ({ roleName: r.roleName, isTrained: r.isTrained, wantsToServeToday: r.wantsToServeToday === true }))
+        .map(r => ({ roleName: r.roleName, isTrained: r.isTrained, hasServed: r.hasServed, wantsToServeToday: r.wantsToServeToday === true }))
     };
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
