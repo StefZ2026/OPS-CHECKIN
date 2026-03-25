@@ -234,8 +234,11 @@ router.post("/check-in/submit", async (req, res) => {
     return;
   }
 
-  // ~1-in-20 chance, truly random — not sequential so it can't be gamed by counting
-  const wonNoIceButton = Math.random() < 0.05;
+  // Volunteers already receive free buttons — only regular attendees enter the prize draw.
+  // A role with wantsToServeToday === true (walk-in volunteer) or null (pre-reg volunteer)
+  // means they're serving today, so they're excluded.
+  const isServingToday = roles?.some(r => r.wantsToServeToday !== false) ?? false;
+  const wonNoIceButton = !isServingToday && Math.random() < 0.05;
   if (wonNoIceButton) {
     await db.update(attendeesTable).set({ isNoIceWinner: true }).where(eq(attendeesTable.id, newAttendee.id));
   }
