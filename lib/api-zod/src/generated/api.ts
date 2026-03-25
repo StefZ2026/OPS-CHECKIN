@@ -70,6 +70,7 @@ export const SubmitCheckInBody = zod.object({
         "information_services",
       ]),
       isTrained: zod.boolean(),
+      wantsToServeToday: zod.boolean().optional().nullable(),
     }),
   ),
 });
@@ -101,6 +102,7 @@ export const ListAttendeesResponse = zod.object({
             "information_services",
           ]),
           isTrained: zod.boolean(),
+          wantsToServeToday: zod.boolean().nullable().optional(),
         }),
       ),
     }),

@@ -568,23 +568,50 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       information_services: "Info Services",
     };
     const rows = attendees.map((a) => {
-      const served = a.roles.map((r) => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
-      const trained = a.roles.filter((r) => r.isTrained).map((r) => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
+      // wantsToServeToday === null → pre-reg volunteer (assigned a role, no explicit ask)
+      // wantsToServeToday === true → walk-in who chose to serve today
+      // wantsToServeToday === false → has experience but declined to serve today
+      const rolesWithFlag = a.roles as Array<{ roleName: string; isTrained: boolean; wantsToServeToday?: boolean | null }>;
+
+      // "Attended As": Volunteer if any role is actively serving (null or true = serving/assigned)
+      const isVolunteer = rolesWithFlag.some(r => r.wantsToServeToday !== false);
+      const attendedAs = isVolunteer && a.roles.length > 0 ? "Volunteer" : "Attendee";
+
+      // "Roles Served at NK3": roles they're actively working today (wantsToServeToday null or true)
+      const servedAtEvent = rolesWithFlag
+        .filter(r => r.wantsToServeToday !== false)
+        .map(r => ROLE_LABEL[r.roleName] ?? r.roleName)
+        .join("; ");
+
+      // "Prior Experience": roles they've served or trained in previously (isTrained = true)
+      const priorExperience = rolesWithFlag
+        .filter(r => r.isTrained)
+        .map(r => ROLE_LABEL[r.roleName] ?? r.roleName)
+        .join("; ");
+
+      // "Experience (Declined NK3)": trained/experienced but chose not to serve today
+      const declinedToServe = rolesWithFlag
+        .filter(r => r.wantsToServeToday === false)
+        .map(r => ROLE_LABEL[r.roleName] ?? r.roleName)
+        .join("; ");
+
       return {
         "First Name": a.firstName,
         "Last Name": a.lastName,
         "Email": a.email,
         "Phone": a.phone ?? "",
-        "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
-        "Roles Served": served,
-        "Roles Trained": trained,
+        "Attended As": attendedAs,
+        "Pre-Registered": a.preRegistered ? "Yes" : "No",
+        "Roles Served at NK3": servedAtEvent,
+        "Prior Experience / Training": priorExperience,
+        "Experienced (Not Serving NK3)": declinedToServe,
         "Checked In At": new Date(a.checkedInAt).toLocaleString(),
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
     const colWidths = [
-      { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 }, { wch: 14 },
-      { wch: 30 }, { wch: 30 }, { wch: 22 },
+      { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 }, { wch: 12 },
+      { wch: 14 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 22 },
     ];
     ws["!cols"] = colWidths;
     const wb = XLSX.utils.book_new();

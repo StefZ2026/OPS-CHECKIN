@@ -257,6 +257,7 @@ router.post("/check-in/submit", async (req, res) => {
         attendeeId: newAttendee.id,
         roleName: r.roleName as "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services",
         isTrained: r.isTrained || onVolList,
+        wantsToServeToday: r.wantsToServeToday ?? null,
       };
     });
 

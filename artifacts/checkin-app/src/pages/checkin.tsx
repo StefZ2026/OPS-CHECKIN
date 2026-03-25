@@ -210,7 +210,12 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered,
       mobilizeId,
-      roles: rolesToSubmit.filter(r => r.wantsToServeToday).map(r => ({ roleName: r.roleName, isTrained: r.isTrained }))
+      // Submit ALL roles where the person indicated any experience (served before or trained),
+      // plus roles they're actively serving today. wantsToServeToday=true means serving now,
+      // false means they have experience but declined to serve today, null = pre-reg assigned.
+      roles: rolesToSubmit
+        .filter(r => r.hasServed || r.isTrained || r.wantsToServeToday === true)
+        .map(r => ({ roleName: r.roleName, isTrained: r.isTrained, wantsToServeToday: r.wantsToServeToday === true }))
     };
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
