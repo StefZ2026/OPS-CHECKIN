@@ -63,21 +63,23 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
     rolesMap.get(role.attendeeId)!.push(role);
   }
 
-  const header = ["First Name", "Last Name", "Email", "Phone", "Type", "Checked In At", "Roles Served", "Roles Trained"].join(",");
+  const header = ["First Name", "Last Name", "Email", "Phone", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At"].join(",");
 
   const rows = attendees.map((a) => {
     const aRoles = rolesMap.get(a.id) ?? [];
-    const servedRoles = aRoles.map((r) => r.roleName.replace(/_/g, " ")).join("; ");
+    const servedAtEvent = aRoles.filter((r) => r.wantsToServeToday !== false).map((r) => r.roleName.replace(/_/g, " ")).join("; ");
     const trainedRoles = aRoles.filter((r) => r.isTrained).map((r) => r.roleName.replace(/_/g, " ")).join("; ");
+    const priorServed = aRoles.filter((r) => r.hasServed).map((r) => r.roleName.replace(/_/g, " ")).join("; ");
     return [
       `"${a.firstName}"`,
       `"${a.lastName}"`,
       `"${a.email}"`,
       `"${a.phone ?? ""}"`,
       a.preRegistered ? "Pre-Registered" : "Walk-in",
-      `"${a.checkedInAt.toISOString()}"`,
-      `"${servedRoles}"`,
+      `"${servedAtEvent}"`,
       `"${trainedRoles}"`,
+      `"${priorServed}"`,
+      `"${a.checkedInAt.toISOString()}"`,
     ].join(",");
   });
 

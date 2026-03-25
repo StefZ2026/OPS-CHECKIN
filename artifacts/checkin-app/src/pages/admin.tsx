@@ -604,8 +604,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         "Attended As": attendedAs,
         "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
         "Roles Served at NK3": servedAtEvent,
-        "Past Experience": pastExperience,
-        "Past Training": pastTraining,
+        "Roles Trained": pastTraining,
+        "Prior Roles Served": pastExperience,
         "Checked In At": new Date(a.checkedInAt).toLocaleString(),
       };
     });
