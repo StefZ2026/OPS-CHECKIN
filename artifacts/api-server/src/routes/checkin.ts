@@ -234,6 +234,12 @@ router.post("/check-in/submit", async (req, res) => {
     return;
   }
 
+  // ~1-in-20 chance, truly random — not sequential so it can't be gamed by counting
+  const wonNoIceButton = Math.random() < 0.05;
+  if (wonNoIceButton) {
+    await db.update(attendeesTable).set({ isNoIceWinner: true }).where(eq(attendeesTable.id, newAttendee.id));
+  }
+
   if (roles && roles.length > 0) {
     // Targeted query — only fetch volunteer records matching this person by email or full name
     const fn = firstName.trim().toLowerCase();
@@ -265,7 +271,7 @@ router.post("/check-in/submit", async (req, res) => {
     await db.insert(attendeeRolesTable).values(resolvedRoles);
   }
 
-  res.status(201).json({ id: newAttendee.id, message: "Check-in successful!" });
+  res.status(201).json({ id: newAttendee.id, message: "Check-in successful!", wonNoIceButton });
 });
 
 // Self-service name correction — requires attendeeId + email so a random ID alone cannot update anyone

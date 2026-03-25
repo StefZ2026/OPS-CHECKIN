@@ -550,6 +550,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [roleFilter, setRoleFilter] = useState<"served" | "trained">("served");
   const [togglingRoleId, setTogglingRoleId] = useState<number | null>(null);
   const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
+  const [showPrizeWinners, setShowPrizeWinners] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "" });
   const [editSaving, setEditSaving] = useState(false);
 
@@ -732,6 +733,13 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             >
               <RefreshCw className={`w-5 h-5 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setShowPrizeWinners(true)}
+              disabled={isLoading}
+            >
+              🏅 Prize Winners
             </Button>
             <Button
               variant="secondary"
@@ -1017,6 +1025,47 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       </main>
 
       {/* Edit Attendee Modal */}
+      {showPrizeWinners && (() => {
+        const winners = (data?.attendees ?? []).filter(a => (a as typeof a & { isNoIceWinner?: boolean }).isNoIceWinner);
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => setShowPrizeWinners(false)}>
+            <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-6 border-b-4 border-foreground">
+                <div>
+                  <h3 className="font-display text-2xl">🏅 Prize Winners</h3>
+                  <p className="text-sm text-muted-foreground font-medium mt-1">{winners.length} winner{winners.length !== 1 ? "s" : ""} so far</p>
+                </div>
+                <button onClick={() => setShowPrizeWinners(false)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1">
+                {winners.length === 0 ? (
+                  <p className="text-muted-foreground text-center font-medium py-8">No winners yet — keep checking people in!</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {winners.map((w, i) => (
+                      <li key={w.id} className="flex items-center gap-3 p-3 rounded-xl border-2 border-yellow-300 bg-yellow-50">
+                        <span className="font-display text-2xl text-yellow-600 w-8 text-center">{i + 1}.</span>
+                        <div>
+                          <p className="font-bold text-lg">{w.firstName} {w.lastName}</p>
+                          <p className="text-sm text-muted-foreground">{w.email}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="p-6 border-t-4 border-foreground">
+                <p className="text-xs text-muted-foreground font-medium text-center">
+                  Winners are told to give their name at the front desk at the end of the rally.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {editingAttendee && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => setEditingAttendee(null)}>
           <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md" onClick={e => e.stopPropagation()}>

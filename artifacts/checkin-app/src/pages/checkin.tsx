@@ -66,6 +66,7 @@ export default function CheckInFlow() {
   const [newEmailForShared, setNewEmailForShared] = useState("");
   const [isSharedEmailUpdater, setIsSharedEmailUpdater] = useState(false);
   const [volunteerHasServedBefore, setVolunteerHasServedBefore] = useState<boolean | null>(null);
+  const [wonNoIceButton, setWonNoIceButton] = useState(false);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -91,6 +92,7 @@ export default function CheckInFlow() {
     setNewEmailForShared("");
     setIsSharedEmailUpdater(false);
     setVolunteerHasServedBefore(null);
+    setWonNoIceButton(false);
   };
 
   // Shared error handler for check-in submission failures.
@@ -220,7 +222,9 @@ export default function CheckInFlow() {
         .map(r => ({ roleName: r.roleName, isTrained: r.isTrained, hasServed: r.hasServed, wantsToServeToday: r.wantsToServeToday === true }))
     };
     submitMutation.mutate({ data: payload }, {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        const won = !!(data as typeof data & { wonNoIceButton?: boolean }).wonNoIceButton;
+        if (won) setWonNoIceButton(true);
         const isVolunteering = rolesToSubmit.some(r => r.wantsToServeToday === true);
         const declinedAll = rolesToSubmit.some(r => (r.hasServed || r.isTrained) && r.wantsToServeToday === false);
         if (isVolunteering) {
@@ -249,7 +253,9 @@ export default function CheckInFlow() {
       roles: [{ roleName, isTrained: true, hasServed: volunteerHasServedBefore === true, wantsToServeToday: null }],
     };
     submitMutation.mutate({ data: payload }, {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        const won = !!(data as typeof data & { wonNoIceButton?: boolean }).wonNoIceButton;
+        if (won) setWonNoIceButton(true);
         setCheckedInVolunteerRole(roleName);
         confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
         setStep(4);
@@ -278,10 +284,10 @@ export default function CheckInFlow() {
     if (step === "fun") { const t = setTimeout(() => setStep(4), 5000); return () => clearTimeout(t); }
   }, [step]);
 
-  // Auto-reset after success
+  // Auto-reset after success — give winners extra time to read their prize message
   useEffect(() => {
-    if (step === 4) { const t = setTimeout(handleReset, 8000); return () => clearTimeout(t); }
-  }, [step]);
+    if (step === 4) { const t = setTimeout(handleReset, wonNoIceButton ? 20000 : 8000); return () => clearTimeout(t); }
+  }, [step, wonNoIceButton]);
 
   const submitVolunteerManualCheckin = () => {
     if (!volunteerManualRole) {
@@ -298,7 +304,9 @@ export default function CheckInFlow() {
       roles: [{ roleName: volunteerManualRole, isTrained: true }],
     };
     submitMutation.mutate({ data: payload }, {
-      onSuccess: () => {
+      onSuccess: (data) => {
+        const won = !!(data as typeof data & { wonNoIceButton?: boolean }).wonNoIceButton;
+        if (won) setWonNoIceButton(true);
         setCheckedInVolunteerRole(volunteerManualRole);
         setIsVolunteerManual(true);
         confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
@@ -944,7 +952,9 @@ export default function CheckInFlow() {
                         },
                       },
                       {
-                        onSuccess: () => {
+                        onSuccess: (data) => {
+                          const won = !!(data as typeof data & { wonNoIceButton?: boolean }).wonNoIceButton;
+                          if (won) setWonNoIceButton(true);
                           setEmail(updatedEmail);
                           setIsSharedEmailUpdater(true);
                           setStep(4);
@@ -1004,6 +1014,19 @@ export default function CheckInFlow() {
                 <p className="font-display text-3xl md:text-5xl text-foreground leading-tight">
                   WELCOME TO NO KINGS 3,<br />{firstName.toUpperCase()}!
                 </p>
+
+                {wonNoIceButton && (
+                  <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", bounce: 0.5, delay: 0.5 }}
+                    className="border-4 border-yellow-400 rounded-2xl bg-yellow-50 p-6 space-y-2 text-center shadow-brutal">
+                    <p className="text-4xl">🎉🏅🎉</p>
+                    <p className="font-display text-3xl md:text-4xl text-yellow-700">YOU WON A FREE</p>
+                    <p className="font-display text-4xl md:text-5xl text-yellow-800">"NO ICE" BUTTON!</p>
+                    <p className="font-bold text-yellow-700 text-lg mt-2">
+                      Come to the front desk at the end of the rally, give them your name, and we'll have it waiting for you!
+                    </p>
+                  </motion.div>
+                )}
+
                 {checkedInVolunteerRole ? (
                   <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-3">
                     <p className="font-bold text-xl text-primary">
