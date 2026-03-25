@@ -301,12 +301,10 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
-      roles: [{ roleName: volunteerManualRole, isTrained: true }],
+      roles: [{ roleName: volunteerManualRole, isTrained: true, hasServed: false, wantsToServeToday: true }],
     };
     submitMutation.mutate({ data: payload }, {
-      onSuccess: (data) => {
-        const won = !!(data as typeof data & { wonNoIceButton?: boolean }).wonNoIceButton;
-        if (won) setWonNoIceButton(true);
+      onSuccess: () => {
         setCheckedInVolunteerRole(volunteerManualRole);
         setIsVolunteerManual(true);
         confetti({ particleCount: 300, spread: 160, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
@@ -983,6 +981,12 @@ export default function CheckInFlow() {
                 <p className="text-2xl font-bold text-muted-foreground">
                   You're already checked in. Go enjoy the rally! 🎉
                 </p>
+              </motion.div>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
+                <button onClick={handleReset}
+                  className="mt-4 px-8 py-3 rounded-2xl border-4 border-foreground bg-white hover:bg-muted/30 font-display text-xl shadow-brutal transition-all">
+                  ← Start Over
+                </button>
               </motion.div>
             </motion.div>
           )}
