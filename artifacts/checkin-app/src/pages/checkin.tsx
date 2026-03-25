@@ -65,6 +65,7 @@ export default function CheckInFlow() {
   const [sharedEmailWith, setSharedEmailWith] = useState<string | null>(null);
   const [newEmailForShared, setNewEmailForShared] = useState("");
   const [isSharedEmailUpdater, setIsSharedEmailUpdater] = useState(false);
+  const [volunteerHasServedBefore, setVolunteerHasServedBefore] = useState<boolean | null>(null);
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -89,6 +90,7 @@ export default function CheckInFlow() {
     setSharedEmailWith(null);
     setNewEmailForShared("");
     setIsSharedEmailUpdater(false);
+    setVolunteerHasServedBefore(null);
   };
 
   // Shared error handler for check-in submission failures.
@@ -244,7 +246,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
-      roles: [{ roleName, isTrained: true }],
+      roles: [{ roleName, isTrained: true, hasServed: volunteerHasServedBefore === true, wantsToServeToday: null }],
     };
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
@@ -515,7 +517,37 @@ export default function CheckInFlow() {
                 </CardContent>
               </Card>
 
-              <Button size="xl" className="w-full group" onClick={submitVolunteerCheckin} isLoading={submitMutation.isPending}>
+              {/* Prior rally experience question */}
+              {(() => {
+                const roleName = volunteerPreRegData.roleName as AttendeeRoleRoleName;
+                const meta = ROLE_META[roleName] ?? { title: volunteerPreRegData.roleName, Icon: HardHat, hasVest: false };
+                return (
+                  <div className="space-y-3">
+                    <p className="font-bold text-lg text-center text-foreground">
+                      Have you served as a <span className="text-primary">{meta.title}</span> at a previous rally?
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => setVolunteerHasServedBefore(true)}
+                        className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
+                          ${volunteerHasServedBefore === true
+                            ? "border-primary bg-primary text-white"
+                            : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
+                        Yes
+                      </button>
+                      <button onClick={() => setVolunteerHasServedBefore(false)}
+                        className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
+                          ${volunteerHasServedBefore === false
+                            ? "border-primary bg-primary text-white"
+                            : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
+                        No — first time!
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <Button size="xl" className="w-full group" onClick={submitVolunteerCheckin}
+                isLoading={submitMutation.isPending} disabled={volunteerHasServedBefore === null || submitMutation.isPending}>
                 That's me — check me in! <CheckCircle className="ml-4 w-8 h-8" />
               </Button>
 
