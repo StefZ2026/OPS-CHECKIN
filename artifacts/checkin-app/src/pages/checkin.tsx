@@ -641,20 +641,38 @@ export default function CheckInFlow() {
               </div>
 
               {volunteerManualRole && (
-                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-                  className="p-5 bg-primary/10 border-4 border-primary rounded-2xl text-center space-y-1">
-                  <p className="font-display text-2xl text-primary">
-                    Glad to have you on the {ROLE_META[volunteerManualRole]?.title} team! 🎉
+                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                  <p className="font-bold text-lg text-center text-foreground">
+                    Have you served as a <span className="text-primary">{ROLE_META[volunteerManualRole]?.title}</span> at a previous rally?
                   </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setVolunteerHasServedBefore(true)}
+                      className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
+                        ${volunteerHasServedBefore === true
+                          ? "border-primary bg-primary text-white"
+                          : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
+                      Yes
+                    </button>
+                    <button onClick={() => setVolunteerHasServedBefore(false)}
+                      className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
+                        ${volunteerHasServedBefore === false
+                          ? "border-primary bg-primary text-white"
+                          : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
+                      No — first time!
+                    </button>
+                  </div>
                 </motion.div>
               )}
 
               <Button size="xl" className="w-full" onClick={submitVolunteerManualCheckin} isLoading={submitMutation.isPending}
-                disabled={!volunteerManualRole}>
+                disabled={!volunteerManualRole || volunteerHasServedBefore === null}>
                 Check Me In <CheckCircle className="ml-4 w-8 h-8" />
               </Button>
               {!volunteerManualRole && (
                 <p className="text-center text-sm text-muted-foreground font-medium">Select your role above to continue</p>
+              )}
+              {volunteerManualRole && volunteerHasServedBefore === null && (
+                <p className="text-center text-sm text-muted-foreground font-medium">Answer the question above to continue</p>
               )}
             </motion.div>
           )}
