@@ -601,7 +601,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         "Email": a.email,
         "Phone": a.phone ?? "",
         "Attended As": attendedAs,
-        "Pre-Registered": a.preRegistered ? "Yes" : "No",
+        "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
         "Roles Served at NK3": servedAtEvent,
         "Prior Experience / Training": priorExperience,
         "Experienced (Not Serving NK3)": declinedToServe,
