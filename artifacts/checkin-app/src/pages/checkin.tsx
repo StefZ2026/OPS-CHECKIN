@@ -66,6 +66,7 @@ export default function CheckInFlow() {
   const [newEmailForShared, setNewEmailForShared] = useState("");
   const [isSharedEmailUpdater, setIsSharedEmailUpdater] = useState(false);
   const [volunteerHasServedBefore, setVolunteerHasServedBefore] = useState<boolean | null>(null);
+  const [volPriorRoles, setVolPriorRoles] = useState<Partial<Record<AttendeeRoleRoleName, { hasServed: boolean; isTrained: boolean }>>>({});
   const [wonNoIceButton, setWonNoIceButton] = useState(false);
 
   const lookupMutation = useAttendeeLookup();
@@ -92,7 +93,31 @@ export default function CheckInFlow() {
     setNewEmailForShared("");
     setIsSharedEmailUpdater(false);
     setVolunteerHasServedBefore(null);
+    setVolPriorRoles({});
     setWonNoIceButton(false);
+  };
+
+  // Build the roles array for volunteer submissions.
+  // The primary role always gets isTrained:true (required for today).
+  // Any other role the volunteer flags gets submitted with wantsToServeToday:false.
+  const buildVolRoles = (primaryRole: AttendeeRoleRoleName, wantsToServeTodayValue: boolean | null) => {
+    const result: Array<{ roleName: AttendeeRoleRoleName; isTrained: boolean; hasServed: boolean; wantsToServeToday: boolean | null }> = [];
+    const primary = volPriorRoles[primaryRole];
+    result.push({ roleName: primaryRole, isTrained: true, hasServed: primary?.hasServed ?? false, wantsToServeToday: wantsToServeTodayValue });
+    for (const [rn, flags] of Object.entries(volPriorRoles) as [AttendeeRoleRoleName, { hasServed: boolean; isTrained: boolean }][]) {
+      if (rn === primaryRole) continue;
+      if (flags.hasServed || flags.isTrained) {
+        result.push({ roleName: rn, isTrained: flags.isTrained, hasServed: flags.hasServed, wantsToServeToday: false });
+      }
+    }
+    return result;
+  };
+
+  const updateVolPriorRole = (roleName: AttendeeRoleRoleName, field: "hasServed" | "isTrained", value: boolean) => {
+    setVolPriorRoles(prev => ({
+      ...prev,
+      [roleName]: { hasServed: false, isTrained: false, ...prev[roleName], [field]: value },
+    }));
   };
 
   // Shared error handler for check-in submission failures.
@@ -250,7 +275,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
-      roles: [{ roleName, isTrained: true, hasServed: volunteerHasServedBefore === true, wantsToServeToday: null }],
+      roles: buildVolRoles(roleName, null),
     };
     submitMutation.mutate({ data: payload }, {
       onSuccess: (data) => {
@@ -301,7 +326,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
-      roles: [{ roleName: volunteerManualRole, isTrained: true, hasServed: false, wantsToServeToday: true }],
+      roles: buildVolRoles(volunteerManualRole, true),
     };
     submitMutation.mutate({ data: payload }, {
       onSuccess: () => {
@@ -523,37 +548,48 @@ export default function CheckInFlow() {
                 </CardContent>
               </Card>
 
-              {/* Prior rally experience question */}
+              {/* Prior experience — all roles */}
               {(() => {
-                const roleName = volunteerPreRegData.roleName as AttendeeRoleRoleName;
-                const meta = ROLE_META[roleName] ?? { title: volunteerPreRegData.roleName, Icon: HardHat, hasVest: false };
+                const primaryRole = volunteerPreRegData.roleName as AttendeeRoleRoleName;
                 return (
                   <div className="space-y-3">
-                    <p className="font-bold text-lg text-center text-foreground">
-                      Have you served as a <span className="text-primary">{meta.title}</span> at a previous rally?
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button onClick={() => setVolunteerHasServedBefore(true)}
-                        className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
-                          ${volunteerHasServedBefore === true
-                            ? "border-primary bg-primary text-white"
-                            : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
-                        Yes
-                      </button>
-                      <button onClick={() => setVolunteerHasServedBefore(false)}
-                        className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
-                          ${volunteerHasServedBefore === false
-                            ? "border-primary bg-primary text-white"
-                            : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
-                        No — first time!
-                      </button>
+                    <div>
+                      <p className="font-display text-lg uppercase tracking-wider">Prior experience <span className="text-muted-foreground font-sans font-medium normal-case text-sm">(optional)</span></p>
+                      <p className="text-sm font-medium text-muted-foreground mt-1">Have you worked in or trained for any of these roles at a previous rally or event?</p>
+                    </div>
+                    <div className="space-y-2">
+                      {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([rn, meta]) => {
+                        const prior = volPriorRoles[rn] ?? { hasServed: false, isTrained: false };
+                        const isPrimary = rn === primaryRole;
+                        return (
+                          <div key={rn} className={`p-3 rounded-xl border-2 ${isPrimary ? 'border-primary/40 bg-primary/5' : 'border-foreground/15 bg-white'}`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <meta.Icon className={`w-4 h-4 flex-shrink-0 ${isPrimary ? 'text-primary' : 'text-muted-foreground'}`} />
+                              <span className={`font-bold text-sm ${isPrimary ? 'text-primary' : ''}`}>{meta.title}</span>
+                              {isPrimary && <span className="ml-auto text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">Today's role</span>}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button onClick={() => updateVolPriorRole(rn, 'hasServed', !prior.hasServed)}
+                                className={`py-2 rounded-lg border-2 text-xs font-bold transition-all
+                                  ${prior.hasServed ? 'border-primary bg-primary text-white' : 'border-foreground/30 bg-white hover:bg-muted/20 text-foreground'}`}>
+                                {prior.hasServed ? '✓ ' : ''}Worked it before
+                              </button>
+                              <button onClick={() => updateVolPriorRole(rn, 'isTrained', !prior.isTrained)}
+                                className={`py-2 rounded-lg border-2 text-xs font-bold transition-all
+                                  ${prior.isTrained ? 'border-primary bg-primary text-white' : 'border-foreground/30 bg-white hover:bg-muted/20 text-foreground'}`}>
+                                {prior.isTrained ? '✓ ' : ''}Trained before
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })()}
 
               <Button size="xl" className="w-full group" onClick={submitVolunteerCheckin}
-                isLoading={submitMutation.isPending} disabled={volunteerHasServedBefore === null || submitMutation.isPending}>
+                isLoading={submitMutation.isPending} disabled={submitMutation.isPending}>
                 That's me — check me in! <CheckCircle className="ml-4 w-8 h-8" />
               </Button>
 
@@ -642,37 +678,46 @@ export default function CheckInFlow() {
 
               {volunteerManualRole && (
                 <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                  <p className="font-bold text-lg text-center text-foreground">
-                    Have you served as a <span className="text-primary">{ROLE_META[volunteerManualRole]?.title}</span> at a previous rally?
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={() => setVolunteerHasServedBefore(true)}
-                      className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
-                        ${volunteerHasServedBefore === true
-                          ? "border-primary bg-primary text-white"
-                          : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
-                      Yes
-                    </button>
-                    <button onClick={() => setVolunteerHasServedBefore(false)}
-                      className={`py-5 rounded-2xl border-4 font-display text-xl transition-all
-                        ${volunteerHasServedBefore === false
-                          ? "border-primary bg-primary text-white"
-                          : "border-foreground bg-white hover:bg-gray-50 text-foreground"}`}>
-                      No — first time!
-                    </button>
+                  <div>
+                    <p className="font-display text-lg uppercase tracking-wider">Prior experience <span className="text-muted-foreground font-sans font-medium normal-case text-sm">(optional)</span></p>
+                    <p className="text-sm font-medium text-muted-foreground mt-1">Have you worked in or trained for any of these roles at a previous rally or event?</p>
+                  </div>
+                  <div className="space-y-2">
+                    {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([rn, meta]) => {
+                      const prior = volPriorRoles[rn] ?? { hasServed: false, isTrained: false };
+                      const isPrimary = rn === volunteerManualRole;
+                      return (
+                        <div key={rn} className={`p-3 rounded-xl border-2 ${isPrimary ? 'border-primary/40 bg-primary/5' : 'border-foreground/15 bg-white'}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <meta.Icon className={`w-4 h-4 flex-shrink-0 ${isPrimary ? 'text-primary' : 'text-muted-foreground'}`} />
+                            <span className={`font-bold text-sm ${isPrimary ? 'text-primary' : ''}`}>{meta.title}</span>
+                            {isPrimary && <span className="ml-auto text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">Today's role</span>}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button onClick={() => updateVolPriorRole(rn, 'hasServed', !prior.hasServed)}
+                              className={`py-2 rounded-lg border-2 text-xs font-bold transition-all
+                                ${prior.hasServed ? 'border-primary bg-primary text-white' : 'border-foreground/30 bg-white hover:bg-muted/20 text-foreground'}`}>
+                              {prior.hasServed ? '✓ ' : ''}Worked it before
+                            </button>
+                            <button onClick={() => updateVolPriorRole(rn, 'isTrained', !prior.isTrained)}
+                              className={`py-2 rounded-lg border-2 text-xs font-bold transition-all
+                                ${prior.isTrained ? 'border-primary bg-primary text-white' : 'border-foreground/30 bg-white hover:bg-muted/20 text-foreground'}`}>
+                              {prior.isTrained ? '✓ ' : ''}Trained before
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}
 
               <Button size="xl" className="w-full" onClick={submitVolunteerManualCheckin} isLoading={submitMutation.isPending}
-                disabled={!volunteerManualRole || volunteerHasServedBefore === null}>
+                disabled={!volunteerManualRole}>
                 Check Me In <CheckCircle className="ml-4 w-8 h-8" />
               </Button>
               {!volunteerManualRole && (
                 <p className="text-center text-sm text-muted-foreground font-medium">Select your role above to continue</p>
-              )}
-              {volunteerManualRole && volunteerHasServedBefore === null && (
-                <p className="text-center text-sm text-muted-foreground font-medium">Answer the question above to continue</p>
               )}
             </motion.div>
           )}
