@@ -258,7 +258,7 @@ function CsvUploadSection() {
                     className="w-full p-4 rounded-xl border-4 border-green-600 bg-green-50 hover:bg-green-100 transition-all text-left space-y-1 disabled:opacity-50">
                     <p className="font-display text-lg text-green-800">✅ These are two different people sharing this email</p>
                     <p className="text-xs text-green-700 font-medium">
-                      Both will be accepted. {conflict.option2.firstName} {conflict.option2.lastName} will be asked to update their email at check-in and receive a free No ICE button as a thank-you.
+                      Both will be accepted. Whichever one arrives second at check-in will be asked to provide a different email and will receive a free No ICE button as a thank-you.
                     </p>
                   </button>
                 </div>
