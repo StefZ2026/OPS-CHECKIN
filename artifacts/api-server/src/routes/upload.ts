@@ -289,20 +289,21 @@ router.post("/admin/upload-registrations/accept-both", requireAdminAuth, async (
       firstName: option1.firstName,
       lastName: option1.lastName,
       email: normalizedEmail,
+      sharedEmailWith: `${option2.firstName} ${option2.lastName}`,
     });
   } else {
-    // Update the primary record to ensure option1's name is stored
+    // Update the primary record to store option1's name and mark as shared
     await db.update(preRegistrationsTable)
-      .set({ firstName: option1.firstName, lastName: option1.lastName, needsEmailUpdate: false, sharedEmailWith: null })
+      .set({ firstName: option1.firstName, lastName: option1.lastName, needsEmailUpdate: false, sharedEmailWith: `${option2.firstName} ${option2.lastName}` })
       .where(eq(preRegistrationsTable.email, normalizedEmail));
   }
 
-  // Insert option2 with the shared-email flag — they'll be prompted at check-in
+  // Insert option2 — also marked as shared. Whoever arrives second will be asked to update their email.
   await db.insert(preRegistrationsTable).values({
     firstName: option2.firstName,
     lastName: option2.lastName,
     email: normalizedEmail,
-    needsEmailUpdate: true,
+    needsEmailUpdate: false,
     sharedEmailWith: `${option1.firstName} ${option1.lastName}`,
   });
 

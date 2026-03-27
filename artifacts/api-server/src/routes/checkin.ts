@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
-import { eq, ilike, or, and } from "drizzle-orm";
+import { eq, ilike, or, and, isNotNull } from "drizzle-orm";
 import {
   LookupAttendeeBody,
   SubmitCheckInBody,
@@ -106,29 +106,33 @@ router.post("/check-in/lookup", async (req, res) => {
     .limit(1);
 
   if (existing.length > 0) {
-    // Email is taken — but check if this is a different person sharing the same email.
-    // A shared-email pre-reg record has needsEmailUpdate=true and firstName matching who just arrived.
-    const sharedPreReg = await db
-      .select()
-      .from(preRegistrationsTable)
-      .where(
-        and(
-          eq(preRegistrationsTable.email, normalizedEmail),
-          ilike(preRegistrationsTable.firstName, firstName.trim()),
-          eq(preRegistrationsTable.needsEmailUpdate, true)
+    // Email is taken. First check if this is the same person checking in again (genuine duplicate).
+    const sameFirstName = existing[0].firstName.toLowerCase() === firstName.toLowerCase().trim();
+    if (!sameFirstName) {
+      // Different name — could be a second person sharing this email.
+      // They will have a pre-reg record with sharedEmailWith set.
+      const sharedPreReg = await db
+        .select()
+        .from(preRegistrationsTable)
+        .where(
+          and(
+            eq(preRegistrationsTable.email, normalizedEmail),
+            ilike(preRegistrationsTable.firstName, firstName.trim()),
+            isNotNull(preRegistrationsTable.sharedEmailWith)
+          )
         )
-      )
-      .limit(1);
+        .limit(1);
 
-    if (sharedPreReg.length > 0) {
-      // This is the second person — they need to supply a new email before checking in
-      res.json({
-        found: false,
-        alreadyCheckedIn: false,
-        sharedEmail: true,
-        sharedEmailWith: `${existing[0].firstName} ${existing[0].lastName}`,
-      });
-      return;
+      if (sharedPreReg.length > 0) {
+        // This is the second person to arrive — ask them to provide a new email
+        res.json({
+          found: false,
+          alreadyCheckedIn: false,
+          sharedEmail: true,
+          sharedEmailWith: `${existing[0].firstName} ${existing[0].lastName}`,
+        });
+        return;
+      }
     }
 
     res.json({ found: existing[0].preRegistered, alreadyCheckedIn: true });
