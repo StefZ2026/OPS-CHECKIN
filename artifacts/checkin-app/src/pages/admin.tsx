@@ -696,8 +696,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     });
 
   const roleCounts = ALL_ROLES.map((role) => {
-    const serving = (data?.attendees ?? []).filter((a) => a.roles.some((r) => r.roleName === role));
-    const trained = serving.filter((a) => a.roles.some((r) => r.roleName === role && r.isTrained));
+    const serving = (data?.attendees ?? []).filter((a) => a.roles.some((r) => r.roleName === role && r.wantsToServeToday !== false));
+    const trained = serving.filter((a) => a.roles.some((r) => r.roleName === role && r.wantsToServeToday !== false && r.isTrained));
     return { role, count: serving.length, trained: trained.length };
   });
 
@@ -831,8 +831,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         {/* Role volunteer modal */}
         {selectedRole && (() => {
           const meta = ROLE_META[selectedRole];
-          const served = (data?.attendees ?? []).filter(a => a.roles.some(r => r.roleName === selectedRole));
-          const trained = served.filter(a => a.roles.some(r => r.roleName === selectedRole && r.isTrained));
+          const served = (data?.attendees ?? []).filter(a => a.roles.some(r => r.roleName === selectedRole && r.wantsToServeToday !== false));
+          const trained = served.filter(a => a.roles.some(r => r.roleName === selectedRole && r.wantsToServeToday !== false && r.isTrained));
           const list = roleFilter === "trained" ? trained : served;
           return (
             <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => { setSelectedRole(null); setRoleFilter("served"); }}>
@@ -975,7 +975,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                         <td className="p-5">
                           {attendee.roles && attendee.roles.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
-                              {attendee.roles.map((r) => {
+                              {attendee.roles.filter(r => r.wantsToServeToday !== false).map((r) => {
                                 const meta = ROLE_META[r.roleName];
                                 return (
                                   <span
