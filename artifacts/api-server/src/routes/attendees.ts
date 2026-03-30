@@ -35,6 +35,7 @@ router.get("/attendees", async (_req, res) => {
     mobilizeId: a.mobilizeId ?? null,
     checkedInAt: a.checkedInAt.toISOString(),
     isNoIceWinner: a.isNoIceWinner,
+    wantsToBeContacted: a.wantsToBeContacted,
     roles: (rolesMap.get(a.id) || []).map((r) => ({
       id: r.id,
       roleName: r.roleName,

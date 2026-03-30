@@ -22,7 +22,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             "placeholder:text-muted-foreground",
             "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring focus-visible:border-primary",
             "disabled:cursor-not-allowed disabled:opacity-50",
-            icon ? "pl-14 pr-6 py-5 text-xl lg:text-2xl" : "px-6 py-5 text-xl lg:text-2xl",
+            icon ? "pl-14 pr-6 py-6 text-2xl lg:text-3xl" : "px-6 py-6 text-2xl lg:text-3xl",
             className
           )}
           ref={ref}

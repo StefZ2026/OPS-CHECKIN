@@ -559,8 +559,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const attendees = data?.attendees ?? [];
+
     const ROLE_LABEL: Record<string, string> = {
       safety_marshal: "Safety Marshal",
       medic: "Medic",
@@ -568,57 +569,114 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       chant_lead: "Chant Lead",
       information_services: "Info Services",
     };
-    const rows = attendees.map((a) => {
-      // wantsToServeToday === null → pre-reg volunteer (assigned a role, no explicit ask)
-      // wantsToServeToday === true → walk-in who chose to serve today
-      // wantsToServeToday === false → has experience but declined to serve today
+
+    type PreReg = { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; source: string; roleName: string | null };
+    let preRegs: PreReg[] = [];
+    try {
+      const res = await fetch("/api/admin/pre-registrations", {
+        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { preRegistrations: PreReg[] };
+        preRegs = d.preRegistrations ?? [];
+      }
+    } catch { /* fall through — export checked-in only */ }
+
+    const attendeesByEmail = new Map(attendees.map(a => [a.email.toLowerCase(), a]));
+    const coveredEmails = new Set<string>();
+
+    type ExportRow = Record<string, string>;
+    const rows: ExportRow[] = [];
+
+    const buildAttendeeRow = (a: (typeof attendees)[0], status: string): ExportRow => {
       const rolesWithFlag = a.roles as Array<{ roleName: string; isTrained: boolean; hasServed: boolean; wantsToServeToday?: boolean | null }>;
-
-      // "Attended As": Volunteer if any role is actively serving (wantsToServeToday null or true)
       const isVolunteer = a.roles.length > 0 && rolesWithFlag.some(r => r.wantsToServeToday !== false);
-      const attendedAs = isVolunteer ? "Volunteer" : "Attendee";
-
-      // "Roles Served at NK3": roles they're actively working today (wantsToServeToday null or true)
-      const servedAtEvent = rolesWithFlag
-        .filter(r => r.wantsToServeToday !== false)
-        .map(r => ROLE_LABEL[r.roleName] ?? r.roleName)
-        .join("; ");
-
-      // "Past Experience": roles they've actually served in before (hasServed = true)
-      const pastExperience = rolesWithFlag
-        .filter(r => r.hasServed)
-        .map(r => ROLE_LABEL[r.roleName] ?? r.roleName)
-        .join("; ");
-
-      // "Past Training": roles they've been trained in (isTrained = true)
-      const pastTraining = rolesWithFlag
-        .filter(r => r.isTrained)
-        .map(r => ROLE_LABEL[r.roleName] ?? r.roleName)
-        .join("; ");
-
+      const servedAtEvent = rolesWithFlag.filter(r => r.wantsToServeToday !== false).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
+      const pastTraining = rolesWithFlag.filter(r => r.isTrained).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
+      const pastExperience = rolesWithFlag.filter(r => r.hasServed).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
+      const wantsContact = (a as typeof a & { wantsToBeContacted?: boolean }).wantsToBeContacted ? "Yes" : "No";
       return {
+        "Status": status,
         "First Name": a.firstName,
         "Last Name": a.lastName,
         "Email": a.email,
         "Phone": a.phone ?? "",
-        "Attended As": attendedAs,
+        "Attended As": isVolunteer ? "Volunteer" : "Attendee",
         "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
         "Roles Served at NK3": servedAtEvent,
         "Roles Trained": pastTraining,
         "Prior Roles Served": pastExperience,
         "Checked In At": new Date(a.checkedInAt).toLocaleString(),
+        "Wants Future Contact": wantsContact,
       };
-    });
+    };
+
+    // Process pre-registrations → Checked In or No Show
+    for (const pr of preRegs) {
+      const email = (pr.email ?? "").toLowerCase();
+      if (email && attendeesByEmail.has(email)) {
+        const attendee = attendeesByEmail.get(email)!;
+        coveredEmails.add(email);
+        rows.push(buildAttendeeRow(attendee, "Checked In"));
+      } else if (!email) {
+        const nameMatch = attendees.find(a =>
+          a.firstName.toLowerCase() === pr.firstName.toLowerCase() &&
+          a.lastName.toLowerCase() === pr.lastName.toLowerCase()
+        );
+        if (nameMatch && !coveredEmails.has(nameMatch.email)) {
+          coveredEmails.add(nameMatch.email);
+          rows.push(buildAttendeeRow(nameMatch, "Checked In"));
+        } else if (!nameMatch) {
+          rows.push({
+            "Status": "No Show",
+            "First Name": pr.firstName,
+            "Last Name": pr.lastName,
+            "Email": pr.email ?? "",
+            "Phone": pr.phone ?? "",
+            "Attended As": "",
+            "Type": pr.source === "volunteer" ? "Pre-Registered (Volunteer)" : "Pre-Registered",
+            "Roles Served at NK3": pr.roleName?.replace(/_/g, " ") ?? "",
+            "Roles Trained": "",
+            "Prior Roles Served": "",
+            "Checked In At": "",
+            "Wants Future Contact": "",
+          });
+        }
+      } else {
+        rows.push({
+          "Status": "No Show",
+          "First Name": pr.firstName,
+          "Last Name": pr.lastName,
+          "Email": pr.email ?? "",
+          "Phone": pr.phone ?? "",
+          "Attended As": "",
+          "Type": pr.source === "volunteer" ? "Pre-Registered (Volunteer)" : "Pre-Registered",
+          "Roles Served at NK3": pr.roleName?.replace(/_/g, " ") ?? "",
+          "Roles Trained": "",
+          "Prior Roles Served": "",
+          "Checked In At": "",
+          "Wants Future Contact": "",
+        });
+      }
+    }
+
+    // Walk-ins: attendees not matched to any pre-reg
+    for (const a of attendees) {
+      if (!coveredEmails.has(a.email.toLowerCase())) {
+        rows.push(buildAttendeeRow(a, "Walk-in"));
+      }
+    }
+
     const ws = XLSX.utils.json_to_sheet(rows);
     const colWidths = [
-      { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 }, { wch: 12 },
-      { wch: 14 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 22 },
+      { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 },
+      { wch: 12 }, { wch: 22 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 22 }, { wch: 20 },
     ];
     ws["!cols"] = colWidths;
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Attendees");
+    XLSX.utils.book_append_sheet(wb, ws, "Full Roster");
     const date = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `nk3-attendees-${date}.xlsx`);
+    XLSX.writeFile(wb, `nk3-full-roster-${date}.xlsx`);
   };
 
   const handleToggleTrained = async (roleId: number, current: boolean) => {

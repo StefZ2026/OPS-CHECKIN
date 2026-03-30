@@ -20,6 +20,7 @@ export const attendeesTable = pgTable("attendees", {
   mobilizeId: text("mobilize_id"),
   checkedInAt: timestamp("checked_in_at").notNull().defaultNow(),
   isNoIceWinner: boolean("is_no_ice_winner").notNull().default(false),
+  wantsToBeContacted: boolean("wants_to_be_contacted").notNull().default(false),
 });
 
 export const attendeeRolesTable = pgTable("attendee_roles", {

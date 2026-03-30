@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle } from "lucide-react";
+import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle, Users, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,25 +27,24 @@ const ROLE_DEFS: Pick<RoleState, "roleName" | "title" | "Icon">[] = [
 ];
 
 const ROLE_META: Record<AttendeeRoleRoleName, { title: string; Icon: React.ElementType; hasVest: boolean }> = {
-  safety_marshal:      { title: "Safety Marshal",      Icon: Shield,        hasVest: true },
-  medic:               { title: "Medic",               Icon: Activity,      hasVest: true },
+  safety_marshal:      { title: "Safety Marshal",      Icon: Shield,         hasVest: true },
+  medic:               { title: "Medic",               Icon: Activity,       hasVest: true },
   de_escalator:        { title: "De-escalator",        Icon: HeartHandshake, hasVest: true },
-  chant_lead:          { title: "Chant Lead",          Icon: Megaphone,     hasVest: true },
-  information_services:{ title: "Information Services", Icon: Info,          hasVest: false },
+  chant_lead:          { title: "Chant Lead",          Icon: Megaphone,      hasVest: true },
+  information_services:{ title: "Information Services", Icon: Info,           hasVest: false },
 };
 
 function makeInitialRoles(): RoleState[] {
   return ROLE_DEFS.map(d => ({ ...d, hasServed: false, isTrained: false, wantsToServeToday: null }));
 }
 
-type Step = 1 | "found" | 2 | 3 | "invite" | "volunteer" | "fun" | "duplicate" | 4
-          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm"
-          | "shared_email";
+type Step = "home" | "lookup" | "found" | 2 | "vol_gate" | 3 | "future_contact" | "invite" | "volunteer" | "fun" | "duplicate" | 4
+          | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm" | "shared_email";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
 
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>("home");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -65,9 +64,10 @@ export default function CheckInFlow() {
   const [sharedEmailWith, setSharedEmailWith] = useState<string | null>(null);
   const [newEmailForShared, setNewEmailForShared] = useState("");
   const [isSharedEmailUpdater, setIsSharedEmailUpdater] = useState(false);
-  const [volunteerHasServedBefore, setVolunteerHasServedBefore] = useState<boolean | null>(null);
   const [volPriorRoles, setVolPriorRoles] = useState<Partial<Record<AttendeeRoleRoleName, { hasServed: boolean; isTrained: boolean }>>>({});
   const [wonNoIceButton, setWonNoIceButton] = useState(false);
+  const [wantsToBeContacted, setWantsToBeContacted] = useState<boolean | null>(null);
+  const [futureContactSource, setFutureContactSource] = useState<"vol_gate" | 3 | "invite">("vol_gate");
 
   const lookupMutation = useAttendeeLookup();
   const submitMutation = useCheckInSubmit();
@@ -76,7 +76,7 @@ export default function CheckInFlow() {
   const anyEligible = eligibleRoles.length > 0;
 
   const handleReset = () => {
-    setStep(1);
+    setStep("home");
     setFirstName(""); setLastName(""); setEmail(""); setPhone("");
     setPreRegistered(false); setMobilizeId(null);
     setWalkinSource("direct");
@@ -92,14 +92,12 @@ export default function CheckInFlow() {
     setSharedEmailWith(null);
     setNewEmailForShared("");
     setIsSharedEmailUpdater(false);
-    setVolunteerHasServedBefore(null);
     setVolPriorRoles({});
     setWonNoIceButton(false);
+    setWantsToBeContacted(null);
+    setFutureContactSource("vol_gate");
   };
 
-  // Build the roles array for volunteer submissions.
-  // The primary role always gets isTrained:true (required for today).
-  // Any other role the volunteer flags gets submitted with wantsToServeToday:false.
   const buildVolRoles = (primaryRole: AttendeeRoleRoleName, wantsToServeTodayValue: boolean | null) => {
     const result: Array<{ roleName: AttendeeRoleRoleName; isTrained: boolean; hasServed: boolean; wantsToServeToday: boolean | null }> = [];
     const primary = volPriorRoles[primaryRole];
@@ -120,8 +118,6 @@ export default function CheckInFlow() {
     }));
   };
 
-  // Shared error handler for check-in submission failures.
-  // Handles the "already checked in under a different name" case across all submit paths.
   const handleCheckinError = (err: unknown) => {
     const msg = (err as { message?: string })?.message ?? "";
     if (msg.toLowerCase().includes("already")) {
@@ -156,8 +152,6 @@ export default function CheckInFlow() {
     }
     lookupMutation.mutate({ data: { firstName: firstName.trim(), email: email.trim(), isVolunteer: isVolunteerMode } }, {
       onSuccess: (data) => {
-        // Shared-email path: backend detected this person is the second of a couple
-        // who share one email — the first has already checked in. Must capture a new email.
         const d = data as typeof data & { sharedEmail?: boolean; sharedEmailWith?: string };
         if (d.sharedEmail) {
           setSharedEmailWith(d.sharedEmailWith ?? "another attendee");
@@ -172,10 +166,8 @@ export default function CheckInFlow() {
           return;
         }
 
-        // Volunteer path
         if (isVolunteerMode) {
           if (data.volunteerPreReg) {
-            // Found in volunteer list
             const vpr = data.volunteerPreReg;
             setVolunteerPreRegData(vpr);
             setFirstName(vpr.firstName);
@@ -184,13 +176,11 @@ export default function CheckInFlow() {
             if (vpr.phone) setPhone(vpr.phone);
             setStep("vol_found");
           } else {
-            // Not found in volunteer list
             setStep("vol_not_found");
           }
           return;
         }
 
-        // Regular attendee path: catch volunteers who missed the volunteer button
         if (data.volunteerPreReg) {
           const vpr = data.volunteerPreReg;
           setVolunteerPreRegData(vpr);
@@ -206,12 +196,11 @@ export default function CheckInFlow() {
         if (data.found) {
           setPreRegistered(true);
           setMobilizeId(data.mobilizeId ?? null);
-          // Check if name on file differs from what they typed
-          const d = data as typeof data & { foundFirstName?: string; foundLastName?: string };
-          const foundFirst = (d.foundFirstName ?? "").trim().toLowerCase();
+          const d2 = data as typeof data & { foundFirstName?: string; foundLastName?: string };
+          const foundFirst = (d2.foundFirstName ?? "").trim().toLowerCase();
           const typedFirst = firstName.trim().toLowerCase();
-          if (d.foundFirstName && foundFirst !== typedFirst) {
-            setPreRegName({ firstName: d.foundFirstName, lastName: d.foundLastName ?? "" });
+          if (d2.foundFirstName && foundFirst !== typedFirst) {
+            setPreRegName({ firstName: d2.foundFirstName, lastName: d2.foundLastName ?? "" });
             setStep("name_confirm");
           } else {
             setStep("found");
@@ -231,7 +220,7 @@ export default function CheckInFlow() {
     });
   };
 
-  const submitCheckin = (rolesToSubmit: RoleState[]) => {
+  const submitCheckin = (rolesToSubmit: RoleState[], contactPref: boolean | null = null) => {
     const payload = {
       firstName: firstName.trim(),
       lastName: lastName.trim() || "Unknown",
@@ -239,9 +228,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered,
       mobilizeId,
-      // Submit ALL roles where the person indicated any experience (served before or trained),
-      // plus roles they're actively serving today. wantsToServeToday=true means serving now,
-      // false means they have experience but declined to serve today, null = pre-reg assigned.
+      wantsToBeContacted: contactPref ?? false,
       roles: rolesToSubmit
         .filter(r => r.hasServed || r.isTrained || r.wantsToServeToday === true)
         .map(r => ({ roleName: r.roleName, isTrained: r.isTrained, hasServed: r.hasServed, wantsToServeToday: r.wantsToServeToday === true }))
@@ -251,12 +238,9 @@ export default function CheckInFlow() {
         const won = !!(data as typeof data & { wonNoIceButton?: boolean }).wonNoIceButton;
         if (won) setWonNoIceButton(true);
         const isVolunteering = rolesToSubmit.some(r => r.wantsToServeToday === true);
-        const declinedAll = rolesToSubmit.some(r => (r.hasServed || r.isTrained) && r.wantsToServeToday === false);
         if (isVolunteering) {
           confetti({ particleCount: 250, spread: 140, origin: { y: 0.4 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
           setStep("volunteer");
-        } else if (declinedAll) {
-          setStep("fun");
         } else {
           confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff'] });
           setStep(4);
@@ -275,6 +259,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
+      wantsToBeContacted: false,
       roles: buildVolRoles(roleName, null),
     };
     submitMutation.mutate({ data: payload }, {
@@ -289,27 +274,23 @@ export default function CheckInFlow() {
     });
   };
 
-  // Auto-advance from "found" to experience step
+  // Auto-advance from "found" to vol_gate
   useEffect(() => {
-    if (step === "found") { const t = setTimeout(() => setStep(3), 3000); return () => clearTimeout(t); }
+    if (step === "found") { const t = setTimeout(() => setStep("vol_gate"), 3000); return () => clearTimeout(t); }
   }, [step]);
 
-  // Auto-reset after duplicate screen
   useEffect(() => {
     if (step === "duplicate") { const t = setTimeout(handleReset, 7000); return () => clearTimeout(t); }
   }, [step]);
 
-  // Auto-advance from volunteer celebration to YOU'RE IN
   useEffect(() => {
     if (step === "volunteer") { const t = setTimeout(() => setStep(4), 4000); return () => clearTimeout(t); }
   }, [step]);
 
-  // Auto-advance from fun screen to YOU'RE IN
   useEffect(() => {
     if (step === "fun") { const t = setTimeout(() => setStep(4), 5000); return () => clearTimeout(t); }
   }, [step]);
 
-  // Auto-reset after success — give winners extra time to read their prize message
   useEffect(() => {
     if (step === 4) { const t = setTimeout(handleReset, wonNoIceButton ? 20000 : 8000); return () => clearTimeout(t); }
   }, [step, wonNoIceButton]);
@@ -326,6 +307,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
+      wantsToBeContacted: false,
       roles: buildVolRoles(volunteerManualRole, true),
     };
     submitMutation.mutate({ data: payload }, {
@@ -355,7 +337,23 @@ export default function CheckInFlow() {
     }));
   };
 
-  const showBackButton = step === 2 || step === 3 || step === "invite" || step === "vol_found" || step === "vol_not_found" || step === "vol_manual";
+  const showBackButton = step === "lookup" || step === 2 || step === "vol_gate" || step === 3 || step === "invite"
+    || step === "future_contact" || step === "vol_found" || step === "vol_not_found" || step === "vol_manual";
+
+  const handleBack = () => {
+    if (step === "lookup") setStep("home");
+    else if (step === 2) setStep("lookup");
+    else if (step === "vol_gate") { if (preRegistered) setStep("lookup"); else setStep(2); }
+    else if (step === 3) setStep("vol_gate");
+    else if (step === "invite") setStep(3);
+    else if (step === "future_contact") {
+      if (futureContactSource === "invite") setStep("invite");
+      else if (futureContactSource === 3) setStep(3);
+      else setStep("vol_gate");
+    }
+    else if (step === "vol_found" || step === "vol_not_found") { setVolunteerPreRegData(null); setStep("lookup"); }
+    else if (step === "vol_manual") { setVolunteerManualRole(null); setStep("vol_not_found"); }
+  };
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background selection:bg-primary selection:text-white">
@@ -373,13 +371,7 @@ export default function CheckInFlow() {
           {showBackButton && (
             <Button variant="outline" size="sm"
               className="bg-transparent text-white border-white hover:bg-white/10 hover:text-white"
-              onClick={() => {
-                if (step === "invite") setStep(3);
-                else if (step === 3) setStep(preRegistered ? 1 : 2);
-                else if (step === "vol_found" || step === "vol_not_found") { setVolunteerPreRegData(null); setStep(1); }
-                else if (step === "vol_manual") { setVolunteerManualRole(null); setStep("vol_not_found"); }
-                else setStep(1);
-              }}
+              onClick={handleBack}
             >
               <ArrowLeft className="w-5 h-5 mr-2" /> Back
             </Button>
@@ -390,57 +382,91 @@ export default function CheckInFlow() {
       <main className="flex-1 w-full max-w-5xl mx-auto p-6 md:p-12 flex flex-col justify-center">
         <AnimatePresence mode="wait" initial={false}>
 
-          {/* STEP 1: LOOKUP */}
-          {step === 1 && (
-            <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+          {/* HOME: Mode selection */}
+          {step === "home" && (
+            <motion.div key="home" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-2xl mx-auto space-y-8">
               <div className="text-center space-y-4 mb-8">
                 <h2 className="font-display text-5xl md:text-7xl text-primary">Welcome!</h2>
-                <p className="text-2xl md:text-3xl font-medium text-muted-foreground">Let's get you checked in to the rally.</p>
+                <p className="text-2xl md:text-3xl font-medium text-muted-foreground">How are you here today?</p>
               </div>
 
-              {/* Volunteer toggle */}
-              <button
-                onClick={() => setIsVolunteerMode(v => !v)}
-                className={`w-full flex items-center gap-4 p-5 rounded-2xl border-4 transition-all text-left
-                  ${isVolunteerMode
-                    ? 'border-primary bg-primary/10 shadow-brutal-sm'
-                    : 'border-foreground bg-white hover:bg-muted/30'}`}
-              >
-                <div className={`flex-shrink-0 w-12 h-12 rounded-xl border-4 border-foreground flex items-center justify-center transition-colors
-                  ${isVolunteerMode ? 'bg-primary text-white' : 'bg-muted text-foreground'}`}>
-                  <HardHat className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <p className={`font-display text-xl leading-tight ${isVolunteerMode ? 'text-primary' : 'text-foreground'}`}>
-                    I'm checking in as a <strong>volunteer</strong> today
-                  </p>
-                  <p className="text-sm font-medium text-muted-foreground mt-1">
-                    {isVolunteerMode ? "✓ Volunteer mode ON — we'll look you up in our volunteer list" : "Tap to activate if you're on the volunteer team"}
-                  </p>
-                </div>
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full border-4 border-foreground flex items-center justify-center
-                  ${isVolunteerMode ? 'bg-primary' : 'bg-white'}`}>
-                  {isVolunteerMode && <div className="w-3 h-3 rounded-full bg-white" />}
-                </div>
-              </button>
+              <div className="grid grid-cols-1 gap-5">
+                <button
+                  onClick={() => { setIsVolunteerMode(false); setStep("lookup"); }}
+                  className="group w-full p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-secondary/50 hover:border-primary transition-all text-left shadow-brutal space-y-3"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="flex-shrink-0 w-16 h-16 rounded-2xl border-4 border-foreground bg-secondary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                      <Users className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <p className="font-display text-3xl md:text-4xl leading-tight">I'm an Attendee</p>
+                      <p className="text-lg font-medium text-muted-foreground mt-1">Here to rally today</p>
+                    </div>
+                    <ArrowRight className="w-8 h-8 ml-auto text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => { setIsVolunteerMode(true); setStep("lookup"); }}
+                  className="group w-full p-8 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/15 transition-all text-left shadow-brutal space-y-3"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="flex-shrink-0 w-16 h-16 rounded-2xl border-4 border-primary bg-primary flex items-center justify-center">
+                      <HardHat className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-display text-3xl md:text-4xl text-primary leading-tight">I'm a Volunteer</p>
+                      <p className="text-lg font-medium text-muted-foreground mt-1">On the team today</p>
+                    </div>
+                    <ArrowRight className="w-8 h-8 ml-auto text-primary group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* LOOKUP: Name + email form */}
+          {step === "lookup" && (
+            <motion.div key="lookup" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-8">
+              <div className="text-center space-y-4 mb-8">
+                {isVolunteerMode ? (
+                  <>
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-primary rounded-2xl border-4 border-foreground shadow-brutal-sm mb-2">
+                      <HardHat className="w-10 h-10 text-white" />
+                    </div>
+                    <h2 className="font-display text-4xl md:text-6xl text-primary">Volunteer Check-In</h2>
+                    <p className="text-xl md:text-2xl font-medium text-muted-foreground">Let's find you in our volunteer list.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-secondary rounded-2xl border-4 border-foreground shadow-brutal-sm mb-2">
+                      <ClipboardCheck className="w-10 h-10 text-foreground" />
+                    </div>
+                    <h2 className="font-display text-4xl md:text-6xl">Attendee Check-In</h2>
+                    <p className="text-xl md:text-2xl font-medium text-muted-foreground">Enter your name and email to get started.</p>
+                  </>
+                )}
+              </div>
 
               <div className="space-y-6">
                 <div>
-                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">First Name</label>
+                  <label className="font-display text-2xl uppercase tracking-wider mb-3 block">First Name</label>
                   <Input placeholder="Enter your first name" icon={<UserPlus className="w-8 h-8" />}
                     value={firstName} onChange={(e) => setFirstName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLookup()} autoFocus />
                 </div>
                 <div>
-                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Email Address</label>
+                  <label className="font-display text-2xl uppercase tracking-wider mb-3 block">Email Address</label>
                   <Input placeholder="Enter your email" type="email" icon={<Mail className="w-8 h-8" />}
                     value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLookup()} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+              <div className="space-y-4 mt-8">
                 <Button size="xl" className="w-full group" onClick={handleLookup} isLoading={lookupMutation.isPending}>
-                  {isVolunteerMode ? "Look Me Up →" : "Find My Pre-Registration"} <ArrowRight className="ml-3 w-7 h-7 group-hover:translate-x-1 transition-transform" />
+                  {isVolunteerMode ? "Look Me Up" : "Find My Registration"} <ArrowRight className="ml-3 w-7 h-7 group-hover:translate-x-1 transition-transform" />
                 </Button>
                 {!isVolunteerMode && (
                   <Button size="xl" variant="secondary" className="w-full group border-4 border-foreground shadow-brutal"
@@ -450,13 +476,13 @@ export default function CheckInFlow() {
                       }
                       setPreRegistered(false); setWalkinSource("direct"); setStep(2);
                     }}>
-                    Register Me <UserPlus className="ml-3 w-7 h-7" />
+                    I'm Not Pre-Registered <UserPlus className="ml-3 w-7 h-7" />
                   </Button>
                 )}
               </div>
-              <p className="text-center text-muted-foreground font-medium text-base mt-3">
+              <p className="text-center text-muted-foreground font-medium text-lg mt-3">
                 {isVolunteerMode
-                  ? "We'll check our volunteer list — enter your first name and the email you registered with."
+                  ? "We'll check our volunteer list — enter the first name and email you registered with."
                   : "Pre-registered on Mobilize? Use the first button. New to the rally? Use the second."}
               </p>
             </motion.div>
@@ -481,6 +507,50 @@ export default function CheckInFlow() {
             </motion.div>
           )}
 
+          {/* VOL_GATE: Have you ever volunteered/trained? */}
+          {step === "vol_gate" && (
+            <motion.div key="vol_gate" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-8">
+              <div className="text-center space-y-4 mb-8">
+                <div className="text-6xl md:text-7xl">🤝</div>
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">Quick question,<br />{firstName || "friend"}!</h2>
+                <p className="text-2xl font-medium text-muted-foreground">
+                  Have you ever volunteered at or been trained for an event like this?
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <button
+                  onClick={() => setStep(3)}
+                  className="group w-full p-8 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/15 transition-all text-left shadow-brutal"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="text-5xl">✋</div>
+                    <div>
+                      <p className="font-display text-3xl text-primary">Yes, I have!</p>
+                      <p className="text-lg font-medium text-muted-foreground mt-1">Safety Marshal, Medic, De-escalator, or Chant Lead</p>
+                    </div>
+                    <ArrowRight className="w-8 h-8 ml-auto text-primary group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => { setFutureContactSource("vol_gate"); setStep("future_contact"); }}
+                  className="group w-full p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-muted/30 transition-all text-left shadow-brutal"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="text-5xl">🙅</div>
+                    <div>
+                      <p className="font-display text-3xl">No, first time!</p>
+                      <p className="text-lg font-medium text-muted-foreground mt-1">I'm new to event volunteering</p>
+                    </div>
+                    <ArrowRight className="w-8 h-8 ml-auto text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {/* VOL_FOUND: Volunteer found in pre-reg list */}
           {step === "vol_found" && volunteerPreRegData && (
             <motion.div key="vol_found" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
@@ -491,7 +561,6 @@ export default function CheckInFlow() {
                 <p className="text-xl font-medium text-muted-foreground">We have you registered as:</p>
               </div>
 
-              {/* Role badge */}
               {(() => {
                 const roleName = volunteerPreRegData.roleName as AttendeeRoleRoleName;
                 const meta = ROLE_META[roleName] ?? { title: volunteerPreRegData.roleName, Icon: HardHat, hasVest: false };
@@ -508,7 +577,6 @@ export default function CheckInFlow() {
                 );
               })()}
 
-              {/* Info confirmation */}
               <Card className="border-2 border-foreground">
                 <CardContent className="p-6 space-y-4">
                   <h3 className="font-display text-xl">Your Info</h3>
@@ -548,7 +616,6 @@ export default function CheckInFlow() {
                 </CardContent>
               </Card>
 
-              {/* Prior experience — all roles */}
               {(() => {
                 const primaryRole = volunteerPreRegData.roleName as AttendeeRoleRoleName;
                 return (
@@ -643,19 +710,19 @@ export default function CheckInFlow() {
 
               <div className="space-y-5">
                 <div>
-                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Last Name</label>
+                  <label className="font-display text-2xl uppercase tracking-wider mb-3 block">Last Name</label>
                   <Input placeholder="Enter your last name" icon={<UserPlus className="w-8 h-8" />}
                     value={lastName} onChange={(e) => setLastName(e.target.value)} autoFocus />
                 </div>
                 <div>
-                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">
+                  <label className="font-display text-2xl uppercase tracking-wider mb-3 block">
                     Phone <span className="text-muted-foreground font-sans font-medium normal-case text-base">(optional)</span>
                   </label>
                   <Input placeholder="Enter your phone number" type="tel" icon={<Phone className="w-8 h-8" />}
                     value={phone} onChange={(e) => setPhone(e.target.value)} />
                 </div>
                 <div>
-                  <label className="font-display text-xl uppercase tracking-wider mb-2 block">Which role did you sign up for?</label>
+                  <label className="font-display text-2xl uppercase tracking-wider mb-3 block">Which role did you sign up for?</label>
                   <div className="grid grid-cols-1 gap-2">
                     {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([roleName, meta]) => (
                       <button key={roleName} onClick={() => setVolunteerManualRole(roleName)}
@@ -744,30 +811,30 @@ export default function CheckInFlow() {
                 )}
               </div>
               <div>
-                <label className="font-display text-xl uppercase tracking-wider mb-2 block">Last Name</label>
+                <label className="font-display text-2xl uppercase tracking-wider mb-3 block">Last Name</label>
                 <Input placeholder="Enter your last name" icon={<UserPlus className="w-8 h-8" />}
-                  value={lastName} onChange={(e) => setLastName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setStep(3)} autoFocus />
+                  value={lastName} onChange={(e) => setLastName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setStep("vol_gate")} autoFocus />
               </div>
               <div>
-                <label className="font-display text-xl uppercase tracking-wider mb-2 block">
+                <label className="font-display text-2xl uppercase tracking-wider mb-3 block">
                   Phone Number <span className="text-muted-foreground font-sans font-medium normal-case text-base">(optional)</span>
                 </label>
                 <Input placeholder="Enter your phone number" type="tel" icon={<Phone className="w-8 h-8" />}
-                  value={phone} onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setStep(3)} />
+                  value={phone} onChange={(e) => setPhone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setStep("vol_gate")} />
               </div>
-              <Button size="xl" className="w-full mt-8 group" onClick={() => setStep(3)}>
+              <Button size="xl" className="w-full mt-8 group" onClick={() => setStep("vol_gate")}>
                 Continue <ArrowRight className="ml-4 w-8 h-8 group-hover:translate-x-2 transition-transform" />
               </Button>
             </motion.div>
           )}
 
-          {/* STEP 3: EXPERIENCE CHECKBOXES */}
+          {/* STEP 3: EXPERIENCE CHECKBOXES (only reached if vol_gate = Yes) */}
           {step === 3 && (
             <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-3xl mx-auto space-y-8">
               <div className="text-center space-y-2 mb-4">
-                <h2 className="font-display text-4xl md:text-5xl">Volunteer Experience</h2>
-                <p className="text-xl font-medium text-muted-foreground">Have you served in or been trained for any of these roles?</p>
+                <h2 className="font-display text-4xl md:text-5xl">Great! Which roles?</h2>
+                <p className="text-xl font-medium text-muted-foreground">Tell us which roles you've served in or trained for.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -801,8 +868,9 @@ export default function CheckInFlow() {
                     Continue <ArrowRight className="ml-3 w-7 h-7 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 ) : (
-                  <Button size="xl" className="w-full" onClick={() => submitCheckin(roles)} isLoading={submitMutation.isPending}>
-                    None of the above — let's go! →
+                  <Button size="xl" variant="secondary" className="w-full border-4 border-foreground"
+                    onClick={() => { setFutureContactSource(3); setStep("future_contact"); }}>
+                    None of the above — continue →
                   </Button>
                 )}
               </div>
@@ -861,11 +929,78 @@ export default function CheckInFlow() {
 
               <Button size="xl" className="w-full mt-4"
                 disabled={eligibleRoles.some(r => r.wantsToServeToday === null)}
-                onClick={() => submitCheckin(roles)} isLoading={submitMutation.isPending}>
-                Complete Check-in <CheckCircle className="ml-4 w-8 h-8" />
+                onClick={() => {
+                  const anyYes = eligibleRoles.some(r => r.wantsToServeToday === true);
+                  if (anyYes) {
+                    submitCheckin(roles, false);
+                  } else {
+                    setFutureContactSource("invite");
+                    setStep("future_contact");
+                  }
+                }}
+                isLoading={submitMutation.isPending}>
+                {eligibleRoles.some(r => r.wantsToServeToday === true) ? <>Check Me In as Volunteer <CheckCircle className="ml-4 w-8 h-8" /></> : <>Continue <ArrowRight className="ml-3 w-7 h-7" /></>}
               </Button>
               {eligibleRoles.some(r => r.wantsToServeToday === null) && (
                 <p className="text-center text-sm text-muted-foreground font-medium">Please answer yes or no for each role above</p>
+              )}
+            </motion.div>
+          )}
+
+          {/* FUTURE_CONTACT: Want to be contacted about future volunteering? */}
+          {step === "future_contact" && (
+            <motion.div key="future_contact" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="w-full max-w-2xl mx-auto space-y-8">
+              <div className="text-center space-y-4 mb-8">
+                <div className="text-6xl md:text-7xl">📣</div>
+                <h2 className="font-display text-4xl md:text-5xl leading-tight">One more thing!</h2>
+                <p className="text-2xl font-medium text-muted-foreground">
+                  Would you like us to reach out about volunteering at future events?
+                </p>
+                <p className="text-lg text-muted-foreground font-medium">
+                  We're always looking for great people to join the team.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <button
+                  onClick={() => {
+                    setWantsToBeContacted(true);
+                    submitCheckin(roles, true);
+                  }}
+                  disabled={submitMutation.isPending}
+                  className="group w-full p-8 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/15 transition-all text-left shadow-brutal disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="text-5xl">🙋</div>
+                    <div>
+                      <p className="font-display text-3xl text-primary">Yes, please!</p>
+                      <p className="text-lg font-medium text-muted-foreground mt-1">I'd love to hear about future opportunities</p>
+                    </div>
+                    <ArrowRight className="w-8 h-8 ml-auto text-primary group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setWantsToBeContacted(false);
+                    submitCheckin(roles, false);
+                  }}
+                  disabled={submitMutation.isPending}
+                  className="group w-full p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-muted/30 transition-all text-left shadow-brutal disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="text-5xl">👍</div>
+                    <div>
+                      <p className="font-display text-3xl">No thanks</p>
+                      <p className="text-lg font-medium text-muted-foreground mt-1">Just here to rally today</p>
+                    </div>
+                    <ArrowRight className="w-8 h-8 ml-auto text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                  </div>
+                </button>
+              </div>
+              {submitMutation.isPending && (
+                <p className="text-center text-muted-foreground font-medium text-lg">Checking you in…</p>
               )}
             </motion.div>
           )}
@@ -904,7 +1039,6 @@ export default function CheckInFlow() {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {/* Option 1: What they typed — recommended */}
                 <button onClick={() => {
                   setPreRegName(null);
                   confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 }, colors: ['#1d4ed8','#e11d48','#fbbf24','#ffffff','#10b981'] });
@@ -917,7 +1051,6 @@ export default function CheckInFlow() {
                   <p className="text-sm font-medium text-muted-foreground">What you entered today — you know your name best</p>
                 </button>
 
-                {/* Option 2: What's on file */}
                 <button onClick={() => {
                   setFirstName(preRegName.firstName);
                   setLastName(preRegName.lastName);
@@ -1009,6 +1142,7 @@ export default function CheckInFlow() {
                           preRegistered: true,
                           walkinSource: undefined,
                           mobilizeId: mobilizeId ?? undefined,
+                          wantsToBeContacted: false,
                           roles: [],
                         },
                       },
@@ -1054,7 +1188,7 @@ export default function CheckInFlow() {
             </motion.div>
           )}
 
-          {/* FUN: Declined to volunteer */}
+          {/* FUN: kept for backwards compatibility but not reached in new flow */}
           {step === "fun" && (
             <motion.div key="fun" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.05 }}
               transition={{ type: "spring", bounce: 0.4 }} className="w-full max-w-2xl mx-auto text-center space-y-8 py-8">

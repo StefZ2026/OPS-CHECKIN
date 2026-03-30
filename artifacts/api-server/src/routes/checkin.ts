@@ -203,7 +203,7 @@ router.post("/check-in/submit", async (req, res) => {
     return;
   }
 
-  const { firstName, lastName, email, phone, preRegistered, mobilizeId, roles } = parsed.data;
+  const { firstName, lastName, email, phone, preRegistered, mobilizeId, wantsToBeContacted, roles } = parsed.data;
 
   const normalizedEmailSubmit = email.toLowerCase().trim();
 
@@ -218,6 +218,7 @@ router.post("/check-in/submit", async (req, res) => {
       phone: phone?.replace(/\D/g, "") || null,
       preRegistered,
       mobilizeId: mobilizeId ?? null,
+      wantsToBeContacted: wantsToBeContacted ?? false,
     })
     .onConflictDoNothing()
     .returning();

@@ -60,6 +60,7 @@ export const SubmitCheckInBody = zod.object({
   phone: zod.string().optional().nullable(),
   preRegistered: zod.boolean(),
   mobilizeId: zod.string().nullish(),
+  wantsToBeContacted: zod.boolean().optional().nullable(),
   roles: zod.array(
     zod.object({
       roleName: zod.enum([
@@ -93,6 +94,7 @@ export const ListAttendeesResponse = zod.object({
       preRegistered: zod.boolean(),
       mobilizeId: zod.string().nullish(),
       checkedInAt: zod.date(),
+      wantsToBeContacted: zod.boolean().optional(),
       roles: zod.array(
         zod.object({
           roleName: zod.enum([
