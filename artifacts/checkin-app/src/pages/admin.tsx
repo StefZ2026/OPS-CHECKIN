@@ -560,7 +560,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const handleExport = async () => {
-    const attendees = data?.attendees ?? [];
+    const authHeader = { Authorization: `Bearer ${getAdminToken() ?? ""}` };
 
     const ROLE_LABEL: Record<string, string> = {
       safety_marshal: "Safety Marshal",
@@ -570,12 +570,24 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       information_services: "Info Services",
     };
 
+    type ApiAttendee = {
+      id: number; firstName: string; lastName: string; email: string; phone?: string | null;
+      preRegistered: boolean; checkedInAt: string; wantsToBeContacted?: boolean;
+      roles: { roleName: string; isTrained: boolean; hasServed: boolean; wantsToServeToday?: boolean | null }[];
+    };
+    let attendees: ApiAttendee[] = [];
+    try {
+      const res = await fetch("/api/attendees", { headers: authHeader });
+      if (res.ok) {
+        const d = await res.json() as { attendees: ApiAttendee[] };
+        attendees = d.attendees ?? [];
+      }
+    } catch { attendees = (data?.attendees ?? []) as ApiAttendee[]; }
+
     type PreReg = { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; source: string; roleName: string | null };
     let preRegs: PreReg[] = [];
     try {
-      const res = await fetch("/api/admin/pre-registrations", {
-        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
-      });
+      const res = await fetch("/api/admin/pre-registrations", { headers: authHeader });
       if (res.ok) {
         const d = await res.json() as { preRegistrations: PreReg[] };
         preRegs = d.preRegistrations ?? [];
@@ -594,7 +606,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       const servedAtEvent = rolesWithFlag.filter(r => r.wantsToServeToday !== false).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
       const pastTraining = rolesWithFlag.filter(r => r.isTrained).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
       const pastExperience = rolesWithFlag.filter(r => r.hasServed).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
-      const wantsContact = (a as typeof a & { wantsToBeContacted?: boolean }).wantsToBeContacted ? "Yes" : "No";
+      const wantsContact = a.wantsToBeContacted ? "Yes" : "No";
       return {
         "Status": status,
         "First Name": a.firstName,
