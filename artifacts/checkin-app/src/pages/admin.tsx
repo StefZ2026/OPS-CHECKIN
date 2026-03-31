@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
+import { useToast } from "@/hooks/use-toast";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -542,6 +543,7 @@ function VolunteerUploadSection() {
 type EditForm = { firstName: string; lastName: string; phone: string };
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
+  const { toast } = useToast();
   const { data, isLoading, isError, refetch, isRefetching } = useAttendees();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("checkedInAt");
