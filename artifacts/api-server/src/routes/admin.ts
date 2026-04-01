@@ -209,7 +209,7 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
     }
   }
 
-  const header = ["Status", "First Name", "Last Name", "Email", "Phone", "Attended As", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At", "Wants Future Contact"].join(",");
+  const header = ["Status", "First Name", "Last Name", "Email", "Phone", "Attended As", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At", "Contact to Volunteer"].join(",");
 
   const rows = exportRows.map(r => [
     r.status,

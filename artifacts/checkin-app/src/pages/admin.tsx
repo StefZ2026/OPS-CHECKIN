@@ -631,7 +631,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           "Roles Trained": pastTraining,
           "Prior Roles Served": pastExperience,
           "Checked In At": new Date(a.checkedInAt).toLocaleString(),
-          "Wants Future Contact": a.wantsToBeContacted ? "Yes" : "No",
+          "Contact to Volunteer": a.wantsToBeContacted ? "Yes" : "No",
         };
       };
 
@@ -647,7 +647,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         "Roles Trained": "",
         "Prior Roles Served": "",
         "Checked In At": "",
-        "Wants Future Contact": "",
+        "Contact to Volunteer": "",
       });
 
       // Process pre-registrations → Checked In or No Show
