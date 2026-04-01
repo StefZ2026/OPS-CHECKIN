@@ -363,7 +363,7 @@ export default function CheckInFlow() {
           <img src="/icu-logo.jpg" alt="Indivisible Cherokee United" className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover" />
           <div>
             <h1 className="font-display text-xl md:text-3xl text-white leading-tight">No Kings 3 Rally</h1>
-            <p className="text-white/70 text-sm font-medium hidden md:block">March 28th · ICU Check-In</p>
+            <p className="text-white/70 text-sm font-medium hidden md:block">March 28th · ICU <span className="whitespace-nowrap">Check-In</span></p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -437,7 +437,7 @@ export default function CheckInFlow() {
                     <div className="inline-flex items-center justify-center w-20 h-20 bg-primary rounded-2xl border-4 border-foreground shadow-brutal-sm mb-2">
                       <HardHat className="w-10 h-10 text-white" />
                     </div>
-                    <h2 className="font-display text-4xl md:text-6xl text-primary">Volunteer Check-In</h2>
+                    <h2 className="font-display text-4xl md:text-6xl text-primary">Volunteer<br /><span className="whitespace-nowrap">Check-In</span></h2>
                     <p className="text-xl md:text-2xl font-medium text-muted-foreground">Let's find you in our volunteer list.</p>
                   </>
                 ) : (
@@ -445,7 +445,7 @@ export default function CheckInFlow() {
                     <div className="inline-flex items-center justify-center w-20 h-20 bg-secondary rounded-2xl border-4 border-foreground shadow-brutal-sm mb-2">
                       <ClipboardCheck className="w-10 h-10 text-foreground" />
                     </div>
-                    <h2 className="font-display text-4xl md:text-6xl">Attendee Check-In</h2>
+                    <h2 className="font-display text-4xl md:text-6xl">Attendee<br /><span className="whitespace-nowrap">Check-In</span></h2>
                     <p className="text-xl md:text-2xl font-medium text-muted-foreground">Enter your name and email to get started.</p>
                   </>
                 )}

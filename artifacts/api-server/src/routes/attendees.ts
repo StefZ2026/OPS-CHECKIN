@@ -51,14 +51,51 @@ router.get("/attendees", async (_req, res) => {
 router.patch("/admin/attendees/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const { firstName, lastName, phone, preRegistered } = req.body as { firstName?: string; lastName?: string; phone?: string; preRegistered?: boolean };
+  const { firstName, lastName, phone, preRegistered, email } = req.body as { firstName?: string; lastName?: string; phone?: string; preRegistered?: boolean; email?: string };
   const updates: Record<string, string | boolean | null> = {};
   if (firstName !== undefined) updates.firstName = firstName.trim();
   if (lastName !== undefined) updates.lastName = lastName.trim();
   if (phone !== undefined) updates.phone = phone.replace(/\D/g, "") || null;
   if (preRegistered !== undefined) updates.preRegistered = preRegistered;
+  if (email !== undefined && email.trim()) updates.email = email.trim().toLowerCase();
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
   await db.update(attendeesTable).set(updates).where(eq(attendeesTable.id, id));
+  res.json({ ok: true });
+});
+
+router.put("/admin/attendee-roles/:roleId", async (req, res) => {
+  const roleId = parseInt(req.params.roleId);
+  if (isNaN(roleId)) { res.status(400).json({ error: "Invalid roleId" }); return; }
+  const { roleName, wantsToServeToday, isTrained, hasServed } = req.body as { roleName?: string; wantsToServeToday?: boolean | null; isTrained?: boolean; hasServed?: boolean };
+  const updates: Record<string, unknown> = {};
+  if (roleName !== undefined) updates.roleName = roleName;
+  if (wantsToServeToday !== undefined) updates.wantsToServeToday = wantsToServeToday;
+  if (typeof isTrained === "boolean") updates.isTrained = isTrained;
+  if (typeof hasServed === "boolean") updates.hasServed = hasServed;
+  if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+  await db.update(attendeeRolesTable).set(updates).where(eq(attendeeRolesTable.id, roleId));
+  res.json({ ok: true });
+});
+
+router.delete("/admin/attendee-roles/:roleId", async (req, res) => {
+  const roleId = parseInt(req.params.roleId);
+  if (isNaN(roleId)) { res.status(400).json({ error: "Invalid roleId" }); return; }
+  await db.delete(attendeeRolesTable).where(eq(attendeeRolesTable.id, roleId));
+  res.json({ ok: true });
+});
+
+router.post("/admin/attendees/:id/roles", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid attendee id" }); return; }
+  const { roleName, wantsToServeToday, isTrained, hasServed } = req.body as { roleName?: string; wantsToServeToday?: boolean | null; isTrained?: boolean; hasServed?: boolean };
+  if (!roleName) { res.status(400).json({ error: "roleName is required" }); return; }
+  await db.insert(attendeeRolesTable).values({
+    attendeeId: id,
+    roleName: roleName as "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services",
+    wantsToServeToday: wantsToServeToday ?? null,
+    isTrained: isTrained ?? false,
+    hasServed: hasServed ?? false,
+  });
   res.json({ ok: true });
 });
 

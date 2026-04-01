@@ -540,7 +540,16 @@ function VolunteerUploadSection() {
   );
 }
 
-type EditForm = { firstName: string; lastName: string; phone: string };
+type RoleEdit = {
+  id?: number;
+  roleName: AttendeeRoleRoleName;
+  wantsToServeToday: boolean | null;
+  isTrained: boolean;
+  hasServed: boolean;
+  isNew?: boolean;
+  isDeleted?: boolean;
+};
+type EditForm = { firstName: string; lastName: string; phone: string; email: string; roles: RoleEdit[] };
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const { toast } = useToast();
@@ -553,7 +562,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [togglingRoleId, setTogglingRoleId] = useState<number | null>(null);
   const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
   const [showPrizeWinners, setShowPrizeWinners] = useState(false);
-  const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "", email: "", roles: [] });
   const [editSaving, setEditSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -721,23 +730,67 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const handleEditOpen = (attendee: AttendeeWithRoles) => {
     setEditingAttendee(attendee);
-    setEditForm({ firstName: attendee.firstName, lastName: attendee.lastName, phone: "" });
+    setEditForm({
+      firstName: attendee.firstName,
+      lastName: attendee.lastName,
+      phone: "",
+      email: attendee.email,
+      roles: attendee.roles.map((r) => ({
+        id: r.id,
+        roleName: r.roleName as AttendeeRoleRoleName,
+        wantsToServeToday: r.wantsToServeToday ?? null,
+        isTrained: r.isTrained,
+        hasServed: r.hasServed,
+      })),
+    });
   };
 
   const handleSaveEdit = async () => {
     if (!editingAttendee) return;
     setEditSaving(true);
     try {
+      const auth = `Bearer ${getAdminToken() ?? ""}`;
+      const jsonH = { "Content-Type": "application/json", Authorization: auth };
+
       const res = await fetch(`/api/admin/attendees/${editingAttendee.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
-        body: JSON.stringify({ firstName: editForm.firstName, lastName: editForm.lastName, ...(editForm.phone ? { phone: editForm.phone } : {}) }),
+        headers: jsonH,
+        body: JSON.stringify({
+          firstName: editForm.firstName,
+          lastName: editForm.lastName,
+          email: editForm.email,
+          ...(editForm.phone ? { phone: editForm.phone } : {}),
+        }),
       });
       if (!res.ok) throw new Error("Save failed");
+
+      for (const role of editForm.roles) {
+        if (role.isDeleted && role.id) {
+          await fetch(`/api/admin/attendee-roles/${role.id}`, { method: "DELETE", headers: { Authorization: auth } });
+        } else if (role.isNew) {
+          await fetch(`/api/admin/attendees/${editingAttendee.id}/roles`, {
+            method: "POST",
+            headers: jsonH,
+            body: JSON.stringify({ roleName: role.roleName, wantsToServeToday: role.wantsToServeToday, isTrained: role.isTrained, hasServed: role.hasServed }),
+          });
+        } else if (role.id) {
+          const orig = editingAttendee.roles.find((r) => r.id === role.id);
+          const changed = orig && (orig.roleName !== role.roleName || (orig.wantsToServeToday ?? null) !== role.wantsToServeToday || orig.isTrained !== role.isTrained || orig.hasServed !== role.hasServed);
+          if (changed) {
+            await fetch(`/api/admin/attendee-roles/${role.id}`, {
+              method: "PUT",
+              headers: jsonH,
+              body: JSON.stringify({ roleName: role.roleName, wantsToServeToday: role.wantsToServeToday, isTrained: role.isTrained, hasServed: role.hasServed }),
+            });
+          }
+        }
+      }
+
       setEditingAttendee(null);
       refetch();
+      toast({ title: "Saved", description: "Attendee updated." });
     } catch {
-      alert("Could not save — please try again.");
+      toast({ title: "Save failed", description: "Could not save — please try again.", variant: "destructive" });
     } finally {
       setEditSaving(false);
     }
@@ -1157,20 +1210,31 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="font-display text-sm uppercase tracking-wider mb-1 block">First Name</label>
-                <input
-                  value={editForm.firstName}
-                  onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
-                  className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
-                />
+            <div className="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider mb-1 block">First Name</label>
+                  <input
+                    value={editForm.firstName}
+                    onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
+                    className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider mb-1 block">Last Name</label>
+                  <input
+                    value={editForm.lastName}
+                    onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
+                    className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
+                  />
+                </div>
               </div>
               <div>
-                <label className="font-display text-sm uppercase tracking-wider mb-1 block">Last Name</label>
+                <label className="font-display text-sm uppercase tracking-wider mb-1 block">Email</label>
                 <input
-                  value={editForm.lastName}
-                  onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
+                  value={editForm.email}
+                  onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  type="email"
                   className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
                 />
               </div>
@@ -1185,6 +1249,66 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   placeholder="Enter phone number..."
                   className="w-full border-2 border-foreground rounded-lg px-3 py-2 font-medium text-base focus:outline-none focus:border-primary"
                 />
+              </div>
+
+              {/* Role editing */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="font-display text-sm uppercase tracking-wider">Roles Served</label>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm(f => ({
+                      ...f,
+                      roles: [...f.roles, { roleName: "safety_marshal", wantsToServeToday: true, isTrained: false, hasServed: true, isNew: true }]
+                    }))}
+                    className="text-xs font-bold border-2 border-foreground rounded-lg px-3 py-1 hover:bg-muted transition-colors"
+                  >
+                    + Add Role
+                  </button>
+                </div>
+                {editForm.roles.filter(r => !r.isDeleted).length === 0 && (
+                  <p className="text-sm text-muted-foreground italic py-2">No roles recorded — use Add Role to add one.</p>
+                )}
+                <div className="space-y-2">
+                  {editForm.roles.map((role, idx) => role.isDeleted ? null : (
+                    <div key={idx} className="flex items-center gap-2 p-2 border-2 border-foreground rounded-lg bg-muted/30">
+                      <select
+                        value={role.roleName}
+                        onChange={e => setEditForm(f => ({
+                          ...f,
+                          roles: f.roles.map((r, i) => i === idx ? { ...r, roleName: e.target.value as AttendeeRoleRoleName } : r)
+                        }))}
+                        className="flex-1 border-2 border-foreground rounded-md px-2 py-1 text-sm font-medium bg-white focus:outline-none focus:border-primary"
+                      >
+                        {ALL_ROLES.map(rn => (
+                          <option key={rn} value={rn}>{ROLE_META[rn].label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(f => ({
+                          ...f,
+                          roles: f.roles.map((r, i) => i === idx ? { ...r, wantsToServeToday: r.wantsToServeToday === true ? false : true } : r)
+                        }))}
+                        className={`text-xs font-bold px-2 py-1 rounded-md border-2 transition-colors ${role.wantsToServeToday === true ? "bg-green-100 border-green-700 text-green-800" : "bg-gray-100 border-gray-400 text-gray-600"}`}
+                        title="Served today?"
+                      >
+                        {role.wantsToServeToday === true ? "Served ✓" : "No-show"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditForm(f => ({
+                          ...f,
+                          roles: f.roles.map((r, i) => i === idx ? { ...r, isDeleted: true } : r)
+                        }))}
+                        className="p-1 rounded-md hover:bg-destructive/10 text-destructive transition-colors"
+                        title="Remove role"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex gap-3 p-6 pt-0">
