@@ -631,7 +631,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           "Roles Trained": pastTraining,
           "Prior Roles Served": pastExperience,
           "Checked In At": new Date(a.checkedInAt).toLocaleString(),
-          "Contact to Volunteer": a.wantsToBeContacted ? "Yes" : "No",
+          "Contact to Volunteer": a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
         };
       };
 

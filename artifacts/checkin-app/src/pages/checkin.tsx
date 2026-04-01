@@ -228,7 +228,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered,
       mobilizeId,
-      wantsToBeContacted: contactPref ?? false,
+      wantsToBeContacted: contactPref ?? null,
       roles: rolesToSubmit
         .filter(r => r.hasServed || r.isTrained || r.wantsToServeToday === true)
         .map(r => ({ roleName: r.roleName, isTrained: r.isTrained, hasServed: r.hasServed, wantsToServeToday: r.wantsToServeToday === true }))
@@ -259,7 +259,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
-      wantsToBeContacted: false,
+      wantsToBeContacted: null,
       roles: buildVolRoles(roleName, null),
     };
     submitMutation.mutate({ data: payload }, {
@@ -307,7 +307,7 @@ export default function CheckInFlow() {
       phone: phone.trim() || null,
       preRegistered: true,
       mobilizeId: null,
-      wantsToBeContacted: false,
+      wantsToBeContacted: null,
       roles: buildVolRoles(volunteerManualRole, true),
     };
     submitMutation.mutate({ data: payload }, {
@@ -1142,7 +1142,7 @@ export default function CheckInFlow() {
                           preRegistered: true,
                           walkinSource: undefined,
                           mobilizeId: mobilizeId ?? undefined,
-                          wantsToBeContacted: false,
+                          wantsToBeContacted: null,
                           roles: [],
                         },
                       },

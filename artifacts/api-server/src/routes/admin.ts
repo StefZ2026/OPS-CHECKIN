@@ -136,7 +136,7 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
       trainedRoles,
       priorServed,
       checkedInAt: a.checkedInAt.toISOString(),
-      wantsContact: a.wantsToBeContacted ? "Yes" : "No",
+      wantsContact: a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
     };
   };
 
