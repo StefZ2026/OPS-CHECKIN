@@ -149,7 +149,7 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
       exportRows.push(buildAttendeeRow(attendee, "Checked In"));
     } else {
       exportRows.push({
-        status: "No Show",
+        status: "Not Checked In",
         firstName: pr.firstName,
         lastName: pr.lastName,
         email: pr.email,
@@ -185,7 +185,7 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
       } else if (!nameMatch && !coveredByName.has(nameKey)) {
         coveredByName.add(nameKey);
         exportRows.push({
-          status: "No Show",
+          status: "Not Checked In",
           firstName: vr.firstName,
           lastName: vr.lastName,
           email: vr.email ?? "",
@@ -209,7 +209,7 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
     }
   }
 
-  const header = ["Status", "First Name", "Last Name", "Email", "Phone", "Attended As", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At", "Contact to Volunteer"].join(",");
+  const header = ["Status", "First Name", "Last Name", "Email", "Phone", "Attended As", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At", "Future Volunteer?"].join(",");
 
   const rows = exportRows.map(r => [
     r.status,

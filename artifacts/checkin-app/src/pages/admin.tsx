@@ -631,12 +631,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           "Roles Trained": pastTraining,
           "Prior Roles Served": pastExperience,
           "Checked In At": new Date(a.checkedInAt).toLocaleString(),
-          "Contact to Volunteer": a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
+          "Future Volunteer?": a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
         };
       };
 
       const noShowRow = (pr: PreReg): ExportRow => ({
-        "Status": "No Show",
+        "Status": "Not Checked In",
         "First Name": pr.firstName,
         "Last Name": pr.lastName,
         "Email": pr.email ?? "",
@@ -647,7 +647,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         "Roles Trained": "",
         "Prior Roles Served": "",
         "Checked In At": "",
-        "Contact to Volunteer": "",
+        "Future Volunteer?": "",
       });
 
       // Process pre-registrations → Checked In or No Show
