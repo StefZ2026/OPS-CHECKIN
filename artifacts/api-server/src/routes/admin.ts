@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -88,7 +89,16 @@ router.get("/admin/pre-registrations", requireAdminAuth, async (_req, res) => {
   }
 });
 
-router.get("/admin/export", requireAdminAuth, async (_req, res) => {
+// ── Shared export logic ──────────────────────────────────────────────────────
+
+type ExportRow = {
+  "Status": string; "First Name": string; "Last Name": string; "Email": string;
+  "Phone": string; "Attended As": string; "Type": string;
+  "Roles Served at NK3": string; "Roles Trained": string; "Prior Roles Served": string;
+  "Checked In At": string; "Future Volunteer?": string;
+};
+
+async function buildExportRows(): Promise<ExportRow[]> {
   const [attendees, roles, preRegs, volRegs] = await Promise.all([
     db.select().from(attendeesTable).orderBy(attendeesTable.checkedInAt),
     db.select().from(attendeeRolesTable),
@@ -105,136 +115,83 @@ router.get("/admin/export", requireAdminAuth, async (_req, res) => {
   const attendeesByEmail = new Map(attendees.map(a => [a.email.toLowerCase(), a]));
   const coveredEmails = new Set<string>();
   const coveredByName = new Set<string>();
+  const rows: ExportRow[] = [];
 
-  type ExportRow = {
-    status: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    attendedAs: string;
-    type: string;
-    servedAtEvent: string;
-    trainedRoles: string;
-    priorServed: string;
-    checkedInAt: string;
-    wantsContact: string;
-  };
-
-  const exportRows: ExportRow[] = [];
-
-  const buildAttendeeRow = (a: (typeof attendees)[0], status: string): ExportRow => {
+  const toRow = (a: (typeof attendees)[0], status: string): ExportRow => {
     const aRoles = rolesMap.get(a.id) ?? [];
     const isVolunteer = aRoles.some(r => r.wantsToServeToday !== false);
-    const servedAtEvent = aRoles.filter(r => r.wantsToServeToday !== false).map(r => r.roleName.replace(/_/g, " ")).join("; ");
-    const trainedRoles = aRoles.filter(r => r.isTrained).map(r => r.roleName.replace(/_/g, " ")).join("; ");
-    const priorServed = aRoles.filter(r => r.hasServed).map(r => r.roleName.replace(/_/g, " ")).join("; ");
     return {
-      status,
-      firstName: a.firstName,
-      lastName: a.lastName,
-      email: a.email,
-      phone: a.phone ?? "",
-      attendedAs: isVolunteer ? "Volunteer" : "Attendee",
-      type: a.preRegistered ? "Pre-Registered" : "Walk-in",
-      servedAtEvent,
-      trainedRoles,
-      priorServed,
-      checkedInAt: a.checkedInAt.toISOString(),
-      wantsContact: a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
+      "Status": status,
+      "First Name": a.firstName,
+      "Last Name": a.lastName,
+      "Email": a.email,
+      "Phone": a.phone ?? "",
+      "Attended As": isVolunteer ? "Volunteer" : "Attendee",
+      "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
+      "Roles Served at NK3": aRoles.filter(r => r.wantsToServeToday !== false).map(r => r.roleName.replace(/_/g, " ")).join("; "),
+      "Roles Trained": aRoles.filter(r => r.isTrained).map(r => r.roleName.replace(/_/g, " ")).join("; "),
+      "Prior Roles Served": aRoles.filter(r => r.hasServed).map(r => r.roleName.replace(/_/g, " ")).join("; "),
+      "Checked In At": a.checkedInAt.toISOString(),
+      "Future Volunteer?": a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
     };
   };
 
-  // Process regular pre-registrations
+  const notCheckedIn = (p: { firstName: string; lastName: string; email: string; phone: string | null; type: string; role?: string }): ExportRow => ({
+    "Status": "Not Checked In",
+    "First Name": p.firstName, "Last Name": p.lastName,
+    "Email": p.email, "Phone": p.phone ?? "",
+    "Attended As": "", "Type": p.type,
+    "Roles Served at NK3": p.role ?? "", "Roles Trained": "", "Prior Roles Served": "",
+    "Checked In At": "", "Future Volunteer?": "",
+  });
+
   for (const pr of preRegs) {
     const email = pr.email.toLowerCase();
     const attendee = attendeesByEmail.get(email);
-    if (attendee) {
-      coveredEmails.add(email);
-      exportRows.push(buildAttendeeRow(attendee, "Checked In"));
-    } else {
-      exportRows.push({
-        status: "Not Checked In",
-        firstName: pr.firstName,
-        lastName: pr.lastName,
-        email: pr.email,
-        phone: pr.phone ?? "",
-        attendedAs: "",
-        type: "Pre-Registered",
-        servedAtEvent: "",
-        trainedRoles: "",
-        priorServed: "",
-        checkedInAt: "",
-        wantsContact: "",
-      });
-    }
+    if (attendee) { coveredEmails.add(email); rows.push(toRow(attendee, "Checked In")); }
+    else rows.push(notCheckedIn({ firstName: pr.firstName, lastName: pr.lastName, email: pr.email, phone: pr.phone, type: "Pre-Registered" }));
   }
 
-  // Process volunteer pre-registrations
   for (const vr of volRegs) {
     const email = (vr.email ?? "").toLowerCase();
     const nameKey = `${vr.firstName.toLowerCase()} ${vr.lastName.toLowerCase()}`;
     if (email && attendeesByEmail.has(email) && !coveredEmails.has(email)) {
-      const attendee = attendeesByEmail.get(email)!;
-      coveredEmails.add(email);
-      exportRows.push(buildAttendeeRow(attendee, "Checked In"));
+      const a = attendeesByEmail.get(email)!; coveredEmails.add(email); rows.push(toRow(a, "Checked In"));
     } else if (!email) {
-      const nameMatch = attendees.find(a =>
-        a.firstName.toLowerCase() === vr.firstName.toLowerCase() &&
-        a.lastName.toLowerCase() === vr.lastName.toLowerCase()
-      );
+      const nameMatch = attendees.find(a => a.firstName.toLowerCase() === vr.firstName.toLowerCase() && a.lastName.toLowerCase() === vr.lastName.toLowerCase());
       if (nameMatch && !coveredEmails.has(nameMatch.email) && !coveredByName.has(nameKey)) {
-        coveredEmails.add(nameMatch.email);
-        coveredByName.add(nameKey);
-        exportRows.push(buildAttendeeRow(nameMatch, "Checked In"));
+        coveredEmails.add(nameMatch.email); coveredByName.add(nameKey); rows.push(toRow(nameMatch, "Checked In"));
       } else if (!nameMatch && !coveredByName.has(nameKey)) {
         coveredByName.add(nameKey);
-        exportRows.push({
-          status: "Not Checked In",
-          firstName: vr.firstName,
-          lastName: vr.lastName,
-          email: vr.email ?? "",
-          phone: vr.phone ?? "",
-          attendedAs: "",
-          type: "Pre-Registered (Volunteer)",
-          servedAtEvent: vr.roleName.replace(/_/g, " "),
-          trainedRoles: "",
-          priorServed: "",
-          checkedInAt: "",
-          wantsContact: "",
-        });
+        rows.push(notCheckedIn({ firstName: vr.firstName, lastName: vr.lastName, email: vr.email ?? "", phone: vr.phone, type: "Pre-Registered (Volunteer)", role: vr.roleName.replace(/_/g, " ") }));
       }
     }
   }
 
-  // Walk-ins: attendees not covered by any pre-reg
-  for (const attendee of attendees) {
-    if (!coveredEmails.has(attendee.email.toLowerCase())) {
-      exportRows.push(buildAttendeeRow(attendee, "Walk-in"));
-    }
+  for (const a of attendees) {
+    if (!coveredEmails.has(a.email.toLowerCase())) rows.push(toRow(a, "Walk-in"));
   }
 
-  const header = ["Status", "First Name", "Last Name", "Email", "Phone", "Attended As", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At", "Future Volunteer?"].join(",");
+  return rows;
+}
 
-  const rows = exportRows.map(r => [
-    r.status,
-    `"${r.firstName}"`,
-    `"${r.lastName}"`,
-    `"${r.email}"`,
-    `"${r.phone}"`,
-    r.attendedAs,
-    r.type,
-    `"${r.servedAtEvent}"`,
-    `"${r.trainedRoles}"`,
-    `"${r.priorServed}"`,
-    `"${r.checkedInAt}"`,
-    r.wantsContact,
-  ].join(","));
+// ── XLSX export ───────────────────────────────────────────────────────────────
 
-  const csv = [header, ...rows].join("\n");
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader("Content-Disposition", `attachment; filename="nk3-full-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.send(csv);
+router.get("/admin/export-xlsx", requireAdminAuth, async (_req, res) => {
+  const exportRows = await buildExportRows();
+  const ws = XLSX.utils.json_to_sheet(exportRows, {
+    header: ["Status", "First Name", "Last Name", "Email", "Phone", "Attended As", "Type", "Roles Served at NK3", "Roles Trained", "Prior Roles Served", "Checked In At", "Future Volunteer?"],
+  });
+  ws["!cols"] = [
+    { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 },
+    { wch: 12 }, { wch: 24 }, { wch: 28 }, { wch: 24 }, { wch: 24 }, { wch: 22 }, { wch: 16 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Full Roster");
+  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="nk3-full-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(buf);
 });
 
 router.delete("/admin/attendees", requireAdminAuth, async (req, res) => {

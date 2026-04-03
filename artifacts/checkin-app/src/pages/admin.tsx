@@ -574,117 +574,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const authHeader = { Authorization: `Bearer ${getAdminToken() ?? ""}` };
-
-      const ROLE_LABEL: Record<string, string> = {
-        safety_marshal: "Safety Marshal",
-        medic: "Medic",
-        de_escalator: "De-escalator",
-        chant_lead: "Chant Lead",
-        information_services: "Info Services",
-      };
-
-      type ApiAttendee = {
-        id: number; firstName: string; lastName: string; email: string; phone?: string | null;
-        preRegistered: boolean; checkedInAt: string; wantsToBeContacted?: boolean;
-        roles: { roleName: string; isTrained: boolean; hasServed: boolean; wantsToServeToday?: boolean | null }[];
-      };
-      let attendees: ApiAttendee[] = [];
-      const attendeesRes = await fetch("/api/attendees", { headers: authHeader });
-      if (!attendeesRes.ok) throw new Error(`Attendees fetch failed (${attendeesRes.status})`);
-      const attendeesData = await attendeesRes.json() as { attendees: ApiAttendee[] };
-      attendees = attendeesData.attendees ?? [];
-
-      type PreReg = { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; source: string; roleName: string | null };
-      let preRegs: PreReg[] = [];
-      const preRegsRes = await fetch("/api/admin/pre-registrations", { headers: authHeader });
-      if (!preRegsRes.ok) throw new Error(`Pre-registrations fetch failed (${preRegsRes.status}) — export will be incomplete`);
-      const preRegsData = await preRegsRes.json() as { preRegistrations: PreReg[] };
-      preRegs = preRegsData.preRegistrations ?? [];
-
-      const attendeesByEmail = new Map(attendees.map(a => [a.email.toLowerCase(), a]));
-      const coveredEmails = new Set<string>();
-
-      type ExportRow = Record<string, string>;
-      const rows: ExportRow[] = [];
-
-      const buildAttendeeRow = (a: ApiAttendee, status: string): ExportRow => {
-        const isVolunteer = a.roles.length > 0 && a.roles.some(r => r.wantsToServeToday !== false);
-        const servedAtEvent = a.roles.filter(r => r.wantsToServeToday !== false).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
-        const pastTraining = a.roles.filter(r => r.isTrained).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
-        const pastExperience = a.roles.filter(r => r.hasServed).map(r => ROLE_LABEL[r.roleName] ?? r.roleName).join("; ");
-        return {
-          "Status": status,
-          "First Name": a.firstName,
-          "Last Name": a.lastName,
-          "Email": a.email,
-          "Phone": a.phone ?? "",
-          "Attended As": isVolunteer ? "Volunteer" : "Attendee",
-          "Type": a.preRegistered ? "Pre-Registered" : "Walk-in",
-          "Roles Served at NK3": servedAtEvent,
-          "Roles Trained": pastTraining,
-          "Prior Roles Served": pastExperience,
-          "Checked In At": new Date(a.checkedInAt).toLocaleString(),
-          "Future Volunteer?": a.wantsToBeContacted === true ? "Yes" : a.wantsToBeContacted === false ? "No" : "Unknown",
-        };
-      };
-
-      const noShowRow = (pr: PreReg): ExportRow => ({
-        "Status": "Not Checked In",
-        "First Name": pr.firstName,
-        "Last Name": pr.lastName,
-        "Email": pr.email ?? "",
-        "Phone": pr.phone ?? "",
-        "Attended As": "",
-        "Type": pr.source === "volunteer" ? "Pre-Registered (Volunteer)" : "Pre-Registered",
-        "Roles Served at NK3": pr.roleName?.replace(/_/g, " ") ?? "",
-        "Roles Trained": "",
-        "Prior Roles Served": "",
-        "Checked In At": "",
-        "Future Volunteer?": "",
+      const res = await fetch("/api/admin/export-xlsx", {
+        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
       });
-
-      // Process pre-registrations → Checked In or No Show
-      for (const pr of preRegs) {
-        const email = (pr.email ?? "").toLowerCase();
-        if (email && attendeesByEmail.has(email)) {
-          const attendee = attendeesByEmail.get(email)!;
-          coveredEmails.add(email);
-          rows.push(buildAttendeeRow(attendee, "Checked In"));
-        } else if (!email) {
-          const nameMatch = attendees.find(a =>
-            a.firstName.toLowerCase() === pr.firstName.toLowerCase() &&
-            a.lastName.toLowerCase() === pr.lastName.toLowerCase()
-          );
-          if (nameMatch && !coveredEmails.has(nameMatch.email)) {
-            coveredEmails.add(nameMatch.email);
-            rows.push(buildAttendeeRow(nameMatch, "Checked In"));
-          } else if (!nameMatch) {
-            rows.push(noShowRow(pr));
-          }
-        } else {
-          rows.push(noShowRow(pr));
-        }
-      }
-
-      // Walk-ins: attendees not matched to any pre-reg
-      for (const a of attendees) {
-        if (!coveredEmails.has(a.email.toLowerCase())) {
-          rows.push(buildAttendeeRow(a, "Walk-in"));
-        }
-      }
-
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws["!cols"] = [
-        { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 16 },
-        { wch: 12 }, { wch: 22 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 22 }, { wch: 20 },
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Full Roster");
-
-      // Use Blob + anchor — avoids browser blocking downloads triggered after async awaits
-      const wbArray = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-      const blob = new Blob([wbArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -693,8 +587,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-
-      toast({ title: "Export complete", description: `${rows.length} row${rows.length === 1 ? "" : "s"} exported.` });
+      toast({ title: "Export complete", description: "Your spreadsheet is downloading." });
     } catch (err) {
       console.error("Export failed:", err);
       toast({ title: "Export failed", description: String((err as Error)?.message ?? err), variant: "destructive" });
