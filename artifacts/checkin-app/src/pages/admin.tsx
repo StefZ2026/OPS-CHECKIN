@@ -590,23 +590,17 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         roles: { roleName: string; isTrained: boolean; hasServed: boolean; wantsToServeToday?: boolean | null }[];
       };
       let attendees: ApiAttendee[] = [];
-      try {
-        const res = await fetch("/api/attendees", { headers: authHeader });
-        if (res.ok) {
-          const d = await res.json() as { attendees: ApiAttendee[] };
-          attendees = d.attendees ?? [];
-        }
-      } catch { attendees = (data?.attendees ?? []) as ApiAttendee[]; }
+      const attendeesRes = await fetch("/api/attendees", { headers: authHeader });
+      if (!attendeesRes.ok) throw new Error(`Attendees fetch failed (${attendeesRes.status})`);
+      const attendeesData = await attendeesRes.json() as { attendees: ApiAttendee[] };
+      attendees = attendeesData.attendees ?? [];
 
       type PreReg = { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; source: string; roleName: string | null };
       let preRegs: PreReg[] = [];
-      try {
-        const res = await fetch("/api/admin/pre-registrations", { headers: authHeader });
-        if (res.ok) {
-          const d = await res.json() as { preRegistrations: PreReg[] };
-          preRegs = d.preRegistrations ?? [];
-        }
-      } catch { /* fall through — export checked-in only */ }
+      const preRegsRes = await fetch("/api/admin/pre-registrations", { headers: authHeader });
+      if (!preRegsRes.ok) throw new Error(`Pre-registrations fetch failed (${preRegsRes.status}) — export will be incomplete`);
+      const preRegsData = await preRegsRes.json() as { preRegistrations: PreReg[] };
+      preRegs = preRegsData.preRegistrations ?? [];
 
       const attendeesByEmail = new Map(attendees.map(a => [a.email.toLowerCase(), a]));
       const coveredEmails = new Set<string>();

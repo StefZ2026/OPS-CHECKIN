@@ -55,32 +55,37 @@ router.post("/admin/login", loginLimiter, (req, res) => {
 
 // Returns all pre-registrations (regular + volunteer) for full export
 router.get("/admin/pre-registrations", requireAdminAuth, async (_req, res) => {
-  const [preRegs, volRegs] = await Promise.all([
-    db.select().from(preRegistrationsTable),
-    db.select().from(volunteerPreRegistrationsTable),
-  ]);
+  try {
+    const [preRegs, volRegs] = await Promise.all([
+      db.select().from(preRegistrationsTable),
+      db.select().from(volunteerPreRegistrationsTable),
+    ]);
 
-  const attendee = preRegs.map(r => ({
-    id: r.id,
-    firstName: r.firstName,
-    lastName: r.lastName,
-    email: r.email,
-    phone: r.phone ?? null,
-    source: "attendee" as const,
-    roleName: null,
-  }));
+    const attendee = preRegs.map(r => ({
+      id: r.id,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      email: r.email,
+      phone: r.phone ?? null,
+      source: "attendee" as const,
+      roleName: null,
+    }));
 
-  const volunteer = volRegs.map(r => ({
-    id: r.id,
-    firstName: r.firstName,
-    lastName: r.lastName,
-    email: r.email ?? null,
-    phone: r.phone ?? null,
-    source: "volunteer" as const,
-    roleName: r.roleName,
-  }));
+    const volunteer = volRegs.map(r => ({
+      id: r.id,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      email: r.email ?? null,
+      phone: r.phone ?? null,
+      source: "volunteer" as const,
+      roleName: r.roleName,
+    }));
 
-  res.json({ preRegistrations: [...attendee, ...volunteer] });
+    res.json({ preRegistrations: [...attendee, ...volunteer] });
+  } catch (err) {
+    console.error("pre-registrations route error:", err);
+    res.status(500).json({ error: "Failed to load pre-registrations" });
+  }
 });
 
 router.get("/admin/export", requireAdminAuth, async (_req, res) => {
