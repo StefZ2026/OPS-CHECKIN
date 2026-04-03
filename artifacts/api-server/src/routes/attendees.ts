@@ -3,6 +3,12 @@ import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
+const VALID_ROLE_NAMES = ["safety_marshal", "medic", "de_escalator", "chant_lead", "information_services"] as const;
+type RoleName = typeof VALID_ROLE_NAMES[number];
+function isValidRoleName(name: unknown): name is RoleName {
+  return typeof name === "string" && (VALID_ROLE_NAMES as readonly string[]).includes(name);
+}
+
 const router: IRouter = Router();
 
 router.get("/attendees", async (_req, res) => {
@@ -59,8 +65,13 @@ router.patch("/admin/attendees/:id", async (req, res) => {
   if (preRegistered !== undefined) updates.preRegistered = preRegistered;
   if (email !== undefined && email.trim()) updates.email = email.trim().toLowerCase();
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
-  await db.update(attendeesTable).set(updates).where(eq(attendeesTable.id, id));
-  res.json({ ok: true });
+  try {
+    await db.update(attendeesTable).set(updates).where(eq(attendeesTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PATCH /admin/attendees/:id failed:", err);
+    res.status(500).json({ error: "Failed to update attendee" });
+  }
 });
 
 router.put("/admin/attendee-roles/:roleId", async (req, res) => {
@@ -68,20 +79,33 @@ router.put("/admin/attendee-roles/:roleId", async (req, res) => {
   if (isNaN(roleId)) { res.status(400).json({ error: "Invalid roleId" }); return; }
   const { roleName, wantsToServeToday, isTrained, hasServed } = req.body as { roleName?: string; wantsToServeToday?: boolean | null; isTrained?: boolean; hasServed?: boolean };
   const updates: Record<string, unknown> = {};
-  if (roleName !== undefined) updates.roleName = roleName;
+  if (roleName !== undefined) {
+    if (!isValidRoleName(roleName)) { res.status(400).json({ error: "Invalid roleName" }); return; }
+    updates.roleName = roleName;
+  }
   if (wantsToServeToday !== undefined) updates.wantsToServeToday = wantsToServeToday;
   if (typeof isTrained === "boolean") updates.isTrained = isTrained;
   if (typeof hasServed === "boolean") updates.hasServed = hasServed;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
-  await db.update(attendeeRolesTable).set(updates).where(eq(attendeeRolesTable.id, roleId));
-  res.json({ ok: true });
+  try {
+    await db.update(attendeeRolesTable).set(updates).where(eq(attendeeRolesTable.id, roleId));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /admin/attendee-roles/:roleId failed:", err);
+    res.status(500).json({ error: "Failed to update role" });
+  }
 });
 
 router.delete("/admin/attendee-roles/:roleId", async (req, res) => {
   const roleId = parseInt(req.params.roleId);
   if (isNaN(roleId)) { res.status(400).json({ error: "Invalid roleId" }); return; }
-  await db.delete(attendeeRolesTable).where(eq(attendeeRolesTable.id, roleId));
-  res.json({ ok: true });
+  try {
+    await db.delete(attendeeRolesTable).where(eq(attendeeRolesTable.id, roleId));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /admin/attendee-roles/:roleId failed:", err);
+    res.status(500).json({ error: "Failed to delete role" });
+  }
 });
 
 router.post("/admin/attendees/:id/roles", async (req, res) => {
@@ -89,14 +113,20 @@ router.post("/admin/attendees/:id/roles", async (req, res) => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid attendee id" }); return; }
   const { roleName, wantsToServeToday, isTrained, hasServed } = req.body as { roleName?: string; wantsToServeToday?: boolean | null; isTrained?: boolean; hasServed?: boolean };
   if (!roleName) { res.status(400).json({ error: "roleName is required" }); return; }
-  await db.insert(attendeeRolesTable).values({
-    attendeeId: id,
-    roleName: roleName as "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services",
-    wantsToServeToday: wantsToServeToday ?? null,
-    isTrained: isTrained ?? false,
-    hasServed: hasServed ?? false,
-  });
-  res.json({ ok: true });
+  if (!isValidRoleName(roleName)) { res.status(400).json({ error: "Invalid roleName" }); return; }
+  try {
+    await db.insert(attendeeRolesTable).values({
+      attendeeId: id,
+      roleName,
+      wantsToServeToday: wantsToServeToday ?? null,
+      isTrained: isTrained ?? false,
+      hasServed: hasServed ?? false,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("POST /admin/attendees/:id/roles failed:", err);
+    res.status(500).json({ error: "Failed to add role" });
+  }
 });
 
 router.patch("/admin/attendee-roles/:roleId/trained", async (req, res) => {
@@ -104,8 +134,13 @@ router.patch("/admin/attendee-roles/:roleId/trained", async (req, res) => {
   if (isNaN(roleId)) { res.status(400).json({ error: "Invalid roleId" }); return; }
   const { isTrained } = req.body as { isTrained?: boolean };
   if (typeof isTrained !== "boolean") { res.status(400).json({ error: "isTrained must be boolean" }); return; }
-  await db.update(attendeeRolesTable).set({ isTrained }).where(eq(attendeeRolesTable.id, roleId));
-  res.json({ ok: true });
+  try {
+    await db.update(attendeeRolesTable).set({ isTrained }).where(eq(attendeeRolesTable.id, roleId));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PATCH /admin/attendee-roles/:roleId/trained failed:", err);
+    res.status(500).json({ error: "Failed to update trained status" });
+  }
 });
 
 router.post("/admin/backfill-trained", async (_req, res) => {

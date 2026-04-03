@@ -218,7 +218,7 @@ router.post("/check-in/submit", async (req, res) => {
       phone: phone?.replace(/\D/g, "") || null,
       preRegistered,
       mobilizeId: mobilizeId ?? null,
-      wantsToBeContacted: wantsToBeContacted ?? false,
+      wantsToBeContacted: wantsToBeContacted ?? null,
     })
     .onConflictDoNothing()
     .returning();

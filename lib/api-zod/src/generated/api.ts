@@ -91,10 +91,11 @@ export const ListAttendeesResponse = zod.object({
       firstName: zod.string(),
       lastName: zod.string(),
       email: zod.string(),
+      phone: zod.string().nullable(),
       preRegistered: zod.boolean(),
       mobilizeId: zod.string().nullish(),
-      checkedInAt: zod.date(),
-      wantsToBeContacted: zod.boolean().optional(),
+      checkedInAt: zod.string(),
+      wantsToBeContacted: zod.boolean().nullable().optional(),
       roles: zod.array(
         zod.object({
           roleName: zod.enum([

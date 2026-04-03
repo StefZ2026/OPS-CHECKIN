@@ -14,6 +14,10 @@ function expectedToken(): string {
 }
 
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!process.env.ADMIN_PASSWORD) {
+    res.status(503).json({ error: "Admin auth is not configured on this server." });
+    return;
+  }
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   const expected = expectedToken();
