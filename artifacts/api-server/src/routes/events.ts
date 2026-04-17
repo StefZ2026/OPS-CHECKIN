@@ -89,6 +89,16 @@ const loginLimiter = rateLimit({
   message: { error: "Too many login attempts. Please wait 15 minutes and try again." },
 });
 
+// 120 check-in attempts per IP per 10 minutes (covers a whole event day at kiosks
+// while still blocking bots that hit hundreds of times per minute)
+const checkinLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down and try again in a few minutes." },
+});
+
 // ── Config (public) ───────────────────────────────────────────────────────────
 // Returns event metadata + available volunteer roles for this event.
 // The frontend uses this to configure the check-in UI without hardcoded data.
@@ -857,7 +867,7 @@ async function lookupInMobilize(
   }
 }
 
-router.post("/check-in/lookup", async (req: Request, res: Response): Promise<void> => {
+router.post("/check-in/lookup", checkinLimiter, async (req: Request, res: Response): Promise<void> => {
   const parsed = LookupAttendeeBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
 
@@ -922,7 +932,7 @@ router.post("/check-in/lookup", async (req: Request, res: Response): Promise<voi
 
 // ── Check-in: submit ──────────────────────────────────────────────────────────
 
-router.post("/check-in/submit", async (req: Request, res: Response): Promise<void> => {
+router.post("/check-in/submit", checkinLimiter, async (req: Request, res: Response): Promise<void> => {
   const parsed = SubmitCheckInBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid request body" }); return; }
 

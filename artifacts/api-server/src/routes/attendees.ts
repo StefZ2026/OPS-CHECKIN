@@ -3,10 +3,11 @@ import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-const VALID_ROLE_NAMES = ["safety_marshal", "medic", "de_escalator", "chant_lead", "information_services"] as const;
-type RoleName = typeof VALID_ROLE_NAMES[number];
-function isValidRoleName(name: unknown): name is RoleName {
-  return typeof name === "string" && (VALID_ROLE_NAMES as readonly string[]).includes(name);
+// Role names are free-form text stored per-event — the hardcoded enum was removed
+// when event roles became configurable. Basic sanitation: non-empty, <= 100 chars,
+// alphanumeric + underscore + hyphen + space only (admin-protected routes already).
+function isValidRoleName(name: unknown): name is string {
+  return typeof name === "string" && name.trim().length > 0 && name.length <= 100 && /^[a-z0-9_\- ]+$/i.test(name);
 }
 
 const router: IRouter = Router();

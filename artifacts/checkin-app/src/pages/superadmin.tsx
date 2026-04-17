@@ -191,6 +191,8 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
   const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
     new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"])
   );
+  const [customRoles, setCustomRoles] = useState<NewRoleRow[]>([]);
+  const [customRoleInput, setCustomRoleInput] = useState("");
 
   const toggleRole = (key: string) =>
     setSelectedRoleKeys((prev) => {
@@ -199,7 +201,20 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
       return next;
     });
 
-  const roles = ALL_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
+  const addCustomRole = () => {
+    const display = customRoleInput.trim();
+    if (!display) return;
+    const key = display.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (selectedRoleKeys.has(key) || customRoles.some((r) => r.roleKey === key)) return;
+    setCustomRoles((prev) => [...prev, { roleKey: key, displayName: display }]);
+    setCustomRoleInput("");
+  };
+
+  const removeCustomRole = (key: string) =>
+    setCustomRoles((prev) => prev.filter((r) => r.roleKey !== key));
+
+  const selectedFromList = ALL_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
+  const roles = [...selectedFromList, ...customRoles];
 
   const autoSlug = (n: string) =>
     n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -245,6 +260,7 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
       setSelectedRoleKeys(new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"]));
       setMobilizeEventId(""); setGiveawayEnabled(false);
+      setCustomRoles([]); setCustomRoleInput("");
       setOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create event");

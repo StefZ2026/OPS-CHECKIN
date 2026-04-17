@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, eventsTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { eq, ilike, or, and, isNotNull } from "drizzle-orm";
@@ -6,6 +7,14 @@ import {
   LookupAttendeeBody,
   SubmitCheckInBody,
 } from "@workspace/api-zod";
+
+const checkinLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down and try again in a few minutes." },
+});
 
 // DEPRECATED: These routes are superseded by /api/events/:eventSlug/* in events.ts.
 // All active frontend consumers use event-scoped routes. This file is retained for
@@ -105,7 +114,7 @@ async function lookupInMobilize(
   }
 }
 
-router.post("/check-in/lookup", async (req, res) => {
+router.post("/check-in/lookup", checkinLimiter, async (req, res) => {
   const parsed = LookupAttendeeBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body" });
@@ -203,7 +212,7 @@ router.post("/check-in/lookup", async (req, res) => {
   });
 });
 
-router.post("/check-in/submit", async (req, res) => {
+router.post("/check-in/submit", checkinLimiter, async (req, res) => {
   const parsed = SubmitCheckInBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body" });
@@ -273,7 +282,7 @@ router.post("/check-in/submit", async (req, res) => {
       const onVolList = volRegs.some((v) => v.roleName === r.roleName);
       return {
         attendeeId: newAttendee.id,
-        roleName: r.roleName as "safety_marshal" | "medic" | "de_escalator" | "chant_lead" | "information_services",
+        roleName: r.roleName,
         isTrained: r.isTrained || onVolList,
         hasServed: r.hasServed ?? false,
         wantsToServeToday: r.wantsToServeToday ?? null,
