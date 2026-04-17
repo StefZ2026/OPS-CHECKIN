@@ -92,13 +92,7 @@ export const ListAttendeesResponse = zod.object({
       wantsToBeContacted: zod.boolean().nullable().optional(),
       roles: zod.array(
         zod.object({
-          roleName: zod.enum([
-            "safety_marshal",
-            "medic",
-            "de_escalator",
-            "chant_lead",
-            "information_services",
-          ]),
+          roleName: zod.string(),
           isTrained: zod.boolean(),
           hasServed: zod.boolean(),
           wantsToServeToday: zod.boolean().nullable().optional(),

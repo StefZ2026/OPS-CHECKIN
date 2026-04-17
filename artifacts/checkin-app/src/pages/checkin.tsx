@@ -948,7 +948,7 @@ export default function CheckInFlow() {
                 onClick={() => {
                   const anyYes = eligibleRoles.some(r => r.wantsToServeToday === true);
                   if (anyYes) {
-                    submitCheckin(roles, false);
+                    submitCheckin(roles, null);
                   } else {
                     setFutureContactSource("invite");
                     setStep("future_contact");

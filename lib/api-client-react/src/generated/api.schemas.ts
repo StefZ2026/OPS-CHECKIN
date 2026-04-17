@@ -47,22 +47,28 @@ export const AttendeeRoleRoleName = {
 } as const;
 
 export interface AttendeeRole {
-  roleName: AttendeeRoleRoleName;
+  id: number;
+  roleName: string;
   isTrained: boolean;
+  hasServed: boolean;
+  wantsToServeToday?: boolean | null;
 }
 
 export interface CheckInRequest {
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string | null;
   preRegistered: boolean;
   mobilizeId?: string | null;
+  wantsToBeContacted?: boolean | null;
   roles: AttendeeRole[];
 }
 
 export interface CheckInResponse {
   id: number;
   message: string;
+  wonNoIceButton?: boolean;
 }
 
 export interface ErrorResponse {
@@ -74,9 +80,12 @@ export interface AttendeeWithRoles {
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string | null;
   preRegistered: boolean;
   mobilizeId?: string | null;
   checkedInAt: string;
+  isNoIceWinner?: boolean;
+  wantsToBeContacted?: boolean | null;
   roles: AttendeeRole[];
 }
 
