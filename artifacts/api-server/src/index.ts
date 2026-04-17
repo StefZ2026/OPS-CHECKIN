@@ -1,5 +1,6 @@
 import app from "./app";
 import { pool } from "@workspace/db";
+import { runSeed } from "./seed";
 
 // Safe idempotent migrations — run on every startup, safe to repeat
 async function runStartupMigrations() {
@@ -16,60 +17,6 @@ async function runStartupMigrations() {
     // not an explicit answer. Flip false → null (= "never asked"). Idempotent.
     await client.query(`
       UPDATE attendees SET wants_to_be_contacted = NULL WHERE wants_to_be_contacted = false
-    `);
-
-    // ── Multi-event seed (idempotent) ──────────────────────────────────────────
-    // Ensure ICU org exists
-    await client.query(`
-      INSERT INTO organizations (name, slug)
-      VALUES ('ICU - Indivisible Caucus United', 'icu')
-      ON CONFLICT (slug) DO NOTHING
-    `);
-
-    // Ensure NK3 event exists under ICU
-    await client.query(`
-      INSERT INTO events (org_id, name, slug, event_date, giveaway_enabled, is_active)
-      SELECT o.id, 'No Kings 3', 'nk3', '2026-03-28', true, true
-      FROM organizations o WHERE o.slug = 'icu'
-      ON CONFLICT (slug) DO NOTHING
-    `);
-
-    // Seed NK3 volunteer roles (safe: unique index on event_id + role_key prevents duplicates)
-    await client.query(`
-      INSERT INTO event_roles (event_id, role_key, display_name, sort_order)
-      SELECT e.id, v.role_key, v.display_name, v.sort_order
-      FROM events e,
-        (VALUES
-          ('safety_marshal',       'Safety Marshal', 1),
-          ('medic',                'Medic',          2),
-          ('de_escalator',         'De-escalator',   3),
-          ('chant_lead',           'Chant Lead',     4),
-          ('information_services', 'Info Services',  5)
-        ) AS v(role_key, display_name, sort_order)
-      WHERE e.slug = 'nk3'
-      ON CONFLICT DO NOTHING
-    `);
-
-    // Ensure Building Bridges Cafe Series Session 1 event exists under ICU
-    await client.query(`
-      INSERT INTO events (org_id, name, slug, event_date, giveaway_enabled, is_active)
-      SELECT o.id, 'Building Bridges Cafe Series — Session 1', 'bb-cafe-1', '2026-05-10', false, true
-      FROM organizations o WHERE o.slug = 'icu'
-      ON CONFLICT (slug) DO NOTHING
-    `);
-
-    // Seed Building Bridges volunteer roles
-    await client.query(`
-      INSERT INTO event_roles (event_id, role_key, display_name, sort_order)
-      SELECT e.id, v.role_key, v.display_name, v.sort_order
-      FROM events e,
-        (VALUES
-          ('safety_marshal',       'Safety Marshal', 1),
-          ('de_escalator',         'De-escalator',   2),
-          ('information_services', 'Info Services',  3)
-        ) AS v(role_key, display_name, sort_order)
-      WHERE e.slug = 'bb-cafe-1'
-      ON CONFLICT DO NOTHING
     `);
 
     // Backfill: tag any legacy records that predate the event_id column
@@ -108,8 +55,15 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-runStartupMigrations().then(() => {
-  app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
+// Run seed first (creates org/events/roles), then structural migrations and backfills
+runSeed()
+  .then(() => runStartupMigrations())
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Fatal startup error:", err);
+    process.exit(1);
   });
-});
