@@ -47,7 +47,7 @@ export const AttendeeRoleRoleName = {
 } as const;
 
 export interface AttendeeRole {
-  id: number;
+  id?: number;
   roleName: string;
   isTrained: boolean;
   hasServed: boolean;

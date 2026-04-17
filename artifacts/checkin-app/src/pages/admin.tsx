@@ -576,7 +576,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [selectedRole, setSelectedRole] = useState<AttendeeRoleRoleName | null>(null);
   const [roleFilter, setRoleFilter] = useState<"served" | "trained">("served");
   const [togglingRoleId, setTogglingRoleId] = useState<number | null>(null);
-  const [editingAttendee, setEditingAttendee] = useState<(AttendeeWithRoles & { phone?: string }) | null>(null);
+  const [editingAttendee, setEditingAttendee] = useState<AttendeeWithRoles | null>(null);
   const [showPrizeWinners, setShowPrizeWinners] = useState(false);
   const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "", email: "", roles: [] });
   const [editSaving, setEditSaving] = useState(false);
@@ -914,7 +914,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                               <p className="text-sm text-muted-foreground truncate">{a.email}</p>
                             </div>
                             <button
-                              onClick={() => handleToggleTrained(roleEntry.id, roleEntry.isTrained)}
+                              onClick={() => handleToggleTrained(roleEntry.id!, roleEntry.isTrained)}
                               disabled={toggling}
                               className={`shrink-0 text-xs font-bold border-2 rounded-full px-3 py-1 transition-colors ${
                                 roleEntry.isTrained
@@ -1011,7 +1011,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                           {attendee.roles && attendee.roles.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                               {attendee.roles.filter(r => r.wantsToServeToday !== false).map((r) => {
-                                const meta = ROLE_META[r.roleName];
+                                const meta = (ROLE_META as Record<string, typeof ROLE_META[AttendeeRoleRoleName]>)[r.roleName];
                                 return (
                                   <span
                                     key={r.roleName}

@@ -128,10 +128,10 @@ export default function CheckInFlow() {
   };
 
   const updateVolPriorRole = (roleName: string, field: "hasServed" | "isTrained", value: boolean) => {
-    setVolPriorRoles(prev => ({
-      ...prev,
-      [roleName]: { hasServed: false, isTrained: false, ...prev[roleName], [field]: value },
-    }));
+    setVolPriorRoles(prev => {
+      const current = prev[roleName] ?? { hasServed: false, isTrained: false };
+      return { ...prev, [roleName]: { ...current, [field]: value } };
+    });
   };
 
   const handleCheckinError = (err: unknown) => {
@@ -293,22 +293,27 @@ export default function CheckInFlow() {
   // Auto-advance from "found" to vol_gate
   useEffect(() => {
     if (step === "found") { const t = setTimeout(() => setStep("vol_gate"), 3000); return () => clearTimeout(t); }
+    return undefined;
   }, [step]);
 
   useEffect(() => {
     if (step === "duplicate") { const t = setTimeout(handleReset, 7000); return () => clearTimeout(t); }
+    return undefined;
   }, [step]);
 
   useEffect(() => {
     if (step === "volunteer") { const t = setTimeout(() => setStep(4), 4000); return () => clearTimeout(t); }
+    return undefined;
   }, [step]);
 
   useEffect(() => {
     if (step === "fun") { const t = setTimeout(() => setStep(4), 5000); return () => clearTimeout(t); }
+    return undefined;
   }, [step]);
 
   useEffect(() => {
     if (step === 4) { const t = setTimeout(handleReset, wonNoIceButton ? 20000 : 8000); return () => clearTimeout(t); }
+    return undefined;
   }, [step, wonNoIceButton]);
 
   const submitVolunteerManualCheckin = () => {
@@ -1156,7 +1161,6 @@ export default function CheckInFlow() {
                           email: updatedEmail,
                           phone: phone.trim() || undefined,
                           preRegistered: true,
-                          walkinSource: undefined,
                           mobilizeId: mobilizeId ?? undefined,
                           wantsToBeContacted: null,
                           roles: [],
