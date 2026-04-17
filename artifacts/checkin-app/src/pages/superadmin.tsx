@@ -156,16 +156,26 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
-  const NK3_ROLES: NewRoleRow[] = [
-    { roleKey: "safety_marshal", displayName: "Safety Marshal" },
-    { roleKey: "medic", displayName: "Medic" },
-    { roleKey: "de_escalator", displayName: "De-Escalator" },
-    { roleKey: "chant_lead", displayName: "Chant Lead" },
+  const ALL_ROLES: NewRoleRow[] = [
+    { roleKey: "safety_marshal",       displayName: "Safety Marshal" },
+    { roleKey: "medic",                displayName: "Medic" },
+    { roleKey: "de_escalator",         displayName: "De-Escalator" },
+    { roleKey: "chant_lead",           displayName: "Chant Lead" },
+    { roleKey: "information_services", displayName: "Info Services" },
   ];
 
-  const [roles, setRoles] = useState<NewRoleRow[]>([
-    { roleKey: "", displayName: "" },
-  ]);
+  const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
+    new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"])
+  );
+
+  const toggleRole = (key: string) =>
+    setSelectedRoleKeys((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+
+  const roles = ALL_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
 
   const autoSlug = (n: string) =>
     n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -173,20 +183,6 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
   const handleNameChange = (v: string) => {
     setName(v);
     if (!slug || slug === autoSlug(name)) setSlug(autoSlug(v));
-  };
-
-  const addRole = () => setRoles((r) => [...r, { roleKey: "", displayName: "" }]);
-  const removeRole = (i: number) => setRoles((r) => r.filter((_, idx) => idx !== i));
-  const updateRole = (i: number, field: keyof NewRoleRow, value: string) =>
-    setRoles((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
-
-  const handleRoleDisplayNameChange = (i: number, displayName: string) => {
-    const roleKey = displayName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    setRoles((r) =>
-      r.map((row, idx) =>
-        idx === i ? { displayName, roleKey: row.roleKey || roleKey } : row
-      )
-    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -222,8 +218,8 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
       onCreated();
 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
+      setSelectedRoleKeys(new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"]));
       setMobilizeEventId(""); setGiveawayEnabled(false);
-      setRoles([{ roleKey: "", displayName: "" }]);
       setOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create event");
@@ -329,58 +325,29 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="font-display text-sm uppercase tracking-wider">
-                    <Users className="w-4 h-4 inline mr-1" />Volunteer Roles
-                  </label>
-                  <div className="flex items-center gap-3">
+                <label className="font-display text-sm uppercase tracking-wider block mb-3">
+                  <Users className="w-4 h-4 inline mr-1" />Volunteer Roles
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_ROLES.map((role) => (
                     <button
+                      key={role.roleKey}
                       type="button"
-                      onClick={() => setRoles(NK3_ROLES)}
-                      className="text-sm font-bold text-muted-foreground hover:text-foreground flex items-center gap-1 border-2 border-foreground rounded px-2 py-0.5"
+                      onClick={() => toggleRole(role.roleKey)}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border-4 text-left font-bold text-sm transition-all ${
+                        selectedRoleKeys.has(role.roleKey)
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-foreground/20 bg-white text-muted-foreground hover:border-foreground/60"
+                      }`}
                     >
-                      Clone NK3 roles
+                      <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        selectedRoleKeys.has(role.roleKey) ? "border-primary bg-primary" : "border-foreground/30"
+                      }`}>
+                        {selectedRoleKeys.has(role.roleKey) && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                      </span>
+                      {role.displayName}
                     </button>
-                    <button
-                      type="button"
-                      onClick={addRole}
-                      className="text-primary text-sm font-bold flex items-center gap-1 hover:text-primary/80"
-                    >
-                      <Plus className="w-4 h-4" /> Add Role
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {roles.map((role, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <div className="flex-1">
-                        <Input
-                          value={role.displayName}
-                          onChange={(e) => handleRoleDisplayNameChange(i, e.target.value)}
-                          placeholder="Display name (e.g. Safety Marshal)"
-                          className="text-sm"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Input
-                          value={role.roleKey}
-                          onChange={(e) => updateRole(i, "roleKey", e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))}
-                          placeholder="key (e.g. safety_marshal)"
-                          className="text-sm font-mono"
-                        />
-                      </div>
-                      {roles.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeRole(i)}
-                          className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
                   ))}
-                  <p className="text-xs text-muted-foreground">Rows with empty display name or key will be skipped.</p>
                 </div>
               </div>
 
