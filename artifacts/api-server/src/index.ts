@@ -33,6 +33,33 @@ async function runStartupMigrations() {
       WHERE event_id IS NULL
     `);
 
+    // ── RLS Phase 1 (idempotent — re-applied every startup so drizzle-kit push
+    //    can't wipe it) ──────────────────────────────────────────────────────────
+    // Enables Row Level Security on all tenant-data tables. The app user (postgres,
+    // table owner) bypasses RLS by default so nothing breaks. Any other DB user
+    // who somehow obtains a connection is blocked from all rows by default.
+    //
+    // Phase 2 (session-variable per-org policies + FORCE ROW LEVEL SECURITY) is
+    // documented in replit.md and will replace the allow_all policies below.
+    const tenantTables = [
+      "organizations", "events", "event_roles",
+      "attendees", "attendee_roles",
+      "pre_registrations", "volunteer_pre_registrations",
+    ];
+    for (const table of tenantTables) {
+      await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+      await client.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE tablename = '${table}' AND policyname = 'allow_all'
+          ) THEN
+            EXECUTE 'CREATE POLICY allow_all ON ${table} FOR ALL USING (true) WITH CHECK (true)';
+          END IF;
+        END $$;
+      `);
+    }
+
     console.log("Startup migrations OK");
   } catch (err) {
     console.warn("Startup migration warning (non-fatal):", err);
