@@ -1068,14 +1068,29 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
   }
 
   const event = res.locals.event;
+
+  // ── Session coverage check ────────────────────────────────────────────────
+  // Pass type "WRISTBAND" covers all sessions while the event is active.
+  // If the event has been closed (isActive=false), no further re-entries
+  // are permitted regardless of the token.
+  const passType = "WRISTBAND" as const;
+  if (!event.isActive) {
+    res.status(403).json({
+      ok: false,
+      state: "NOT_COVERED",
+      passType,
+      error: "This event has ended — re-entry is no longer permitted.",
+    });
+    return;
+  }
+
   const todayISO = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
   try {
-    // ── Atomic gate admission ────────────────────────────────────────────────
-    // Single UPDATE with a conditional WHERE clause.  PostgreSQL serializes
-    // concurrent UPDATEs on the same row: the second update re-evaluates its
-    // WHERE after the first commits, so a double-tap cannot yield two CLEARED
-    // results.  We get RETURNING data only on the first successful admission.
+    // ── Atomic gate admission ─────────────────────────────────────────────────
+    // Single conditional UPDATE.  PostgreSQL serialises concurrent UPDATEs on
+    // the same row: the second call re-evaluates its WHERE after the first
+    // commits, so two near-simultaneous scans cannot both return CLEARED.
     const cleared = await db
       .update(attendeesTable)
       .set({ entryTokenUsedDate: todayISO })
@@ -1083,7 +1098,7 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
         and(
           eq(attendeesTable.eventId, event.id),
           eq(attendeesTable.entryToken, token),
-          // Only mark as used if NOT already used today (IS DISTINCT FROM handles NULLs)
+          // Only fire if NOT already marked for today (IS DISTINCT FROM handles NULLs)
           sql`${attendeesTable.entryTokenUsedDate} IS DISTINCT FROM ${todayISO}`,
         ),
       )
@@ -1100,13 +1115,14 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
       res.json({
         ok: true,
         state: "CLEARED",
+        passType,
         attendee: cleared[0],
       });
       return;
     }
 
-    // 0 rows updated → either ALREADY_ADMITTED or NOT_FOUND
-    // (a second SELECT is safe here — outcome has already been decided above)
+    // 0 rows updated → ALREADY_ADMITTED or NOT_FOUND
+    // A second SELECT is safe here — the gate outcome was already decided above.
     const [existing] = await db
       .select({
         id: attendeesTable.id,
@@ -1114,7 +1130,6 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
         lastName: attendeesTable.lastName,
         email: attendeesTable.email,
         preRegistered: attendeesTable.preRegistered,
-        entryTokenUsedDate: attendeesTable.entryTokenUsedDate,
       })
       .from(attendeesTable)
       .where(
@@ -1126,15 +1141,16 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
       .limit(1);
 
     if (!existing) {
-      // ── NOT_FOUND: token is not on any attendee in this event ─────────────
-      res.status(404).json({ ok: false, state: "NOT_FOUND", error: "Token not recognised" });
+      // ── NOT_FOUND: token not on any attendee in this event (off-list) ──────
+      res.status(404).json({ ok: false, state: "NOT_FOUND", passType, error: "Token not recognised" });
       return;
     }
 
-    // ── ALREADY_ADMITTED: attendee already scanned in for today ──────────────
+    // ── ALREADY_ADMITTED: wristband already scanned today ────────────────────
     res.json({
       ok: true,
       state: "ALREADY_ADMITTED",
+      passType,
       attendee: {
         id: existing.id,
         firstName: existing.firstName,
