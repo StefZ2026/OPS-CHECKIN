@@ -199,6 +199,64 @@ router.get("/admin/export-xlsx", requireAdminAuth, async (_req, res) => {
   res.send(buf);
 });
 
+// ── Superadmin: Organization Management ───────────────────────────────────────
+
+// List all organizations with event counts
+router.get("/superadmin/orgs", requireAdminAuth, async (_req, res) => {
+  try {
+    const orgs = await db.select().from(organizationsTable).orderBy(organizationsTable.name);
+    const eventCounts = await db
+      .select({ orgId: eventsTable.orgId, eventCount: count() })
+      .from(eventsTable)
+      .groupBy(eventsTable.orgId);
+    const countMap = new Map<number, number>();
+    for (const row of eventCounts) {
+      if (row.orgId !== null) countMap.set(row.orgId, row.eventCount);
+    }
+    res.json({
+      orgs: orgs.map((o) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        mobilizeApiKey: o.mobilizeApiKey ? "••••••••" : null,
+        createdAt: o.createdAt,
+        eventCount: countMap.get(o.id) ?? 0,
+      })),
+    });
+  } catch (err) {
+    console.error("GET /superadmin/orgs error:", err);
+    res.status(500).json({ error: "Failed to load organizations" });
+  }
+});
+
+// Create a new organization
+router.post("/superadmin/orgs", requireAdminAuth, async (req, res) => {
+  const { name, slug, mobilizeApiKey } = req.body as {
+    name?: string; slug?: string; mobilizeApiKey?: string;
+  };
+  if (!name?.trim()) { res.status(400).json({ error: "name is required" }); return; }
+  if (!slug?.trim()) { res.status(400).json({ error: "slug is required" }); return; }
+  if (!/^[a-z0-9-]+$/.test(slug.trim())) {
+    res.status(400).json({ error: "slug must be lowercase letters, numbers, and hyphens only" });
+    return;
+  }
+  try {
+    const [org] = await db
+      .insert(organizationsTable)
+      .values({ name: name.trim(), slug: slug.trim(), mobilizeApiKey: mobilizeApiKey?.trim() || null })
+      .returning();
+    res.status(201).json({ org });
+  } catch (err: unknown) {
+    const pgCode = (err as { code?: string }).code ?? (err as { cause?: { code?: string } }).cause?.code;
+    if (pgCode === "23505") {
+      res.status(409).json({ error: `An organization with slug '${slug}' already exists` });
+      return;
+    }
+    console.error("POST /superadmin/orgs error:", err);
+    res.status(500).json({ error: "Failed to create organization" });
+  }
+});
+
 // ── Superadmin: Event Management ──────────────────────────────────────────────
 // Protected by the same global ADMIN_PASSWORD as the rest of the admin routes.
 

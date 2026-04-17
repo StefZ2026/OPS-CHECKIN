@@ -52,6 +52,14 @@ type EventRecord = {
 
 type NewRoleRow = { roleKey: string; displayName: string };
 
+type OrgRecord = {
+  id: number;
+  name: string;
+  slug: string;
+  eventCount: number;
+  createdAt: string;
+};
+
 // ── Login gate ─────────────────────────────────────────────────────────────────
 
 function LoginGate({ onLogin }: { onLogin: () => void }) {
@@ -141,10 +149,12 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
 // ── Create Event Form ──────────────────────────────────────────────────────────
 
 type CreateEventFormProps = {
+  orgSlug: string;
+  orgName: string;
   onCreated: () => void;
 };
 
-function CreateEventForm({ onCreated }: CreateEventFormProps) {
+function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -157,11 +167,25 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
   const ALL_ROLES: NewRoleRow[] = [
-    { roleKey: "safety_marshal",       displayName: "Safety Marshal" },
-    { roleKey: "medic",                displayName: "Medic" },
-    { roleKey: "de_escalator",         displayName: "De-Escalator" },
-    { roleKey: "chant_lead",           displayName: "Chant Lead" },
-    { roleKey: "information_services", displayName: "Info Services" },
+    { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
+    { roleKey: "medic",                  displayName: "Medic" },
+    { roleKey: "de_escalator",           displayName: "De-Escalator" },
+    { roleKey: "chant_lead",             displayName: "Chant Lead" },
+    { roleKey: "information_services",   displayName: "Info Services" },
+    { roleKey: "registration",           displayName: "Registration" },
+    { roleKey: "greeter",                displayName: "Greeter" },
+    { roleKey: "timekeeper",             displayName: "Timekeeper" },
+    { roleKey: "facilitator",            displayName: "Facilitator" },
+    { roleKey: "canvasser",              displayName: "Canvasser" },
+    { roleKey: "phone_banker",           displayName: "Phone Banker" },
+    { roleKey: "av_tech",                displayName: "AV / Tech" },
+    { roleKey: "photographer",           displayName: "Photographer / Videographer" },
+    { roleKey: "setup_teardown",         displayName: "Setup & Teardown" },
+    { roleKey: "childcare",              displayName: "Childcare" },
+    { roleKey: "interpreter",            displayName: "Interpreter / Translation" },
+    { roleKey: "accessibility_support",  displayName: "Accessibility Support" },
+    { roleKey: "social_media",           displayName: "Social Media" },
+    { roleKey: "outreach_coordinator",   displayName: "Outreach Coordinator" },
   ];
 
   const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
@@ -192,6 +216,7 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
     const validRoles = roles.filter((r) => r.roleKey.trim() && r.displayName.trim());
 
     const payload = {
+      orgSlug,
       name: name.trim(),
       slug: slug.trim(),
       eventDate: eventDate || undefined,
@@ -232,11 +257,11 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
     <div className="space-y-3">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 font-display text-xl text-primary hover:text-primary/80 transition-colors"
+        className="flex items-center gap-2 font-display text-lg text-primary hover:text-primary/80 transition-colors"
       >
-        <Plus className="w-6 h-6" />
-        Create New Event
-        {open ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        <Plus className="w-5 h-5" />
+        Add Event for {orgName}
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
       </button>
 
       {open && (
@@ -538,6 +563,94 @@ function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
   );
 }
 
+// ── Create Organization Form ───────────────────────────────────────────────────
+
+function CreateOrgForm({ onCreated }: { onCreated: (org: OrgRecord) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const autoSlug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const handleNameChange = (v: string) => {
+    setName(v);
+    if (!slug || slug === autoSlug(name)) setSlug(autoSlug(v));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/superadmin/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSuperadminToken() ?? ""}` },
+        body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
+      });
+      const data = await res.json() as { org?: OrgRecord; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to create organization");
+      toast({ title: "Organization created!", description: `"${data.org!.name}" is ready.` });
+      onCreated(data.org!);
+      setName(""); setSlug(""); setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create organization");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 font-display text-xl text-primary hover:text-primary/80 transition-colors"
+      >
+        <Plus className="w-6 h-6" />
+        Add Organization
+        {open ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+      </button>
+      {open && (
+        <Card className="border-4 border-primary">
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider block mb-1">Organization Name <span className="text-destructive">*</span></label>
+                  <Input value={name} onChange={(e) => handleNameChange(e.target.value)} placeholder="Indivisible North Atlanta" required />
+                </div>
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider block mb-1">Slug <span className="text-destructive">*</span></label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Hash className="w-4 h-4 inline" />
+                    </span>
+                    <Input
+                      value={slug}
+                      onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                      placeholder="ina"
+                      className="pl-8 font-mono"
+                      required
+                      pattern="[a-z0-9-]+"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Short unique ID for this org</p>
+                </div>
+              </div>
+              {error && <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">{error}</p>}
+              <div className="flex gap-3">
+                <Button type="submit" isLoading={loading} className="flex-1">{loading ? "Creating..." : "Create Organization"}</Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── Event card ─────────────────────────────────────────────────────────────────
 
 function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }) {
@@ -736,56 +849,65 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
 export default function SuperadminPage() {
   const [authed, setAuthed] = useState(!!getSuperadminToken());
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const { toast } = useToast();
 
-  const fetchEvents = async () => {
+  const fetchAll = async () => {
     setLoading(true);
     setLoadError("");
+    const token = getSuperadminToken() ?? "";
     try {
-      const res = await fetch("/api/superadmin/events", {
-        headers: { Authorization: `Bearer ${getSuperadminToken() ?? ""}` },
-      });
-      if (res.status === 401) {
+      const [eventsRes, orgsRes] = await Promise.all([
+        fetch("/api/superadmin/events", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/orgs", { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (eventsRes.status === 401 || orgsRes.status === 401) {
         clearSuperadminToken();
         setAuthed(false);
         return;
       }
-      if (!res.ok) throw new Error("Failed to load events");
-      const data = (await res.json()) as { events: EventRecord[] };
-      setEvents(data.events);
+      if (!eventsRes.ok || !orgsRes.ok) throw new Error("Failed to load data");
+      const [eventsData, orgsData] = await Promise.all([
+        eventsRes.json() as Promise<{ events: EventRecord[] }>,
+        orgsRes.json() as Promise<{ orgs: OrgRecord[] }>,
+      ]);
+      setEvents(eventsData.events);
+      setOrgs(orgsData.orgs);
     } catch {
-      setLoadError("Could not load events. Check your connection and try again.");
+      setLoadError("Could not load data. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (authed) fetchEvents();
-  }, [authed]);
+  useEffect(() => { if (authed) void fetchAll(); }, [authed]);
 
-  const handleLogout = () => {
-    clearSuperadminToken();
-    setAuthed(false);
-    setEvents([]);
-  };
-
-  const handleEventCreated = () => {
-    void fetchEvents();
-  };
-
-  const handleEventUpdated = (_updated: EventRecord) => {
-    void fetchEvents();
-  };
+  const handleLogout = () => { clearSuperadminToken(); setAuthed(false); setEvents([]); setOrgs([]); };
 
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
 
-  if (!authed) {
-    return <LoginGate onLogin={() => setAuthed(true)} />;
+  if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
+
+  // Group events by org slug
+  const eventsByOrg = new Map<string, EventRecord[]>();
+  for (const event of events) {
+    const key = event.org.slug ?? "unknown";
+    if (!eventsByOrg.has(key)) eventsByOrg.set(key, []);
+    eventsByOrg.get(key)!.push(event);
   }
+
+  // Merge orgs list with any orgs that appear in events but aren't in orgs list yet
+  const orgSlugsInList = new Set(orgs.map((o) => o.slug));
+  const extraOrgs: OrgRecord[] = [];
+  for (const event of events) {
+    if (event.org.slug && !orgSlugsInList.has(event.org.slug)) {
+      extraOrgs.push({ id: event.org.id, name: event.org.name ?? event.org.slug!, slug: event.org.slug!, eventCount: 0, createdAt: "" });
+      orgSlugsInList.add(event.org.slug);
+    }
+  }
+  const allOrgs = [...orgs, ...extraOrgs];
 
   return (
     <div className="min-h-screen bg-background">
@@ -796,22 +918,11 @@ export default function SuperadminPage() {
             <p className="text-lg text-gray-300 font-medium">OpsCheckIn · Platform Admin</p>
           </div>
           <div className="flex gap-3 w-full md:w-auto flex-wrap">
-            <Button
-              variant="outline"
-              className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white"
-              onClick={() => fetchEvents()}
-              disabled={loading}
-            >
-              <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Refresh
+            <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
+              <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
             </Button>
-            <Button
-              variant="outline"
-              className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
+            <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />Sign Out
             </Button>
           </div>
         </div>
@@ -824,8 +935,8 @@ export default function SuperadminPage() {
           <Card className="bg-primary text-white border-black">
             <CardContent className="p-8 flex items-center justify-between">
               <div>
-                <p className="text-primary-foreground/80 font-bold text-lg uppercase tracking-wider mb-2">Total Events</p>
-                <p className="font-display text-6xl md:text-7xl">{loading ? "—" : events.length}</p>
+                <p className="text-primary-foreground/80 font-bold text-lg uppercase tracking-wider mb-2">Organizations</p>
+                <p className="font-display text-6xl md:text-7xl">{loading ? "—" : allOrgs.length}</p>
               </div>
               <Calendar className="w-16 h-16 opacity-50" />
             </CardContent>
@@ -850,26 +961,52 @@ export default function SuperadminPage() {
           </Card>
         </div>
 
-        {/* Create Event */}
-        <CreateEventForm onCreated={handleEventCreated} />
-
-        {/* Events List */}
-        <div>
-          <h2 className="font-display text-2xl mb-4">All Events</h2>
-
-          {loadError && (
-            <div className="p-4 bg-red-50 border-2 border-destructive rounded-xl text-destructive font-bold text-sm mb-4">
-              {loadError}
-            </div>
-          )}
-          {!loading && !loadError && events.length === 0 && (
-            <div className="text-center text-muted-foreground py-12 font-medium">No events yet. Create one above.</div>
-          )}
-          <div className="space-y-3">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} onUpdated={handleEventUpdated} />
-            ))}
+        {loadError && (
+          <div className="p-4 bg-red-50 border-2 border-destructive rounded-xl text-destructive font-bold text-sm">
+            {loadError}
           </div>
+        )}
+
+        {/* Add Organization */}
+        <div className="border-4 border-foreground rounded-2xl p-6 bg-white shadow-brutal">
+          <CreateOrgForm onCreated={() => void fetchAll()} />
+        </div>
+
+        {/* Organizations → Events */}
+        <div className="space-y-8">
+          {allOrgs.length === 0 && !loading && (
+            <div className="text-center text-muted-foreground py-12 font-medium">No organizations yet. Add one above.</div>
+          )}
+
+          {allOrgs.map((org) => {
+            const orgEvents = eventsByOrg.get(org.slug) ?? [];
+            return (
+              <div key={org.slug} className="border-4 border-foreground rounded-2xl overflow-hidden shadow-brutal">
+                {/* Org header */}
+                <div className="bg-foreground text-white px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="font-display text-2xl">{org.name}</h2>
+                    <p className="font-mono text-sm text-gray-400">/{org.slug} · {orgEvents.length} event{orgEvents.length !== 1 ? "s" : ""} · {orgEvents.reduce((s, e) => s + e.checkedInCount, 0)} checked in</p>
+                  </div>
+                </div>
+
+                {/* Events under this org */}
+                <div className="p-6 space-y-4 bg-gray-50">
+                  {orgEvents.length === 0 && (
+                    <p className="text-muted-foreground text-sm italic">No events yet for this organization.</p>
+                  )}
+                  {orgEvents.map((event) => (
+                    <EventCard key={event.id} event={event} onUpdated={() => void fetchAll()} />
+                  ))}
+
+                  {/* Add event for this org */}
+                  <div className="pt-2">
+                    <CreateEventForm orgSlug={org.slug} orgName={org.name} onCreated={() => void fetchAll()} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </main>
     </div>
