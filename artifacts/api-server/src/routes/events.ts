@@ -994,11 +994,18 @@ router.post("/check-in/submit", checkinLimiter, async (req: Request, res: Respon
     const phoneDigits = (phone?.replace(/\D/g, "") ?? "");
     if (event.smsWristbandEnabled && phoneDigits.length >= 10) {
       const token = randomBytes(20).toString("hex");
-      // Persist token on the attendee record
-      db.update(attendeesTable)
-        .set({ entryToken: token })
-        .where(eq(attendeesTable.id, newAttendee.id))
-        .catch((e) => console.error("[wristband] token save failed:", e));
+
+      // Await token persistence so the link is guaranteed resolvable before we SMS it
+      try {
+        await db.update(attendeesTable)
+          .set({ entryToken: token })
+          .where(eq(attendeesTable.id, newAttendee.id));
+      } catch (e) {
+        console.error("[wristband] token save failed — skipping SMS:", e);
+        // Don't send the SMS if we couldn't persist the token
+        res.status(201).json({ id: newAttendee.id, message: "Check-in successful!", wonNoIceButton });
+        return;
+      }
 
       // Build the re-entry URL
       const baseUrl = process.env.CHECKIN_BASE_URL?.replace(/\/$/, "")
@@ -1012,6 +1019,7 @@ router.post("/check-in/submit", checkinLimiter, async (req: Request, res: Respon
         `(This message was sent from ${process.env.TELNYX_FROM_NUMBER ?? "the event system"}. Save it now!)`,
       ].join("\n");
 
+      // SMS send is fire-and-forget (token is already saved; delivery failure is non-critical)
       sendSms(phoneDigits, smsBody)
         .catch((e) => console.error("[wristband] SMS send failed:", e));
     }
