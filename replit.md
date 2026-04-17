@@ -18,13 +18,43 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Applications
 
-### ICU No Kings 3 Check-In App
-Tablet-optimized event check-in for the ICU (Indivisible Cherokee United) No Kings 3 rally (March 28th).
+### ICU Check-In Platform (multi-event SaaS)
+Tablet-optimized event check-in for ICU (Indivisible Cherokee United). Supports multiple events and organizations.
 - **Frontend**: `artifacts/checkin-app` — React + Vite, served at `/`
-- **Backend**: API routes in `artifacts/api-server/src/routes/checkin.ts` and `attendees.ts`
-- **DB**: `lib/db/src/schema/attendees.ts` — `attendees` + `attendee_roles` tables
-- **Mobilize**: Set `MOBILIZE_API_KEY` env var to enable pre-registration lookup; `MOBILIZE_EVENT_ID` defaults to `901026`
+- **Backend**: Express API at `artifacts/api-server`
+- **DB**: `lib/db/src/schema/attendees.ts` — `organizations`, `events`, `event_roles`, `attendees`, `attendee_roles`, `pre_registrations`, `volunteer_pre_registrations`
 - **Admin**: Visit `/admin` for the live attendee dashboard
+
+#### Data Model
+- `organizations` → top-level tenant (e.g. ICU)
+- `events` → individual rallies/sessions under an org; each has `slug`, `adminPassword`, `mobilizeEventId`, `giveawayEnabled`
+- `event_roles` → volunteer roles available per event (dynamic, replaces hardcoded enum)
+- All data tables carry `event_id` FK for multi-tenancy
+
+#### Event-Scoped API Routes (preferred for new events)
+All routes are prefixed `/api/events/:eventSlug/`:
+- `GET  /config` — public; returns event name, date, roles (drives frontend UI)
+- `POST /admin/login` — returns SHA-256 token scoped to this event
+- `GET  /attendees` — auth required; attendee list for this event
+- `POST /check-in/lookup` — pre-reg lookup scoped to event
+- `POST /check-in/submit` — check-in scoped to event
+- `GET  /admin/export-xlsx` — XLSX with no-shows, scoped to event
+- `GET  /admin/pre-registrations` — all pre-regs for this event
+- Upload endpoints: `/admin/upload-registrations`, `/admin/upload-volunteers`
+
+#### Legacy Routes (NK3 backwards-compat, event_id=1)
+Original routes at `/api/check-in/*`, `/api/admin/*`, `/api/attendees` — still work with global `ADMIN_PASSWORD` env var.
+
+#### Auth
+- **New (event-scoped)**: token = SHA-256(event.adminPassword + `:icu-checkin-2026`)
+- **Legacy (global)**: token = SHA-256(ADMIN_PASSWORD env var + `:icu-admin-2026`)
+
+#### Current Events in DB
+- `nk3` (id=1) — No Kings 3 rally, March 28 2026, password=`CherokeeBoo*2026`, mobilize=`901026`
+
+#### Mobilize integration
+- API key stored at org level (`organizations.mobilize_api_key`) or falls back to `MOBILIZE_API_KEY` env var
+- Event ID stored at event level (`events.mobilize_event_id`) or falls back to `MOBILIZE_EVENT_ID` env var
 
 ## Structure
 
