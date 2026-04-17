@@ -50,15 +50,14 @@ export const eventRolesTable = pgTable("event_roles", {
 // ── Attendees ─────────────────────────────────────────────────────────────────
 // eventId is nullable to allow safe migration — the startup migration tags all
 // existing records with event_id=1 (NK3). After migration all rows will have a value.
-// NOTE: email is still globally unique for now; becomes per-event unique in Task 3
-// when the check-in flow is scoped to an event.
+// email uniqueness is scoped per event so the same person can attend multiple events.
 
 export const attendeesTable = pgTable("attendees", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").references(() => eventsTable.id),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").notNull(),
   phone: text("phone"),
   preRegistered: boolean("pre_registered").notNull().default(false),
   mobilizeId: text("mobilize_id"),
@@ -66,7 +65,9 @@ export const attendeesTable = pgTable("attendees", {
   isNoIceWinner: boolean("is_no_ice_winner").notNull().default(false),
   // null = never asked; true = yes; false = explicitly declined
   wantsToBeContacted: boolean("wants_to_be_contacted"),
-});
+}, (table) => ({
+  eventEmailUnique: uniqueIndex("attendees_event_id_email_idx").on(table.eventId, table.email),
+}));
 
 // ── Attendee Roles ────────────────────────────────────────────────────────────
 // roleName changed from pgEnum to plain text so any event can use any role names.

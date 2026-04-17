@@ -1,28 +1,45 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
+import { attendeesTable, attendeeRolesTable, eventsTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
 import { eq, ilike, or, and, isNotNull } from "drizzle-orm";
 import {
   LookupAttendeeBody,
   SubmitCheckInBody,
 } from "@workspace/api-zod";
 
+// DEPRECATED: These routes are superseded by /api/events/:eventSlug/* in events.ts.
+// All active frontend consumers use event-scoped routes. This file is retained for
+// any legacy integrations; it defaults to eventId=1 (NK3) when no eventId is supplied.
+
 const router: IRouter = Router();
+
+const DEFAULT_EVENT_ID = 1;
+
+async function resolveEventId(body: Record<string, unknown>): Promise<number> {
+  if (typeof body.eventId === "number" && Number.isInteger(body.eventId)) {
+    return body.eventId as number;
+  }
+  if (typeof body.eventSlug === "string" && body.eventSlug) {
+    const rows = await db.select({ id: eventsTable.id }).from(eventsTable).where(eq(eventsTable.slug, body.eventSlug as string)).limit(1);
+    if (rows[0]) return rows[0].id;
+  }
+  return DEFAULT_EVENT_ID;
+}
 
 // Looks up a volunteer pre-registration by email first, then falls back to
 // first-name match — but only if it's unambiguous (exactly one result).
-async function findVolunteerPreReg(email: string, firstName: string) {
+async function findVolunteerPreReg(eventId: number, email: string, firstName: string) {
   let matches = await db
     .select()
     .from(volunteerPreRegistrationsTable)
-    .where(eq(volunteerPreRegistrationsTable.email, email))
+    .where(and(eq(volunteerPreRegistrationsTable.eventId, eventId), eq(volunteerPreRegistrationsTable.email, email)))
     .limit(1);
 
   if (matches.length === 0) {
     const nameMatches = await db
       .select()
       .from(volunteerPreRegistrationsTable)
-      .where(ilike(volunteerPreRegistrationsTable.firstName, firstName.trim()));
+      .where(and(eq(volunteerPreRegistrationsTable.eventId, eventId), ilike(volunteerPreRegistrationsTable.firstName, firstName.trim())));
     if (nameMatches.length === 1) matches = nameMatches;
   }
 
@@ -97,25 +114,23 @@ router.post("/check-in/lookup", async (req, res) => {
 
   const { firstName, email, isVolunteer } = parsed.data;
   const normalizedEmail = email.toLowerCase().trim();
+  const eventId = await resolveEventId(req.body as Record<string, unknown>);
 
-  // Check if already checked in
   const existing = await db
     .select()
     .from(attendeesTable)
-    .where(eq(attendeesTable.email, normalizedEmail))
+    .where(and(eq(attendeesTable.eventId, eventId), eq(attendeesTable.email, normalizedEmail)))
     .limit(1);
 
   if (existing.length > 0) {
-    // Email is taken. First check if this is the same person checking in again (genuine duplicate).
     const sameFirstName = existing[0].firstName.toLowerCase() === firstName.toLowerCase().trim();
     if (!sameFirstName) {
-      // Different name — could be a second person sharing this email.
-      // They will have a pre-reg record with sharedEmailWith set.
       const sharedPreReg = await db
         .select()
         .from(preRegistrationsTable)
         .where(
           and(
+            eq(preRegistrationsTable.eventId, eventId),
             eq(preRegistrationsTable.email, normalizedEmail),
             ilike(preRegistrationsTable.firstName, firstName.trim()),
             isNotNull(preRegistrationsTable.sharedEmailWith)
@@ -124,7 +139,6 @@ router.post("/check-in/lookup", async (req, res) => {
         .limit(1);
 
       if (sharedPreReg.length > 0) {
-        // This is the second person to arrive — ask them to provide a new email
         res.json({
           found: false,
           alreadyCheckedIn: false,
@@ -139,10 +153,7 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
-  // Volunteer path AND regular-attendee path both check the volunteer pre-reg list.
-  // For volunteers: surface their pre-reg details so they can confirm.
-  // For regular attendees: catch people who forgot to tap "I'm a volunteer".
-  const volPreReg = await findVolunteerPreReg(normalizedEmail, firstName);
+  const volPreReg = await findVolunteerPreReg(eventId, normalizedEmail, firstName);
 
   if (isVolunteer) {
     res.json({
@@ -164,13 +175,10 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
-  // Check the pre-registration CSV list.
-  // Multiple records can share one email (shared-email couples), so fetch all and
-  // prefer the one whose first name matches what was typed.
   const preRegs = await db
     .select()
     .from(preRegistrationsTable)
-    .where(eq(preRegistrationsTable.email, normalizedEmail));
+    .where(and(eq(preRegistrationsTable.eventId, eventId), eq(preRegistrationsTable.email, normalizedEmail)));
 
   if (preRegs.length > 0) {
     const nameMatch = preRegs.find(
@@ -186,7 +194,6 @@ router.post("/check-in/lookup", async (req, res) => {
     return;
   }
 
-  // Fall back to Mobilize API if key is available
   const mobilize = await lookupInMobilize(firstName, email);
 
   res.json({
@@ -204,14 +211,13 @@ router.post("/check-in/submit", async (req, res) => {
   }
 
   const { firstName, lastName, email, phone, preRegistered, mobilizeId, wantsToBeContacted, roles } = parsed.data;
-
   const normalizedEmailSubmit = email.toLowerCase().trim();
+  const eventId = await resolveEventId(req.body as Record<string, unknown>);
 
-  // Use INSERT ... ON CONFLICT DO NOTHING to atomically prevent duplicates
-  // even under concurrent load — no race condition between check and insert
   const [newAttendee] = await db
     .insert(attendeesTable)
     .values({
+      eventId,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: normalizedEmailSubmit,
@@ -224,11 +230,10 @@ router.post("/check-in/submit", async (req, res) => {
     .returning();
 
   if (!newAttendee) {
-    // Email already exists — fetch the stored record to return useful info
     const [stored] = await db
       .select()
       .from(attendeesTable)
-      .where(eq(attendeesTable.email, normalizedEmailSubmit))
+      .where(and(eq(attendeesTable.eventId, eventId), eq(attendeesTable.email, normalizedEmailSubmit)))
       .limit(1);
     res.status(409).json({
       error: "This email has already been checked in.",
@@ -239,9 +244,6 @@ router.post("/check-in/submit", async (req, res) => {
     return;
   }
 
-  // Volunteers already receive free buttons — only regular attendees enter the prize draw.
-  // A role with wantsToServeToday === true (walk-in volunteer) or null (pre-reg volunteer)
-  // means they're serving today, so they're excluded.
   const isServingToday = roles?.some(r => r.wantsToServeToday !== false) ?? false;
   const wonNoIceButton = !isServingToday && Math.random() < 0.05;
   if (wonNoIceButton) {
@@ -249,18 +251,20 @@ router.post("/check-in/submit", async (req, res) => {
   }
 
   if (roles && roles.length > 0) {
-    // Targeted query — only fetch volunteer records matching this person by email or full name
     const fn = firstName.trim().toLowerCase();
     const ln = lastName.trim().toLowerCase();
     const volRegs = await db
       .select()
       .from(volunteerPreRegistrationsTable)
       .where(
-        or(
-          eq(volunteerPreRegistrationsTable.email, normalizedEmailSubmit),
-          and(
-            ilike(volunteerPreRegistrationsTable.firstName, fn),
-            ilike(volunteerPreRegistrationsTable.lastName, ln)
+        and(
+          eq(volunteerPreRegistrationsTable.eventId, eventId),
+          or(
+            eq(volunteerPreRegistrationsTable.email, normalizedEmailSubmit),
+            and(
+              ilike(volunteerPreRegistrationsTable.firstName, fn),
+              ilike(volunteerPreRegistrationsTable.lastName, ln)
+            )
           )
         )
       );
@@ -299,12 +303,12 @@ router.post("/check-in/correct-name", async (req, res) => {
   const normalizedEmail = email.toLowerCase().trim().slice(0, 255);
   const safeFirst = firstName.trim().slice(0, 100);
   const safeLast = lastName !== undefined ? lastName.trim().slice(0, 100) : undefined;
+  const eventId = await resolveEventId(req.body as Record<string, unknown>);
 
-  // Verify the email matches the record being updated
   const [record] = await db
     .select({ id: attendeesTable.id })
     .from(attendeesTable)
-    .where(eq(attendeesTable.email, normalizedEmail))
+    .where(and(eq(attendeesTable.eventId, eventId), eq(attendeesTable.email, normalizedEmail)))
     .limit(1);
 
   if (!record || record.id !== attendeeId) {
