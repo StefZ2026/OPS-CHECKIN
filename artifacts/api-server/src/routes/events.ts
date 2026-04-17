@@ -40,8 +40,15 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
       .where(eq(eventsTable.slug, eventSlug))
       .limit(1);
 
-    if (!rows[0] || !rows[0].event.isActive) {
+    if (!rows[0]) {
       res.status(404).json({ error: "Event not found" });
+      return;
+    }
+    // Inactive events are explicitly rejected with 403 (not 404) so that the
+    // scanner frontend can distinguish "event ended" (NOT_COVERED) from
+    // "token not in this event" (NOT_FOUND).
+    if (!rows[0].event.isActive) {
+      res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — re-entry is no longer permitted." });
       return;
     }
     res.locals.event = rows[0].event;
@@ -1069,20 +1076,10 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
 
   const event = res.locals.event;
 
-  // ── Session coverage check ────────────────────────────────────────────────
-  // Pass type "WRISTBAND" covers all sessions while the event is active.
-  // If the event has been closed (isActive=false), no further re-entries
-  // are permitted regardless of the token.
+  // Session coverage: inactive events are already rejected with 403 (NOT_COVERED)
+  // by the event resolver middleware above — they never reach this handler.
+  // A "WRISTBAND" pass covers all sessions for the duration of an active event.
   const passType = "WRISTBAND" as const;
-  if (!event.isActive) {
-    res.status(403).json({
-      ok: false,
-      state: "NOT_COVERED",
-      passType,
-      error: "This event has ended — re-entry is no longer permitted.",
-    });
-    return;
-  }
 
   const todayISO = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
