@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import {
-  Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut,
-  Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil,
+  Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
+  Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil, QrCode, Download,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,13 +22,13 @@ function clearSuperadminToken() {
   sessionStorage.removeItem(SUPERADMIN_TOKEN_KEY);
 }
 
-async function loginSuperadmin(password: string): Promise<string> {
+async function loginSuperadmin(username: string, password: string): Promise<string> {
   const res = await fetch("/api/admin/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error("Invalid password");
+  if (!res.ok) throw new Error("Invalid credentials");
   const data = (await res.json()) as { token: string };
   return data.token;
 }
@@ -54,6 +55,7 @@ type NewRoleRow = { roleKey: string; displayName: string };
 // ── Login gate ─────────────────────────────────────────────────────────────────
 
 function LoginGate({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
@@ -64,11 +66,11 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
     setError("");
     setLoading(true);
     try {
-      const token = await loginSuperadmin(password);
+      const token = await loginSuperadmin(username, password);
       setSuperadminToken(token);
       onLogin();
     } catch {
-      setError("Incorrect password. Try again.");
+      setError("Invalid username or password.");
     } finally {
       setLoading(false);
     }
@@ -87,16 +89,28 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               <p className="text-muted-foreground font-medium">Platform Admin</p>
             </div>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="font-display text-lg uppercase tracking-wider block mb-2">Admin Password</label>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
+                autoFocus
+                autoComplete="username"
+                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
               <div className="relative">
                 <input
                   type={show ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter platform admin password"
-                  autoFocus
+                  placeholder="Enter password"
+                  autoComplete="current-password"
                   className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
                 />
                 <button
@@ -115,7 +129,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               </p>
             )}
             <Button type="submit" size="lg" className="w-full" isLoading={loading}>
-              {loading ? "Checking..." : "Unlock Event Manager"}
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         </CardContent>
@@ -142,6 +156,13 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
+  const NK3_ROLES: NewRoleRow[] = [
+    { roleKey: "safety_marshal", displayName: "Safety Marshal" },
+    { roleKey: "medic", displayName: "Medic" },
+    { roleKey: "de_escalator", displayName: "De-Escalator" },
+    { roleKey: "chant_lead", displayName: "Chant Lead" },
+  ];
+
   const [roles, setRoles] = useState<NewRoleRow[]>([
     { roleKey: "", displayName: "" },
   ]);
@@ -312,13 +333,22 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
                   <label className="font-display text-sm uppercase tracking-wider">
                     <Users className="w-4 h-4 inline mr-1" />Volunteer Roles
                   </label>
-                  <button
-                    type="button"
-                    onClick={addRole}
-                    className="text-primary text-sm font-bold flex items-center gap-1 hover:text-primary/80"
-                  >
-                    <Plus className="w-4 h-4" /> Add Role
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRoles(NK3_ROLES)}
+                      className="text-sm font-bold text-muted-foreground hover:text-foreground flex items-center gap-1 border-2 border-foreground rounded px-2 py-0.5"
+                    >
+                      Clone NK3 roles
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addRole}
+                      className="text-primary text-sm font-bold flex items-center gap-1 hover:text-primary/80"
+                    >
+                      <Plus className="w-4 h-4" /> Add Role
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {roles.map((role, i) => (
@@ -543,9 +573,56 @@ function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
 
 // ── Event card ─────────────────────────────────────────────────────────────────
 
+function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }) {
+  const url = `${window.location.origin}/${event.slug}`;
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const handlePrint = () => {
+    const win = window.open("", "_blank");
+    if (!win || !svgRef.current) return;
+    const svgHtml = svgRef.current.outerHTML;
+    win.document.write(`
+      <html><head><title>${event.name} — Check-In QR Code</title>
+      <style>
+        body { font-family: sans-serif; text-align: center; padding: 40px; }
+        h1 { font-size: 28px; margin-bottom: 8px; }
+        p { font-size: 16px; color: #555; margin-bottom: 24px; }
+        svg { width: 300px; height: 300px; }
+        .url { font-size: 13px; color: #888; margin-top: 16px; word-break: break-all; }
+      </style></head>
+      <body>
+        <h1>${event.name} — Check-In</h1>
+        <p>Scan to check in from your phone</p>
+        ${svgHtml}
+        <div class="url">${url}</div>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-sm p-8 flex flex-col items-center gap-6" onClick={(e) => e.stopPropagation()}>
+        <div className="w-full flex items-center justify-between">
+          <h3 className="font-display text-2xl">{event.name}</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-2xl font-bold leading-none"><X className="w-6 h-6" /></button>
+        </div>
+        <QRCodeSVG ref={svgRef} value={url} size={240} level="H" className="border-4 border-foreground rounded-xl p-2" />
+        <p className="font-mono text-xs text-muted-foreground text-center break-all">{url}</p>
+        <Button className="w-full" onClick={handlePrint}>
+          <Download className="w-4 h-4 mr-2" /> Print QR Code
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event: EventRecord) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   const handleSaved = (updated: EventRecord) => {
     onUpdated(updated);
@@ -627,6 +704,8 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
               </div>
             )}
 
+            {showQR && <QrModal event={event} onClose={() => setShowQR(false)} />}
+
             <div className="flex gap-3 flex-wrap">
               <a
                 href={`/${event.slug}`}
@@ -646,6 +725,12 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
               >
                 <Lock className="w-5 h-5" /> Open Admin
               </a>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowQR(true); }}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-secondary hover:bg-secondary/70 font-display text-base transition-colors shadow-brutal"
+              >
+                <QrCode className="w-5 h-5" /> QR Code
+              </button>
             </div>
 
             <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-lg">
@@ -728,52 +813,91 @@ export default function SuperadminPage() {
     void fetchEvents();
   };
 
+  const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
+  const activeEvents = events.filter((e) => e.isActive).length;
+
   if (!authed) {
     return <LoginGate onLogin={() => setAuthed(true)} />;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-foreground text-white px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl">OpsCheckIn</h1>
-          <p className="text-white/70 text-sm font-medium">Platform Admin · Event Management</p>
+      <header className="bg-foreground text-white py-6 px-6 md:px-12 sticky top-0 z-20 border-b-8 border-primary">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div>
+            <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
+            <p className="text-lg text-gray-300 font-medium">OpsCheckIn · Platform Admin</p>
+          </div>
+          <div className="flex gap-3 w-full md:w-auto flex-wrap">
+            <Button
+              variant="outline"
+              className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white"
+              onClick={() => fetchEvents()}
+              disabled={loading}
+            >
+              <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white"
+              onClick={handleLogout}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 text-white/80 hover:text-white transition-colors text-sm font-bold"
-        >
-          <LogOut className="w-4 h-4" /> Logout
-        </button>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto p-6 md:p-12 space-y-10">
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="bg-primary text-white border-black">
+            <CardContent className="p-8 flex items-center justify-between">
+              <div>
+                <p className="text-primary-foreground/80 font-bold text-lg uppercase tracking-wider mb-2">Total Events</p>
+                <p className="font-display text-6xl md:text-7xl">{loading ? "—" : events.length}</p>
+              </div>
+              <Calendar className="w-16 h-16 opacity-50" />
+            </CardContent>
+          </Card>
+          <Card className="bg-secondary text-foreground border-black">
+            <CardContent className="p-8 flex items-center justify-between">
+              <div>
+                <p className="text-foreground/80 font-bold text-lg uppercase tracking-wider mb-2">Active Events</p>
+                <p className="font-display text-6xl md:text-7xl">{loading ? "—" : activeEvents}</p>
+              </div>
+              <Zap className="w-16 h-16 opacity-50" />
+            </CardContent>
+          </Card>
+          <Card className="bg-white text-foreground border-black">
+            <CardContent className="p-8 flex items-center justify-between">
+              <div>
+                <p className="text-muted-foreground font-bold text-lg uppercase tracking-wider mb-2">Total Checked In</p>
+                <p className="font-display text-6xl md:text-7xl">{loading ? "—" : totalCheckedIn}</p>
+              </div>
+              <Users className="w-16 h-16 opacity-20" />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Create Event */}
         <CreateEventForm onCreated={handleEventCreated} />
 
+        {/* Events List */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-2xl">All Events</h2>
-            <button
-              onClick={fetchEvents}
-              className="text-sm text-muted-foreground hover:text-foreground font-bold transition-colors"
-            >
-              Refresh
-            </button>
-          </div>
+          <h2 className="font-display text-2xl mb-4">All Events</h2>
 
-          {loading && (
-            <div className="text-center text-muted-foreground py-12 font-medium">Loading events...</div>
-          )}
           {loadError && (
-            <div className="p-4 bg-red-50 border-2 border-destructive rounded-xl text-destructive font-bold text-sm">
+            <div className="p-4 bg-red-50 border-2 border-destructive rounded-xl text-destructive font-bold text-sm mb-4">
               {loadError}
             </div>
           )}
-
           {!loading && !loadError && events.length === 0 && (
             <div className="text-center text-muted-foreground py-12 font-medium">No events yet. Create one above.</div>
           )}
-
           <div className="space-y-3">
             {events.map((event) => (
               <EventCard key={event.id} event={event} onUpdated={handleEventUpdated} />

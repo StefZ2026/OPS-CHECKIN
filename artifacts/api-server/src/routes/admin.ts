@@ -10,7 +10,7 @@ const router: IRouter = Router();
 
 function expectedToken(): string {
   const password = process.env.ADMIN_PASSWORD ?? "";
-  return createHash("sha256").update(password + ":icu-admin-2026").digest("hex");
+  return createHash("sha256").update(password + ":opscheckin-admin-2026").digest("hex");
 }
 
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
@@ -46,13 +46,14 @@ const loginLimiter = rateLimit({
 });
 
 router.post("/admin/login", loginLimiter, (req, res) => {
-  const { password } = req.body as { password?: string };
-  if (!password || !process.env.ADMIN_PASSWORD) {
-    res.status(401).json({ error: "Invalid password" });
+  const { username, password } = req.body as { username?: string; password?: string };
+  if (!password || !process.env.ADMIN_PASSWORD || !username) {
+    res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-  if (password !== process.env.ADMIN_PASSWORD) {
-    res.status(401).json({ error: "Invalid password" });
+  const expectedUsername = process.env.ADMIN_USERNAME ?? "";
+  if (username !== expectedUsername || password !== process.env.ADMIN_PASSWORD) {
+    res.status(401).json({ error: "Invalid credentials" });
     return;
   }
   res.json({ token: expectedToken() });

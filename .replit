@@ -28,7 +28,8 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-ADMIN_PASSWORD = "CherokeeBoo*2026"
+ADMIN_PASSWORD = "SylviBoo*2026"
+ADMIN_USERNAME = "SAZOPSCHECKIN08"
 
 [nix]
 channel = "stable-25_05"
