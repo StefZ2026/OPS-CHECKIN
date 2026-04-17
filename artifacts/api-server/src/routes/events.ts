@@ -1063,15 +1063,50 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
   const todayISO = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
   try {
-    const [attendee] = await db
+    // ── Atomic gate admission ────────────────────────────────────────────────
+    // Single UPDATE with a conditional WHERE clause.  PostgreSQL serializes
+    // concurrent UPDATEs on the same row: the second update re-evaluates its
+    // WHERE after the first commits, so a double-tap cannot yield two CLEARED
+    // results.  We get RETURNING data only on the first successful admission.
+    const cleared = await db
+      .update(attendeesTable)
+      .set({ entryTokenUsedDate: todayISO })
+      .where(
+        and(
+          eq(attendeesTable.eventId, event.id),
+          eq(attendeesTable.entryToken, token),
+          // Only mark as used if NOT already used today (IS DISTINCT FROM handles NULLs)
+          sql`${attendeesTable.entryTokenUsedDate} IS DISTINCT FROM ${todayISO}`,
+        ),
+      )
+      .returning({
+        id: attendeesTable.id,
+        firstName: attendeesTable.firstName,
+        lastName: attendeesTable.lastName,
+        email: attendeesTable.email,
+        preRegistered: attendeesTable.preRegistered,
+      });
+
+    if (cleared.length === 1) {
+      // ── CLEARED: first admission for this attendee today ──────────────────
+      res.json({
+        ok: true,
+        state: "CLEARED",
+        attendee: cleared[0],
+      });
+      return;
+    }
+
+    // 0 rows updated → either ALREADY_ADMITTED or NOT_FOUND
+    // (a second SELECT is safe here — outcome has already been decided above)
+    const [existing] = await db
       .select({
         id: attendeesTable.id,
         firstName: attendeesTable.firstName,
         lastName: attendeesTable.lastName,
         email: attendeesTable.email,
-        entryToken: attendeesTable.entryToken,
-        entryTokenUsedDate: attendeesTable.entryTokenUsedDate,
         preRegistered: attendeesTable.preRegistered,
+        entryTokenUsedDate: attendeesTable.entryTokenUsedDate,
       })
       .from(attendeesTable)
       .where(
@@ -1082,33 +1117,27 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
       )
       .limit(1);
 
-    if (!attendee) {
-      res.status(404).json({ ok: false, error: "Token not found" });
+    if (!existing) {
+      // ── NOT_FOUND: token is not on any attendee in this event ─────────────
+      res.status(404).json({ ok: false, state: "NOT_FOUND", error: "Token not recognised" });
       return;
     }
 
-    const alreadyUsedToday = attendee.entryTokenUsedDate === todayISO;
-
-    // Always update the used date (gate staff can re-scan; idempotent for same day)
-    await db
-      .update(attendeesTable)
-      .set({ entryTokenUsedDate: todayISO })
-      .where(eq(attendeesTable.id, attendee.id));
-
+    // ── ALREADY_ADMITTED: attendee already scanned in for today ──────────────
     res.json({
       ok: true,
-      alreadyUsedToday,
+      state: "ALREADY_ADMITTED",
       attendee: {
-        id: attendee.id,
-        firstName: attendee.firstName,
-        lastName: attendee.lastName,
-        email: attendee.email,
-        preRegistered: attendee.preRegistered,
+        id: existing.id,
+        firstName: existing.firstName,
+        lastName: existing.lastName,
+        email: existing.email,
+        preRegistered: existing.preRegistered,
       },
     });
   } catch (err) {
     console.error("GET /check-in/scan/:token error:", err);
-    res.status(500).json({ ok: false, error: "Scan failed" });
+    res.status(500).json({ ok: false, state: "ERROR", error: "Scan failed" });
   }
 });
 

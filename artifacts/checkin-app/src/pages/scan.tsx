@@ -2,11 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import jsQR from "jsqr";
 
+type AttendeeInfo = {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  preRegistered: boolean;
+};
+
 type ScanState =
   | { phase: "idle" }
   | { phase: "scanning" }
   | { phase: "loading" }
-  | { phase: "success"; attendee: { firstName: string; lastName: string; email: string; preRegistered: boolean }; alreadyUsedToday: boolean }
+  | { phase: "CLEARED"; attendee: AttendeeInfo }
+  | { phase: "ALREADY_ADMITTED"; attendee: AttendeeInfo }
+  | { phase: "NOT_FOUND" }
   | { phase: "error"; message: string };
 
 function extractToken(raw: string): string | null {
@@ -28,6 +38,7 @@ export default function ScanPage() {
   const [camError, setCamError] = useState<string | null>(null);
 
   async function startCamera() {
+    setCamError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
@@ -39,7 +50,7 @@ export default function ScanPage() {
       }
       setState({ phase: "scanning" });
       tick();
-    } catch (err) {
+    } catch {
       setCamError("Camera access denied. Please allow camera permission and reload.");
     }
   }
@@ -66,7 +77,9 @@ export default function ScanPage() {
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
     if (code?.data) {
       const token = extractToken(code.data);
       if (token && token !== lastTokenRef.current) {
@@ -83,11 +96,21 @@ export default function ScanPage() {
     setState({ phase: "loading" });
     try {
       const resp = await fetch(`/api/events/${eventSlug}/check-in/scan/${token}`);
-      const data = await resp.json();
-      if (!resp.ok || !data.ok) {
-        setState({ phase: "error", message: data.error ?? "Scan failed" });
+      const data = await resp.json() as {
+        ok: boolean;
+        state?: "CLEARED" | "ALREADY_ADMITTED" | "NOT_FOUND" | "ERROR";
+        attendee?: AttendeeInfo;
+        error?: string;
+      };
+
+      if (data.state === "CLEARED" && data.attendee) {
+        setState({ phase: "CLEARED", attendee: data.attendee });
+      } else if (data.state === "ALREADY_ADMITTED" && data.attendee) {
+        setState({ phase: "ALREADY_ADMITTED", attendee: data.attendee });
+      } else if (data.state === "NOT_FOUND" || resp.status === 404) {
+        setState({ phase: "NOT_FOUND" });
       } else {
-        setState({ phase: "success", attendee: data.attendee, alreadyUsedToday: data.alreadyUsedToday });
+        setState({ phase: "error", message: data.error ?? "Unexpected response from server." });
       }
     } catch {
       setState({ phase: "error", message: "Network error — check your connection." });
@@ -103,11 +126,16 @@ export default function ScanPage() {
     return () => stopCamera();
   }, []);
 
+  const isCameraVisible =
+    state.phase === "scanning" || state.phase === "loading";
+
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-start p-4 pt-10 gap-6">
       <div className="text-center">
         <h1 className="text-2xl font-bold">Gate Scanner</h1>
-        <p className="text-gray-400 text-sm mt-1">Scan an attendee's re-entry QR code.</p>
+        <p className="text-gray-400 text-sm mt-1">
+          Scan an attendee's re-entry QR code.
+        </p>
       </div>
 
       {camError && (
@@ -125,7 +153,7 @@ export default function ScanPage() {
         </button>
       )}
 
-      {(state.phase === "scanning" || state.phase === "loading") && (
+      {isCameraVisible && (
         <div className="relative w-full max-w-sm aspect-square rounded-2xl overflow-hidden bg-black shadow-xl">
           <video
             ref={videoRef}
@@ -135,7 +163,9 @@ export default function ScanPage() {
           />
           {state.phase === "loading" && (
             <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-              <div className="text-white text-lg font-semibold animate-pulse">Verifying…</div>
+              <div className="text-white text-lg font-semibold animate-pulse">
+                Verifying…
+              </div>
             </div>
           )}
           <div className="absolute inset-0 border-4 border-blue-400/40 rounded-2xl pointer-events-none" />
@@ -151,18 +181,43 @@ export default function ScanPage() {
         </p>
       )}
 
-      {state.phase === "success" && (
-        <div className={`w-full max-w-sm rounded-2xl p-6 text-center shadow-xl ${state.alreadyUsedToday ? "bg-yellow-900 border border-yellow-500" : "bg-green-900 border border-green-500"}`}>
-          <div className="text-4xl mb-3">{state.alreadyUsedToday ? "⚠️" : "✅"}</div>
+      {/* ── CLEARED ─────────────────────────────────────────────────── */}
+      {state.phase === "CLEARED" && (
+        <div className="w-full max-w-sm rounded-2xl p-6 text-center bg-green-900 border border-green-500 shadow-xl">
+          <div className="text-5xl mb-3">✅</div>
           <h2 className="text-2xl font-bold">
             {state.attendee.firstName} {state.attendee.lastName}
           </h2>
           <p className="text-sm mt-1 opacity-70">{state.attendee.email}</p>
           {state.attendee.preRegistered && (
-            <span className="inline-block mt-2 text-xs bg-white/20 rounded-full px-3 py-1">Pre-registered</span>
+            <span className="inline-block mt-2 text-xs bg-white/20 rounded-full px-3 py-1">
+              Pre-registered
+            </span>
           )}
-          <p className={`mt-4 font-semibold text-lg ${state.alreadyUsedToday ? "text-yellow-300" : "text-green-300"}`}>
-            {state.alreadyUsedToday ? "Already scanned today — verify with staff." : "Entry approved!"}
+          <p className="mt-4 font-bold text-xl text-green-300">Entry approved!</p>
+          <button
+            onClick={reset}
+            className="mt-5 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-colors"
+          >
+            Scan Next
+          </button>
+        </div>
+      )}
+
+      {/* ── ALREADY_ADMITTED ────────────────────────────────────────── */}
+      {state.phase === "ALREADY_ADMITTED" && (
+        <div className="w-full max-w-sm rounded-2xl p-6 text-center bg-yellow-900 border border-yellow-500 shadow-xl">
+          <div className="text-5xl mb-3">⚠️</div>
+          <h2 className="text-2xl font-bold">
+            {state.attendee.firstName} {state.attendee.lastName}
+          </h2>
+          <p className="text-sm mt-1 opacity-70">{state.attendee.email}</p>
+          <p className="mt-4 font-bold text-xl text-yellow-300">
+            Already admitted today
+          </p>
+          <p className="text-yellow-200 text-sm mt-1">
+            This pass was already scanned for today. Verify with a supervisor
+            before granting re-entry.
           </p>
           <button
             onClick={reset}
@@ -173,6 +228,25 @@ export default function ScanPage() {
         </div>
       )}
 
+      {/* ── NOT_FOUND (off-list) ────────────────────────────────────── */}
+      {state.phase === "NOT_FOUND" && (
+        <div className="w-full max-w-sm rounded-2xl p-6 text-center bg-gray-800 border border-gray-600 shadow-xl">
+          <div className="text-5xl mb-3">🚫</div>
+          <p className="font-bold text-xl text-gray-200">Pass not recognised</p>
+          <p className="text-gray-400 text-sm mt-2">
+            This QR code is not on the attendee list for this event. Follow
+            off-list policy — direct to the check-in desk.
+          </p>
+          <button
+            onClick={reset}
+            className="mt-5 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {/* ── Generic error ───────────────────────────────────────────── */}
       {state.phase === "error" && (
         <div className="w-full max-w-sm rounded-2xl p-6 text-center bg-red-900 border border-red-500 shadow-xl">
           <div className="text-4xl mb-3">❌</div>
