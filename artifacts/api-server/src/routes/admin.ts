@@ -4,7 +4,7 @@ import rateLimit from "express-rate-limit";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, count } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -222,11 +222,23 @@ router.get("/superadmin/events", requireAdminAuth, async (_req, res) => {
       .leftJoin(organizationsTable, eq(eventsTable.orgId, organizationsTable.id))
       .orderBy(eventsTable.createdAt);
 
-    const allRoles = await db.select().from(eventRolesTable).orderBy(eventRolesTable.sortOrder);
+    const [allRoles, attendeeCounts] = await Promise.all([
+      db.select().from(eventRolesTable).orderBy(eventRolesTable.sortOrder),
+      db
+        .select({ eventId: attendeesTable.eventId, checkedInCount: count() })
+        .from(attendeesTable)
+        .groupBy(attendeesTable.eventId),
+    ]);
+
     const rolesMap = new Map<number, typeof allRoles>();
     for (const role of allRoles) {
       if (!rolesMap.has(role.eventId)) rolesMap.set(role.eventId, []);
       rolesMap.get(role.eventId)!.push(role);
+    }
+
+    const countMap = new Map<number, number>();
+    for (const row of attendeeCounts) {
+      if (row.eventId !== null) countMap.set(row.eventId, row.checkedInCount);
     }
 
     const result = events.map((e) => ({
@@ -238,6 +250,7 @@ router.get("/superadmin/events", requireAdminAuth, async (_req, res) => {
       mobilizeEventId: e.mobilizeEventId,
       isActive: e.isActive,
       createdAt: e.createdAt,
+      checkedInCount: countMap.get(e.id) ?? 0,
       org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
       roles: (rolesMap.get(e.id) ?? []).map((r) => ({
         id: r.id,

@@ -44,6 +44,7 @@ type EventRecord = {
   mobilizeEventId: string | null;
   isActive: boolean;
   createdAt: string;
+  checkedInCount: number;
   org: { id: number; name: string | null; slug: string | null };
   roles: EventRole[];
 };
@@ -126,7 +127,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
 // ── Create Event Form ──────────────────────────────────────────────────────────
 
 type CreateEventFormProps = {
-  onCreated: (event: EventRecord) => void;
+  onCreated: () => void;
 };
 
 function CreateEventForm({ onCreated }: CreateEventFormProps) {
@@ -197,7 +198,7 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
       if (!res.ok) throw new Error(data.error ?? "Failed to create event");
 
       toast({ title: "Event created!", description: `"${data.event!.name}" is ready at /api/events/${data.event!.slug}/...` });
-      onCreated(data.event!);
+      onCreated();
 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
       setMobilizeEventId(""); setGiveawayEnabled(false);
@@ -583,6 +584,10 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
                     {format(new Date(event.eventDate), "MMM d, yyyy")}
                   </span>
                 )}
+                <span className="text-sm font-bold text-foreground">
+                  <Users className="w-4 h-4 inline mr-1" />
+                  {event.checkedInCount} checked in
+                </span>
               </div>
             </div>
             {expanded ? <ChevronUp className="w-5 h-5 flex-shrink-0 mt-1 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 flex-shrink-0 mt-1 text-muted-foreground" />}
@@ -695,12 +700,12 @@ export default function SuperadminPage() {
     setEvents([]);
   };
 
-  const handleEventCreated = (event: EventRecord) => {
-    setEvents((prev) => [...prev, event]);
+  const handleEventCreated = () => {
+    void fetchEvents();
   };
 
-  const handleEventUpdated = (updated: EventRecord) => {
-    setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+  const handleEventUpdated = (_updated: EventRecord) => {
+    void fetchEvents();
   };
 
   if (!authed) {
