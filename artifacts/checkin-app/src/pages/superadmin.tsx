@@ -627,10 +627,30 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
               </div>
             )}
 
+            <div className="flex gap-3 flex-wrap">
+              <a
+                href={`/${event.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-white hover:bg-secondary/30 font-display text-base transition-colors shadow-brutal"
+              >
+                <Users className="w-5 h-5" /> Open Check-In
+              </a>
+              <a
+                href={`/${event.slug}/admin`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal"
+              >
+                <Lock className="w-5 h-5" /> Open Admin
+              </a>
+            </div>
+
             <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-lg">
               <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Check-in URL</p>
-              <p className="font-mono text-xs text-gray-700 break-all">{window.location.origin}/?event={event.slug}</p>
-              <p className="text-xs text-muted-foreground mt-1">Attendees use the root check-in flow; event config is loaded by slug.</p>
+              <p className="font-mono text-xs text-gray-700 break-all">{window.location.origin}/{event.slug}</p>
             </div>
 
             {!editing && (
