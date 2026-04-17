@@ -22,11 +22,11 @@ function clearSuperadminToken() {
   sessionStorage.removeItem(SUPERADMIN_TOKEN_KEY);
 }
 
-async function loginSuperadmin(username: string, password: string): Promise<string> {
-  const res = await fetch("/api/admin/login", {
+async function loginSuperadmin(password: string): Promise<string> {
+  const res = await fetch("/api/superadmin/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ password }),
   });
   if (!res.ok) throw new Error("Invalid credentials");
   const data = (await res.json()) as { token: string };
@@ -63,7 +63,6 @@ type OrgRecord = {
 // ── Login gate ─────────────────────────────────────────────────────────────────
 
 function LoginGate({ onLogin }: { onLogin: () => void }) {
-  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
@@ -74,11 +73,11 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
     setError("");
     setLoading(true);
     try {
-      const token = await loginSuperadmin(username, password);
+      const token = await loginSuperadmin(password);
       setSuperadminToken(token);
       onLogin();
     } catch {
-      setError("Invalid username or password.");
+      setError("Incorrect password. Try again.");
     } finally {
       setLoading(false);
     }
@@ -97,27 +96,16 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               <p className="text-muted-foreground font-medium">Platform Admin</p>
             </div>
           </div>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="font-display text-lg uppercase tracking-wider block mb-2">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                autoFocus
-                autoComplete="username"
-                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Admin Password</label>
               <div className="relative">
                 <input
                   type={show ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
+                  placeholder="Enter platform admin password"
+                  autoFocus
                   autoComplete="current-password"
                   className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
                 />
@@ -137,7 +125,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               </p>
             )}
             <Button type="submit" size="lg" className="w-full" isLoading={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Signing in..." : "Unlock Event Manager"}
             </Button>
           </form>
         </CardContent>

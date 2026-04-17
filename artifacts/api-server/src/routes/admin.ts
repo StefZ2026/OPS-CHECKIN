@@ -13,6 +13,20 @@ function expectedToken(): string {
   return createHash("sha256").update(password + ":opscheckin-admin-2026").digest("hex");
 }
 
+function expectedSuperadminToken(): string {
+  const password = process.env.SUPERADMIN_PASSWORD ?? "";
+  return createHash("sha256").update(password + ":icu-superadmin-2026").digest("hex");
+}
+
+function checkBearer(token: string, expected: string): boolean {
+  try {
+    return token.length === expected.length &&
+      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
   if (!process.env.ADMIN_PASSWORD) {
     res.status(503).json({ error: "Admin auth is not configured on this server." });
@@ -20,15 +34,21 @@ export function requireAdminAuth(req: Request, res: Response, next: NextFunction
   }
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const expected = expectedToken();
-  let valid = false;
-  try {
-    valid = token.length === expected.length &&
-      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
-  } catch {
-    valid = false;
+  if (!checkBearer(token, expectedToken())) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
   }
-  if (!valid) {
+  next();
+}
+
+function requireSuperadminAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!process.env.SUPERADMIN_PASSWORD) {
+    res.status(503).json({ error: "Superadmin auth is not configured on this server." });
+    return;
+  }
+  const auth = req.headers["authorization"] ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!checkBearer(token, expectedSuperadminToken())) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -57,6 +77,19 @@ router.post("/admin/login", loginLimiter, (req, res) => {
     return;
   }
   res.json({ token: expectedToken() });
+});
+
+router.post("/superadmin/login", loginLimiter, (req, res) => {
+  const { password } = req.body as { password?: string };
+  if (!password || !process.env.SUPERADMIN_PASSWORD) {
+    res.status(401).json({ error: "Invalid password" });
+    return;
+  }
+  if (password !== process.env.SUPERADMIN_PASSWORD) {
+    res.status(401).json({ error: "Invalid password" });
+    return;
+  }
+  res.json({ token: expectedSuperadminToken() });
 });
 
 // Returns all pre-registrations (regular + volunteer) for full export
@@ -258,10 +291,10 @@ router.post("/superadmin/orgs", requireAdminAuth, async (req, res) => {
 });
 
 // ── Superadmin: Event Management ──────────────────────────────────────────────
-// Protected by the same global ADMIN_PASSWORD as the rest of the admin routes.
+// Protected by the dedicated SUPERADMIN_PASSWORD env var, separate from ADMIN_PASSWORD.
 
 // List all events with their orgs and roles
-router.get("/superadmin/events", requireAdminAuth, async (_req, res) => {
+router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
   try {
     const events = await db
       .select({
@@ -329,7 +362,7 @@ router.get("/superadmin/events", requireAdminAuth, async (_req, res) => {
 type NewRoleInput = { roleKey: string; displayName: string; sortOrder?: number };
 
 // Create a new event under an org, with optional volunteer roles
-router.post("/superadmin/events", requireAdminAuth, async (req, res) => {
+router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
   const {
     orgSlug,
     name,
@@ -433,7 +466,7 @@ router.post("/superadmin/events", requireAdminAuth, async (req, res) => {
 });
 
 // Update an existing event (name, date, password, mobilize ID, giveaway, active status)
-router.patch("/superadmin/events/:id", requireAdminAuth, async (req, res) => {
+router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid event id" });
