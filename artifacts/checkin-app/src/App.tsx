@@ -1,7 +1,8 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import HomePage from "@/pages/home";
 import CheckInFlow from "@/pages/checkin";
 import AdminDashboard from "@/pages/admin";
 import SuperadminPage from "@/pages/superadmin";
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Switch>
-      <Route path="/"><Redirect to="/superadmin" /></Route>
+      <Route path="/" component={HomePage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/superadmin" component={SuperadminPage} />
       <Route path="/:eventSlug" component={CheckInFlow} />
