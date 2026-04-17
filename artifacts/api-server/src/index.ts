@@ -50,6 +50,28 @@ async function runStartupMigrations() {
       ON CONFLICT DO NOTHING
     `);
 
+    // Ensure Building Bridges Cafe Series Session 1 event exists under ICU
+    await client.query(`
+      INSERT INTO events (org_id, name, slug, event_date, giveaway_enabled, is_active)
+      SELECT o.id, 'Building Bridges Cafe Series — Session 1', 'bb-cafe-1', '2026-05-10', false, true
+      FROM organizations o WHERE o.slug = 'icu'
+      ON CONFLICT (slug) DO NOTHING
+    `);
+
+    // Seed Building Bridges volunteer roles
+    await client.query(`
+      INSERT INTO event_roles (event_id, role_key, display_name, sort_order)
+      SELECT e.id, v.role_key, v.display_name, v.sort_order
+      FROM events e,
+        (VALUES
+          ('safety_marshal',       'Safety Marshal', 1),
+          ('de_escalator',         'De-escalator',   2),
+          ('information_services', 'Info Services',  3)
+        ) AS v(role_key, display_name, sort_order)
+      WHERE e.slug = 'bb-cafe-1'
+      ON CONFLICT DO NOTHING
+    `);
+
     // Backfill: tag any legacy records that predate the event_id column
     await client.query(`
       UPDATE attendees SET event_id = (SELECT id FROM events WHERE slug = 'nk3')

@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import CheckInFlow from "@/pages/checkin";
 import AdminDashboard from "@/pages/admin";
+import SuperadminPage from "@/pages/superadmin";
 import NotFound from "@/pages/not-found";
 
 // Use an aggressive retry strategy for the check-in app since conference Wi-Fi can be spotty
@@ -24,6 +25,7 @@ function Router() {
     <Switch>
       <Route path="/" component={CheckInFlow} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/superadmin" component={SuperadminPage} />
       <Route component={NotFound} />
     </Switch>
   );

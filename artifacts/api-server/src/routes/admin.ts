@@ -3,7 +3,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import rateLimit from "express-rate-limit";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
-import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable } from "@workspace/db/schema";
+import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -196,6 +196,168 @@ router.get("/admin/export-xlsx", requireAdminAuth, async (_req, res) => {
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="nk3-full-${new Date().toISOString().slice(0, 10)}.xlsx"`);
   res.send(buf);
+});
+
+// ── Superadmin: Event Management ──────────────────────────────────────────────
+// Protected by the same global ADMIN_PASSWORD as the rest of the admin routes.
+
+// List all events with their orgs and roles
+router.get("/superadmin/events", requireAdminAuth, async (_req, res) => {
+  try {
+    const events = await db
+      .select({
+        id: eventsTable.id,
+        name: eventsTable.name,
+        slug: eventsTable.slug,
+        eventDate: eventsTable.eventDate,
+        giveawayEnabled: eventsTable.giveawayEnabled,
+        mobilizeEventId: eventsTable.mobilizeEventId,
+        isActive: eventsTable.isActive,
+        createdAt: eventsTable.createdAt,
+        orgId: eventsTable.orgId,
+        orgName: organizationsTable.name,
+        orgSlug: organizationsTable.slug,
+      })
+      .from(eventsTable)
+      .leftJoin(organizationsTable, eq(eventsTable.orgId, organizationsTable.id))
+      .orderBy(eventsTable.createdAt);
+
+    const allRoles = await db.select().from(eventRolesTable).orderBy(eventRolesTable.sortOrder);
+    const rolesMap = new Map<number, typeof allRoles>();
+    for (const role of allRoles) {
+      if (!rolesMap.has(role.eventId)) rolesMap.set(role.eventId, []);
+      rolesMap.get(role.eventId)!.push(role);
+    }
+
+    const result = events.map((e) => ({
+      id: e.id,
+      name: e.name,
+      slug: e.slug,
+      eventDate: e.eventDate,
+      giveawayEnabled: e.giveawayEnabled,
+      mobilizeEventId: e.mobilizeEventId,
+      isActive: e.isActive,
+      createdAt: e.createdAt,
+      org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
+      roles: (rolesMap.get(e.id) ?? []).map((r) => ({
+        id: r.id,
+        roleKey: r.roleKey,
+        displayName: r.displayName,
+        sortOrder: r.sortOrder,
+      })),
+    }));
+
+    res.json({ events: result });
+  } catch (err) {
+    console.error("GET /superadmin/events error:", err);
+    res.status(500).json({ error: "Failed to load events" });
+  }
+});
+
+type NewRoleInput = { roleKey: string; displayName: string; sortOrder?: number };
+
+// Create a new event under an org, with optional volunteer roles
+router.post("/superadmin/events", requireAdminAuth, async (req, res) => {
+  const {
+    orgSlug,
+    name,
+    slug,
+    eventDate,
+    adminPassword,
+    mobilizeEventId,
+    giveawayEnabled,
+    roles,
+  } = req.body as {
+    orgSlug?: string;
+    name?: string;
+    slug?: string;
+    eventDate?: string;
+    adminPassword?: string;
+    mobilizeEventId?: string;
+    giveawayEnabled?: boolean;
+    roles?: NewRoleInput[];
+  };
+
+  if (!name || !name.trim()) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+  if (!slug || !slug.trim()) {
+    res.status(400).json({ error: "slug is required" });
+    return;
+  }
+  if (!/^[a-z0-9-]+$/.test(slug.trim())) {
+    res.status(400).json({ error: "slug must be lowercase letters, numbers, and hyphens only" });
+    return;
+  }
+
+  try {
+    // Resolve org — default to 'icu' if not specified
+    const resolvedOrgSlug = (orgSlug ?? "icu").trim();
+    const orgRows = await db
+      .select()
+      .from(organizationsTable)
+      .where(eq(organizationsTable.slug, resolvedOrgSlug))
+      .limit(1);
+    if (!orgRows[0]) {
+      res.status(400).json({ error: `Organization '${resolvedOrgSlug}' not found` });
+      return;
+    }
+    const org = orgRows[0];
+
+    const validRoles = (roles ?? [])
+      .filter((r) => r.roleKey?.trim() && r.displayName?.trim())
+      .map((r, i) => ({
+        roleKey: r.roleKey.trim(),
+        displayName: r.displayName.trim(),
+        sortOrder: r.sortOrder ?? i + 1,
+      }));
+
+    // Wrap event + role creation in a transaction so a role insert failure
+    // doesn't leave a partially-configured event behind.
+    const { newEvent, insertedRoles } = await db.transaction(async (tx) => {
+      const [newEvent] = await tx
+        .insert(eventsTable)
+        .values({
+          orgId: org.id,
+          name: name.trim(),
+          slug: slug.trim(),
+          eventDate: eventDate ? new Date(eventDate) : null,
+          adminPassword: adminPassword?.trim() || null,
+          mobilizeEventId: mobilizeEventId?.trim() || null,
+          giveawayEnabled: giveawayEnabled ?? false,
+          isActive: true,
+        })
+        .returning();
+
+      let insertedRoles: typeof eventRolesTable.$inferSelect[] = [];
+      if (validRoles.length > 0) {
+        insertedRoles = await tx
+          .insert(eventRolesTable)
+          .values(validRoles.map((r) => ({ ...r, eventId: newEvent.id })))
+          .returning();
+      }
+      return { newEvent, insertedRoles };
+    });
+
+    res.status(201).json({
+      event: {
+        ...newEvent,
+        roles: insertedRoles.map((r) => ({ id: r.id, roleKey: r.roleKey, displayName: r.displayName, sortOrder: r.sortOrder })),
+      },
+    });
+  } catch (err: unknown) {
+    // Drizzle wraps PG errors in DrizzleQueryError; the original pg code is on .cause
+    const pgCode =
+      (err as { code?: string }).code ??
+      (err as { cause?: { code?: string } }).cause?.code;
+    if (pgCode === "23505") {
+      res.status(409).json({ error: `An event with slug '${slug}' already exists` });
+      return;
+    }
+    console.error("POST /superadmin/events error:", err);
+    res.status(500).json({ error: "Failed to create event" });
+  }
 });
 
 router.delete("/admin/attendees", requireAdminAuth, async (req, res) => {
