@@ -1,17 +1,61 @@
-import { pgTable, serial, text, boolean, timestamp, integer, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const roleNameEnum = pgEnum("role_name", [
-  "safety_marshal",
-  "medic",
-  "de_escalator",
-  "chant_lead",
-  "information_services",
-]);
+// ── Organizations ─────────────────────────────────────────────────────────────
+// Top-level tenant. One org can run many events (e.g. ICU runs NK3 + Building Bridges series).
+
+export const organizationsTable = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  // Stored at org level — one key covers all their events
+  mobilizeApiKey: text("mobilize_api_key"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Events ────────────────────────────────────────────────────────────────────
+// Each rally, cafe session, or other gathering is one event under an org.
+
+export const eventsTable = pgTable("events", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().references(() => organizationsTable.id),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  eventDate: timestamp("event_date"),
+  giveawayEnabled: boolean("giveaway_enabled").notNull().default(false),
+  // Which Mobilize event to query for pre-reg lookup (null = no Mobilize, use CSV only)
+  mobilizeEventId: text("mobilize_event_id"),
+  // Plain password for the event's admin — scoped token is derived from this at login time
+  adminPassword: text("admin_password"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Event Volunteer Roles ─────────────────────────────────────────────────────
+// Defines which volunteer roles are available for check-in at a given event.
+// Replaces the hardcoded enum — each event can have completely different roles.
+
+export const eventRolesTable = pgTable("event_roles", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => eventsTable.id),
+  roleKey: text("role_key").notNull(),       // internal key, e.g. "safety_marshal"
+  displayName: text("display_name").notNull(), // shown in UI, e.g. "Safety Marshal"
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  eventIdIdx: index("event_roles_event_id_idx").on(table.eventId),
+  uniqueEventRole: uniqueIndex("event_roles_event_id_role_key_idx").on(table.eventId, table.roleKey),
+}));
+
+// ── Attendees ─────────────────────────────────────────────────────────────────
+// eventId is nullable to allow safe migration — the startup migration tags all
+// existing records with event_id=1 (NK3). After migration all rows will have a value.
+// NOTE: email is still globally unique for now; becomes per-event unique in Task 3
+// when the check-in flow is scoped to an event.
 
 export const attendeesTable = pgTable("attendees", {
   id: serial("id").primaryKey(),
+  eventId: integer("event_id").references(() => eventsTable.id),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email").notNull().unique(),
@@ -24,25 +68,30 @@ export const attendeesTable = pgTable("attendees", {
   wantsToBeContacted: boolean("wants_to_be_contacted"),
 });
 
+// ── Attendee Roles ────────────────────────────────────────────────────────────
+// roleName changed from pgEnum to plain text so any event can use any role names.
+// Existing NK3 values (safety_marshal, medic, etc.) are valid text strings — no data loss.
+
 export const attendeeRolesTable = pgTable("attendee_roles", {
   id: serial("id").primaryKey(),
   attendeeId: integer("attendee_id").notNull().references(() => attendeesTable.id),
-  roleName: roleNameEnum("role_name").notNull(),
+  roleName: text("role_name").notNull(),
   isTrained: boolean("is_trained").notNull().default(false),
   hasServed: boolean("has_served").notNull().default(false),
-  // null = pre-reg volunteer (no explicit ask); true = chose to serve today; false = has experience but declined
+  // null = pre-reg volunteer (no explicit ask); true = serving today; false = has experience but declined
   wantsToServeToday: boolean("wants_to_serve_today"),
 }, (table) => ({
   attendeeIdIdx: index("attendee_roles_attendee_id_idx").on(table.attendeeId),
 }));
 
+// ── Pre-Registrations ─────────────────────────────────────────────────────────
+// eventId nullable for safe migration — backfilled to NK3 on startup.
+
 export const preRegistrationsTable = pgTable("pre_registrations", {
   id: serial("id").primaryKey(),
+  eventId: integer("event_id").references(() => eventsTable.id),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  // Not unique — two people can share an email (couples, families).
-  // When admin resolves a conflict as "accept both", a second record is inserted
-  // with needsEmailUpdate=true so the second arrival is prompted to update at check-in.
   email: text("email").notNull(),
   phone: text("phone"),
   needsEmailUpdate: boolean("needs_email_update").notNull().default(false),
@@ -50,8 +99,12 @@ export const preRegistrationsTable = pgTable("pre_registrations", {
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 
+// ── Volunteer Pre-Registrations ───────────────────────────────────────────────
+// eventId nullable for safe migration — backfilled to NK3 on startup.
+
 export const volunteerPreRegistrationsTable = pgTable("volunteer_pre_registrations", {
   id: serial("id").primaryKey(),
+  eventId: integer("event_id").references(() => eventsTable.id),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email"),
@@ -60,6 +113,11 @@ export const volunteerPreRegistrationsTable = pgTable("volunteer_pre_registratio
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
 
+// ── Types & Insert Schemas ────────────────────────────────────────────────────
+
+export type Organization = typeof organizationsTable.$inferSelect;
+export type Event = typeof eventsTable.$inferSelect;
+export type EventRole = typeof eventRolesTable.$inferSelect;
 export type PreRegistration = typeof preRegistrationsTable.$inferSelect;
 export type VolunteerPreRegistration = typeof volunteerPreRegistrationsTable.$inferSelect;
 
