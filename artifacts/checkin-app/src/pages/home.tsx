@@ -112,9 +112,9 @@ export default function HomePage() {
             Free for progressive organizations
           </div>
           <h1 className="font-display text-white text-4xl sm:text-6xl lg:text-7xl uppercase leading-none tracking-tight mb-6">
-            Check in.{" "}
-            <span className="text-secondary">Show up.</span>{" "}
-            Make change.
+            Show up.{" "}
+            <span className="text-secondary">Check in.</span>{" "}
+            Get to work.
           </h1>
           <p className="text-white/90 text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
             OpsCheckIn is the event check-in platform built for progressive
@@ -304,7 +304,7 @@ export default function HomePage() {
             </span>
           </div>
           <p className="text-white/50 text-xs text-center">
-            Check in. Show up. Make change. © {new Date().getFullYear()} OpsCheckIn
+            Show Up. Check In. Get to Work. © {new Date().getFullYear()} OpsCheckIn
           </p>
           <div className="flex gap-4 text-xs">
             <a
