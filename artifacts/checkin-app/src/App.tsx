@@ -7,7 +7,6 @@ import AdminDashboard from "@/pages/admin";
 import SuperadminPage from "@/pages/superadmin";
 import NotFound from "@/pages/not-found";
 
-// Use an aggressive retry strategy for the check-in app since conference Wi-Fi can be spotty
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -26,6 +25,8 @@ function Router() {
       <Route path="/" component={CheckInFlow} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/superadmin" component={SuperadminPage} />
+      <Route path="/:eventSlug" component={CheckInFlow} />
+      <Route path="/:eventSlug/admin" component={AdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
