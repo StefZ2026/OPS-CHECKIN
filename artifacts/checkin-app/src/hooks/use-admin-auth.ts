@@ -1,4 +1,6 @@
-const TOKEN_KEY = "admin-token";
+import { eventApiBase, getEventSlug } from "@/lib/event-slug";
+
+const TOKEN_KEY = `admin-token:${getEventSlug()}`;
 
 export function getAdminToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
@@ -13,7 +15,7 @@ export function clearAdminToken(): void {
 }
 
 export async function loginAdmin(password: string): Promise<string> {
-  const res = await fetch("/api/admin/login", {
+  const res = await fetch(`${eventApiBase()}/admin/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),

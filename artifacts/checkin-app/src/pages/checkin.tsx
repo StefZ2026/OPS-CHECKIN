@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle, Users, ClipboardCheck } from "lucide-react";
@@ -8,10 +8,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { useAttendeeLookup, useCheckInSubmit } from "@/hooks/use-checkin";
-import type { AttendeeRoleRoleName, VolunteerPreRegResult } from "@workspace/api-client-react";
+import { useEventConfig } from "@/hooks/use-event-config";
+import { eventApiBase } from "@/lib/event-slug";
+import type { VolunteerPreRegResult } from "@workspace/api-client-react";
 
 type RoleState = {
-  roleName: AttendeeRoleRoleName;
+  roleName: string;
   title: string;
   Icon: React.ElementType;
   hasServed: boolean;
@@ -19,14 +21,7 @@ type RoleState = {
   wantsToServeToday: boolean | null;
 };
 
-const ROLE_DEFS: Pick<RoleState, "roleName" | "title" | "Icon">[] = [
-  { roleName: "safety_marshal", title: "Safety Marshal", Icon: Shield },
-  { roleName: "medic",          title: "Medic",           Icon: Activity },
-  { roleName: "de_escalator",   title: "De-escalator",    Icon: HeartHandshake },
-  { roleName: "chant_lead",     title: "Chant Lead",      Icon: Megaphone },
-];
-
-const ROLE_META: Record<AttendeeRoleRoleName, { title: string; Icon: React.ElementType; hasVest: boolean }> = {
+const ROLE_META: Record<string, { title: string; Icon: React.ElementType; hasVest: boolean }> = {
   safety_marshal:      { title: "Safety Marshal",      Icon: Shield,         hasVest: true },
   medic:               { title: "Medic",               Icon: Activity,       hasVest: true },
   de_escalator:        { title: "De-escalator",        Icon: HeartHandshake, hasVest: true },
@@ -34,15 +29,32 @@ const ROLE_META: Record<AttendeeRoleRoleName, { title: string; Icon: React.Eleme
   information_services:{ title: "Information Services", Icon: Info,           hasVest: false },
 };
 
-function makeInitialRoles(): RoleState[] {
-  return ROLE_DEFS.map(d => ({ ...d, hasServed: false, isTrained: false, wantsToServeToday: null }));
-}
-
 type Step = "home" | "lookup" | "found" | 2 | "vol_gate" | 3 | "future_contact" | "invite" | "volunteer" | "fun" | "duplicate" | 4
           | "vol_found" | "vol_not_found" | "vol_manual" | "name_confirm" | "dup_name_confirm" | "shared_email";
 
 export default function CheckInFlow() {
   const { toast } = useToast();
+  const { data: config } = useEventConfig();
+
+  const roleDefs = useMemo((): Pick<RoleState, "roleName" | "title" | "Icon">[] => {
+    if (!config?.roles?.length) return [];
+    return config.roles.map(r => ({
+      roleName: r.key,
+      title: r.displayName,
+      Icon: ROLE_META[r.key]?.Icon ?? Shield,
+    }));
+  }, [config]);
+
+  const eventTitle = config?.name ?? "No Kings 3 Rally";
+  const eventDateDisplay = config?.eventDate
+    ? (() => {
+        const datePart = String(config.eventDate).slice(0, 10);
+        const d = new Date(datePart + "T12:00:00");
+        return isNaN(d.getTime())
+          ? String(config.eventDate)
+          : d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      })()
+    : "March 28";
 
   const [step, setStep] = useState<Step>("home");
   const [firstName, setFirstName] = useState("");
@@ -52,11 +64,11 @@ export default function CheckInFlow() {
   const [preRegistered, setPreRegistered] = useState(false);
   const [mobilizeId, setMobilizeId] = useState<string | null>(null);
   const [walkinSource, setWalkinSource] = useState<"not_found" | "direct">("direct");
-  const [roles, setRoles] = useState<RoleState[]>(makeInitialRoles());
+  const [roles, setRoles] = useState<RoleState[]>([]);
   const [isVolunteerMode, setIsVolunteerMode] = useState(false);
   const [volunteerPreRegData, setVolunteerPreRegData] = useState<VolunteerPreRegResult | null>(null);
-  const [checkedInVolunteerRole, setCheckedInVolunteerRole] = useState<AttendeeRoleRoleName | null>(null);
-  const [volunteerManualRole, setVolunteerManualRole] = useState<AttendeeRoleRoleName | null>(null);
+  const [checkedInVolunteerRole, setCheckedInVolunteerRole] = useState<string | null>(null);
+  const [volunteerManualRole, setVolunteerManualRole] = useState<string | null>(null);
   const [isVolunteerManual, setIsVolunteerManual] = useState(false);
   const [preRegName, setPreRegName] = useState<{ firstName: string; lastName: string } | null>(null);
   const [storedName, setStoredName] = useState<{ firstName: string; lastName: string } | null>(null);
@@ -64,7 +76,7 @@ export default function CheckInFlow() {
   const [sharedEmailWith, setSharedEmailWith] = useState<string | null>(null);
   const [newEmailForShared, setNewEmailForShared] = useState("");
   const [isSharedEmailUpdater, setIsSharedEmailUpdater] = useState(false);
-  const [volPriorRoles, setVolPriorRoles] = useState<Partial<Record<AttendeeRoleRoleName, { hasServed: boolean; isTrained: boolean }>>>({});
+  const [volPriorRoles, setVolPriorRoles] = useState<Record<string, { hasServed: boolean; isTrained: boolean }>>({});
   const [wonNoIceButton, setWonNoIceButton] = useState(false);
   const [wantsToBeContacted, setWantsToBeContacted] = useState<boolean | null>(null);
   const [futureContactSource, setFutureContactSource] = useState<"vol_gate" | 3 | "invite">("vol_gate");
@@ -75,12 +87,16 @@ export default function CheckInFlow() {
   const eligibleRoles = roles.filter(r => r.hasServed || r.isTrained);
   const anyEligible = eligibleRoles.length > 0;
 
+  useEffect(() => {
+    setRoles(roleDefs.map(d => ({ ...d, hasServed: false, isTrained: false, wantsToServeToday: null })));
+  }, [roleDefs]);
+
   const handleReset = () => {
     setStep("home");
     setFirstName(""); setLastName(""); setEmail(""); setPhone("");
     setPreRegistered(false); setMobilizeId(null);
     setWalkinSource("direct");
-    setRoles(makeInitialRoles());
+    setRoles(roleDefs.map(d => ({ ...d, hasServed: false, isTrained: false, wantsToServeToday: null })));
     setIsVolunteerMode(false);
     setVolunteerPreRegData(null);
     setCheckedInVolunteerRole(null);
@@ -98,11 +114,11 @@ export default function CheckInFlow() {
     setFutureContactSource("vol_gate");
   };
 
-  const buildVolRoles = (primaryRole: AttendeeRoleRoleName, wantsToServeTodayValue: boolean | null) => {
-    const result: Array<{ roleName: AttendeeRoleRoleName; isTrained: boolean; hasServed: boolean; wantsToServeToday: boolean | null }> = [];
+  const buildVolRoles = (primaryRole: string, wantsToServeTodayValue: boolean | null) => {
+    const result: Array<{ roleName: string; isTrained: boolean; hasServed: boolean; wantsToServeToday: boolean | null }> = [];
     const primary = volPriorRoles[primaryRole];
     result.push({ roleName: primaryRole, isTrained: true, hasServed: primary?.hasServed ?? false, wantsToServeToday: wantsToServeTodayValue });
-    for (const [rn, flags] of Object.entries(volPriorRoles) as [AttendeeRoleRoleName, { hasServed: boolean; isTrained: boolean }][]) {
+    for (const [rn, flags] of Object.entries(volPriorRoles)) {
       if (rn === primaryRole) continue;
       if (flags.hasServed || flags.isTrained) {
         result.push({ roleName: rn, isTrained: flags.isTrained, hasServed: flags.hasServed, wantsToServeToday: false });
@@ -111,7 +127,7 @@ export default function CheckInFlow() {
     return result;
   };
 
-  const updateVolPriorRole = (roleName: AttendeeRoleRoleName, field: "hasServed" | "isTrained", value: boolean) => {
+  const updateVolPriorRole = (roleName: string, field: "hasServed" | "isTrained", value: boolean) => {
     setVolPriorRoles(prev => ({
       ...prev,
       [roleName]: { hasServed: false, isTrained: false, ...prev[roleName], [field]: value },
@@ -138,7 +154,7 @@ export default function CheckInFlow() {
   };
 
   const correctStoredName = async (attendeeId: number, newFirst: string, newLast: string) => {
-    await fetch("/api/check-in/correct-name", {
+    await fetch(`${eventApiBase()}/check-in/correct-name`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ attendeeId, email, firstName: newFirst, lastName: newLast }),
@@ -251,7 +267,7 @@ export default function CheckInFlow() {
   };
 
   const submitVolunteerCheckin = () => {
-    const roleName = volunteerPreRegData!.roleName as AttendeeRoleRoleName;
+    const roleName = volunteerPreRegData!.roleName;
     const payload = {
       firstName: firstName.trim(),
       lastName: lastName.trim() || "Volunteer",
@@ -328,7 +344,7 @@ export default function CheckInFlow() {
     });
   };
 
-  const updateRole = (id: AttendeeRoleRoleName, updates: Partial<RoleState>) => {
+  const updateRole = (id: string, updates: Partial<RoleState>) => {
     setRoles(prev => prev.map(r => {
       if (r.roleName !== id) return r;
       const next = { ...r, ...updates };
@@ -362,8 +378,8 @@ export default function CheckInFlow() {
         <div className="flex items-center gap-4">
           <img src="/icu-logo.jpg" alt="Indivisible Cherokee United" className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover" />
           <div>
-            <h1 className="font-display text-xl md:text-3xl text-white leading-tight">No Kings 3 Rally</h1>
-            <p className="text-white/70 text-sm font-medium hidden md:block">March 28th · ICU <span className="whitespace-nowrap">Check-In</span></p>
+            <h1 className="font-display text-xl md:text-3xl text-white leading-tight">{eventTitle}</h1>
+            <p className="text-white/70 text-sm font-medium hidden md:block">{eventDateDisplay} · ICU <span className="whitespace-nowrap">Check-In</span></p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -562,16 +578,19 @@ export default function CheckInFlow() {
               </div>
 
               {(() => {
-                const roleName = volunteerPreRegData.roleName as AttendeeRoleRoleName;
-                const meta = ROLE_META[roleName] ?? { title: volunteerPreRegData.roleName, Icon: HardHat, hasVest: false };
+                const roleName = volunteerPreRegData.roleName;
+                const configRole = roleDefs.find(r => r.roleName === roleName);
+                const fallback = ROLE_META[roleName] ?? { title: roleName, Icon: HardHat };
+                const displayTitle = configRole?.title ?? fallback.title;
+                const DisplayIcon = configRole?.Icon ?? fallback.Icon;
                 return (
                   <div className="flex items-center justify-center gap-4 p-6 bg-primary/10 border-4 border-primary rounded-2xl">
                     <div className="p-4 bg-primary rounded-2xl border-4 border-foreground shadow-brutal-sm">
-                      <meta.Icon className="w-10 h-10 text-white" />
+                      <DisplayIcon className="w-10 h-10 text-white" />
                     </div>
                     <div>
-                      <p className="font-display text-4xl md:text-5xl text-primary">{meta.title}</p>
-                      <p className="font-bold text-muted-foreground">NK3 Volunteer</p>
+                      <p className="font-display text-4xl md:text-5xl text-primary">{displayTitle}</p>
+                      <p className="font-bold text-muted-foreground">{eventTitle} Volunteer</p>
                     </div>
                   </div>
                 );
@@ -616,23 +635,21 @@ export default function CheckInFlow() {
                 </CardContent>
               </Card>
 
-              {(() => {
-                const primaryRole = volunteerPreRegData.roleName as AttendeeRoleRoleName;
-                return (
+              {roleDefs.length > 0 && (
                   <div className="space-y-3">
                     <div>
                       <p className="font-display text-lg uppercase tracking-wider">Prior experience <span className="text-muted-foreground font-sans font-medium normal-case text-sm">(optional)</span></p>
                       <p className="text-sm font-medium text-muted-foreground mt-1">Have you worked in or trained for any of these roles at a previous rally or event?</p>
                     </div>
                     <div className="space-y-2">
-                      {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([rn, meta]) => {
+                      {roleDefs.map(({ roleName: rn, title, Icon }) => {
                         const prior = volPriorRoles[rn] ?? { hasServed: false, isTrained: false };
-                        const isPrimary = rn === primaryRole;
+                        const isPrimary = rn === volunteerPreRegData.roleName;
                         return (
                           <div key={rn} className={`p-3 rounded-xl border-2 ${isPrimary ? 'border-primary/40 bg-primary/5' : 'border-foreground/15 bg-white'}`}>
                             <div className="flex items-center gap-2 mb-2">
-                              <meta.Icon className={`w-4 h-4 flex-shrink-0 ${isPrimary ? 'text-primary' : 'text-muted-foreground'}`} />
-                              <span className={`font-bold text-sm ${isPrimary ? 'text-primary' : ''}`}>{meta.title}</span>
+                              <Icon className={`w-4 h-4 flex-shrink-0 ${isPrimary ? 'text-primary' : 'text-muted-foreground'}`} />
+                              <span className={`font-bold text-sm ${isPrimary ? 'text-primary' : ''}`}>{title}</span>
                               {isPrimary && <span className="ml-auto text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">Today's role</span>}
                             </div>
                             <div className="grid grid-cols-2 gap-2">
@@ -652,8 +669,7 @@ export default function CheckInFlow() {
                       })}
                     </div>
                   </div>
-                );
-              })()}
+              )}
 
               <Button size="xl" className="w-full group" onClick={submitVolunteerCheckin}
                 isLoading={submitMutation.isPending} disabled={submitMutation.isPending}>
@@ -724,15 +740,15 @@ export default function CheckInFlow() {
                 <div>
                   <label className="font-display text-2xl uppercase tracking-wider mb-3 block">Which role did you sign up for?</label>
                   <div className="grid grid-cols-1 gap-2">
-                    {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([roleName, meta]) => (
+                    {roleDefs.map(({ roleName, title, Icon }) => (
                       <button key={roleName} onClick={() => setVolunteerManualRole(roleName)}
                         className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left
                           ${volunteerManualRole === roleName
                             ? 'border-primary bg-primary/10'
                             : 'border-foreground/30 bg-white hover:bg-muted/20'}`}>
-                        <meta.Icon className={`w-4 h-4 flex-shrink-0 ${volunteerManualRole === roleName ? 'text-primary' : 'text-muted-foreground'}`} />
+                        <Icon className={`w-4 h-4 flex-shrink-0 ${volunteerManualRole === roleName ? 'text-primary' : 'text-muted-foreground'}`} />
                         <span className={`font-bold text-base ${volunteerManualRole === roleName ? 'text-primary' : ''}`}>
-                          {meta.title}
+                          {title}
                         </span>
                         {volunteerManualRole === roleName && (
                           <span className="ml-auto text-primary font-bold">✓</span>
@@ -750,14 +766,14 @@ export default function CheckInFlow() {
                     <p className="text-sm font-medium text-muted-foreground mt-1">Have you worked in or trained for any of these roles at a previous rally or event?</p>
                   </div>
                   <div className="space-y-2">
-                    {(Object.entries(ROLE_META) as [AttendeeRoleRoleName, typeof ROLE_META[AttendeeRoleRoleName]][]).map(([rn, meta]) => {
+                    {roleDefs.map(({ roleName: rn, title, Icon }) => {
                       const prior = volPriorRoles[rn] ?? { hasServed: false, isTrained: false };
                       const isPrimary = rn === volunteerManualRole;
                       return (
                         <div key={rn} className={`p-3 rounded-xl border-2 ${isPrimary ? 'border-primary/40 bg-primary/5' : 'border-foreground/15 bg-white'}`}>
                           <div className="flex items-center gap-2 mb-2">
-                            <meta.Icon className={`w-4 h-4 flex-shrink-0 ${isPrimary ? 'text-primary' : 'text-muted-foreground'}`} />
-                            <span className={`font-bold text-sm ${isPrimary ? 'text-primary' : ''}`}>{meta.title}</span>
+                            <Icon className={`w-4 h-4 flex-shrink-0 ${isPrimary ? 'text-primary' : 'text-muted-foreground'}`} />
+                            <span className={`font-bold text-sm ${isPrimary ? 'text-primary' : ''}`}>{title}</span>
                             {isPrimary && <span className="ml-auto text-xs bg-primary text-white px-2 py-0.5 rounded-full font-medium">Today's role</span>}
                           </div>
                           <div className="grid grid-cols-2 gap-2">
@@ -838,8 +854,8 @@ export default function CheckInFlow() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {ROLE_DEFS.map(({ roleName, title, Icon }) => {
-                  const role = roles.find(r => r.roleName === roleName)!;
+                {roleDefs.map(({ roleName, title, Icon }) => {
+                  const role = roles.find(r => r.roleName === roleName) ?? { hasServed: false, isTrained: false, wantsToServeToday: null as boolean | null };
                   const isActive = role.hasServed || role.isTrained;
                   return (
                     <Card key={roleName} className={`transition-all duration-200 ${isActive ? 'ring-4 ring-primary' : ''}`}>
@@ -884,7 +900,7 @@ export default function CheckInFlow() {
               <div className="text-center space-y-2 mb-4">
                 <h2 className="font-display text-4xl md:text-5xl text-primary">You're experienced!</h2>
                 <p className="text-xl font-medium text-muted-foreground">
-                  Would you like to help out today? We'd love to have you — there's a cool NK3 button in it for you! 🎉
+                  Would you like to help out today? We'd love to have you — there's a cool {eventTitle} button in it for you! 🎉
                 </p>
               </div>
 
@@ -1016,7 +1032,7 @@ export default function CheckInFlow() {
                 <p className="font-display text-3xl md:text-4xl text-foreground leading-snug">YOU'RE AMAZING,<br />{firstName.toUpperCase()}!</p>
                 <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-2">
                   <p className="font-bold text-xl">Welcome to the team!</p>
-                  <p className="font-bold text-xl text-primary">Let the safety team know your role — they'll get you your proper vest, NK3 volunteer button and assignment. 🧡</p>
+                  <p className="font-bold text-xl text-primary">Let the safety team know your role — they'll get you your proper vest, {eventTitle} volunteer button and assignment. 🧡</p>
                 </div>
               </motion.div>
             </motion.div>
@@ -1213,7 +1229,7 @@ export default function CheckInFlow() {
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="space-y-4">
                 <h2 className="font-display text-5xl md:text-7xl text-primary leading-none">YOU'RE IN!</h2>
                 <p className="font-display text-3xl md:text-5xl text-foreground leading-tight">
-                  WELCOME TO NO KINGS 3,<br />{firstName.toUpperCase()}!
+                  WELCOME TO {eventTitle.toUpperCase()},<br />{firstName.toUpperCase()}!
                 </p>
 
                 {wonNoIceButton && (
@@ -1231,22 +1247,22 @@ export default function CheckInFlow() {
                 {checkedInVolunteerRole ? (
                   <div className="border-4 border-primary rounded-2xl bg-primary/5 p-6 mt-4 space-y-3">
                     <p className="font-bold text-xl text-primary">
-                      🎖️ Congrats, you're checked in as a {ROLE_META[checkedInVolunteerRole]?.title ?? checkedInVolunteerRole}!
+                      🎖️ Congrats, you're checked in as a {roleDefs.find(r => r.roleName === checkedInVolunteerRole)?.title ?? ROLE_META[checkedInVolunteerRole]?.title ?? checkedInVolunteerRole}!
                     </p>
                     {isVolunteerManual ? (
                       <>
                         <p className="font-bold text-lg">Let the <span className="text-primary">safety team</span> know we couldn't find your pre-registration details.</p>
-                        <p className="font-bold text-lg">They'll get you your proper vest, NK3 volunteer button and assignment. 🧡</p>
+                        <p className="font-bold text-lg">They'll get you your proper vest, {eventTitle} volunteer button and assignment. 🧡</p>
                       </>
                     ) : ROLE_META[checkedInVolunteerRole]?.hasVest ? (
                       <>
                         <p className="font-bold text-xl">Please see the safety team to pick up your</p>
-                        <p className="font-display text-2xl text-primary">VEST + NK3 Volunteer Button + Assignment 🧡</p>
+                        <p className="font-display text-2xl text-primary">VEST + {eventTitle} Volunteer Button + Assignment 🧡</p>
                       </>
                     ) : (
                       <>
                         <p className="font-bold text-xl">Please pick up your</p>
-                        <p className="font-display text-2xl text-primary">NK3 Volunteer Button + Assignment 🧡</p>
+                        <p className="font-display text-2xl text-primary">{eventTitle} Volunteer Button + Assignment 🧡</p>
                         <p className="text-muted-foreground font-medium">at the info table</p>
                       </>
                     )}

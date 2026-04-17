@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { format } from "date-fns";
 import QRCode from "qrcode";
 import {
@@ -12,6 +12,8 @@ import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
 import { useToast } from "@/hooks/use-toast";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
+import { useEventConfig } from "@/hooks/use-event-config";
+import { eventApiBase, getEventSlug } from "@/lib/event-slug";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,6 +44,8 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { data: eventConfig } = useEventConfig();
+  const loginSubtitle = eventConfig?.name ? `ICU ${eventConfig.name}` : "ICU Check-In";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +72,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
             </div>
             <div>
               <h1 className="font-display text-3xl leading-tight">Admin Access</h1>
-              <p className="text-muted-foreground font-medium">ICU No Kings 3 Rally</p>
+              <p className="text-muted-foreground font-medium">{loginSubtitle}</p>
             </div>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -138,7 +142,7 @@ function CsvUploadSection() {
     if (!csvText.trim()) { setError("Please select a CSV file first."); return; }
     setError(""); setLoading(true); setStatus(null); setNameConflicts([]);
     try {
-      const res = await fetch("/api/admin/upload-registrations", {
+      const res = await fetch(`${eventApiBase()}/admin/upload-registrations`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ csv: csvText }),
@@ -163,7 +167,7 @@ function CsvUploadSection() {
     setResolving(conflict.email);
     const pick = chosen === 1 ? conflict.option1 : conflict.option2;
     try {
-      await fetch("/api/admin/upload-registrations/resolve-name", {
+      await fetch(`${eventApiBase()}/admin/upload-registrations/resolve-name`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ email: conflict.email, firstName: pick.firstName, lastName: pick.lastName }),
@@ -177,7 +181,7 @@ function CsvUploadSection() {
   const resolveAsBoth = async (conflict: NameConflict) => {
     setResolving(conflict.email);
     try {
-      await fetch("/api/admin/upload-registrations/accept-both", {
+      await fetch(`${eventApiBase()}/admin/upload-registrations/accept-both`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ email: conflict.email, option1: conflict.option1, option2: conflict.option2 }),
@@ -275,6 +279,8 @@ function CsvUploadSection() {
 function QrCodeSection() {
   const [url, setUrl] = useState(window.location.origin + "/");
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const { data: eventConfig } = useEventConfig();
+  const qrEventTitle = eventConfig?.name ?? "Check-In";
 
   useEffect(() => {
     if (!url) return;
@@ -289,7 +295,7 @@ function QrCodeSection() {
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`
-      <html><head><title>NK3 Check-In QR Code</title>
+      <html><head><title>${qrEventTitle} — Check-In QR Code</title>
       <style>
         body { font-family: sans-serif; text-align: center; padding: 40px; }
         h1 { font-size: 28px; margin-bottom: 8px; }
@@ -298,7 +304,7 @@ function QrCodeSection() {
         .url { font-size: 13px; color: #888; margin-top: 16px; word-break: break-all; }
       </style></head>
       <body>
-        <h1>No Kings 3 Rally — Check-In</h1>
+        <h1>${qrEventTitle} — Check-In</h1>
         <p>Scan to check in from your phone</p>
         <img src="${qrDataUrl}" />
         <div class="url">${url}</div>
@@ -403,7 +409,7 @@ function VolunteerUploadSection() {
     if (rows.length === 0) { setError("Please select an Excel file first."); return; }
     setError(""); setLoading(true); setStatus(null); setRoleConflicts([]);
     try {
-      const res = await fetch("/api/admin/upload-volunteers", {
+      const res = await fetch(`${eventApiBase()}/admin/upload-volunteers`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ rows }),
@@ -426,7 +432,7 @@ function VolunteerUploadSection() {
     const key = `${conflict.firstName} ${conflict.lastName}`;
     setResolving(key);
     try {
-      await fetch("/api/admin/upload-volunteers/resolve-role", {
+      await fetch(`${eventApiBase()}/admin/upload-volunteers/resolve-role`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ firstName: conflict.firstName, lastName: conflict.lastName, roleName: chosenRoleName }),
@@ -554,6 +560,16 @@ type EditForm = { firstName: string; lastName: string; phone: string; email: str
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const { toast } = useToast();
   const { data, isLoading, isError, refetch, isRefetching } = useAttendees();
+  const { data: eventConfig } = useEventConfig();
+  const eventTitle = eventConfig?.name ?? "No Kings 3 Rally";
+  const eventDateDisplay = useMemo(() => {
+    if (!eventConfig?.eventDate) return "March 28";
+    const datePart = String(eventConfig.eventDate).slice(0, 10);
+    const d = new Date(datePart + "T12:00:00");
+    return isNaN(d.getTime())
+      ? String(eventConfig.eventDate)
+      : d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  }, [eventConfig]);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("checkedInAt");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -574,7 +590,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const res = await fetch("/api/admin/export-xlsx", {
+      const res = await fetch(`${eventApiBase()}/admin/export-xlsx`, {
         headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
@@ -582,7 +598,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `nk3-full-roster-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      anchor.download = `${getEventSlug()}-full-roster-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -599,7 +615,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const handleToggleTrained = async (roleId: number, current: boolean) => {
     setTogglingRoleId(roleId);
     try {
-      await fetch(`/api/admin/attendee-roles/${roleId}/trained`, {
+      await fetch(`${eventApiBase()}/admin/attendee-roles/${roleId}/trained`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ isTrained: !current }),
@@ -639,7 +655,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       const auth = `Bearer ${getAdminToken() ?? ""}`;
       const jsonH = { "Content-Type": "application/json", Authorization: auth };
 
-      const res = await fetch(`/api/admin/attendees/${editingAttendee.id}`, {
+      const res = await fetch(`${eventApiBase()}/admin/attendees/${editingAttendee.id}`, {
         method: "PATCH",
         headers: jsonH,
         body: JSON.stringify({
@@ -653,9 +669,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       for (const role of editForm.roles) {
         if (role.isDeleted && role.id) {
-          await fetch(`/api/admin/attendee-roles/${role.id}`, { method: "DELETE", headers: { Authorization: auth } });
+          await fetch(`${eventApiBase()}/admin/attendee-roles/${role.id}`, { method: "DELETE", headers: { Authorization: auth } });
         } else if (role.isNew) {
-          await fetch(`/api/admin/attendees/${editingAttendee.id}/roles`, {
+          await fetch(`${eventApiBase()}/admin/attendees/${editingAttendee.id}/roles`, {
             method: "POST",
             headers: jsonH,
             body: JSON.stringify({ roleName: role.roleName, wantsToServeToday: role.wantsToServeToday, isTrained: role.isTrained, hasServed: role.hasServed }),
@@ -664,7 +680,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           const orig = editingAttendee.roles.find((r) => r.id === role.id);
           const changed = orig && (orig.roleName !== role.roleName || (orig.wantsToServeToday ?? null) !== role.wantsToServeToday || orig.isTrained !== role.isTrained || orig.hasServed !== role.hasServed);
           if (changed) {
-            await fetch(`/api/admin/attendee-roles/${role.id}`, {
+            await fetch(`${eventApiBase()}/admin/attendee-roles/${role.id}`, {
               method: "PUT",
               headers: jsonH,
               body: JSON.stringify({ roleName: role.roleName, wantsToServeToday: role.wantsToServeToday, isTrained: role.isTrained, hasServed: role.hasServed }),
@@ -686,7 +702,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const handleDelete = async (email: string, name: string) => {
     if (!window.confirm(`Remove ${name} from the roster? This cannot be undone.`)) return;
     try {
-      const res = await fetch("/api/admin/attendees", {
+      const res = await fetch(`${eventApiBase()}/admin/attendees`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -740,7 +756,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <img src="/icu-logo.jpg" alt="ICU" className="w-14 h-14 rounded-full object-cover hidden md:block" />
             <div>
               <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
-              <p className="text-lg text-gray-300 font-medium">ICU No Kings 3 Rally · March 28th</p>
+              <p className="text-lg text-gray-300 font-medium">ICU {eventTitle} · {eventDateDisplay}</p>
             </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto flex-wrap">
