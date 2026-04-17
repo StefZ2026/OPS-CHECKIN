@@ -16,5 +16,7 @@ export interface AttendeeWithRoles {
   preRegistered: boolean;
   mobilizeId?: string | null;
   checkedInAt: Date;
+  isNoIceWinner?: boolean;
+  wantsToBeContacted?: boolean | null;
   roles: AttendeeRole[];
 }

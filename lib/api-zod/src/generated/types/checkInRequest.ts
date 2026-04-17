@@ -11,7 +11,9 @@ export interface CheckInRequest {
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string | null;
   preRegistered: boolean;
   mobilizeId?: string | null;
+  wantsToBeContacted?: boolean | null;
   roles: AttendeeRole[];
 }
