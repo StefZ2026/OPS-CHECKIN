@@ -83,8 +83,8 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               <Lock className="w-8 h-8" />
             </div>
             <div>
-              <h1 className="font-display text-3xl leading-tight">Platform Admin</h1>
-              <p className="text-muted-foreground font-medium">Event Management</p>
+              <h1 className="font-display text-3xl leading-tight">OpsCheckIn</h1>
+              <p className="text-muted-foreground font-medium">Platform Admin</p>
             </div>
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -736,8 +736,8 @@ export default function SuperadminPage() {
     <div className="min-h-screen bg-background">
       <header className="bg-foreground text-white px-6 py-4 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl">Platform Admin</h1>
-          <p className="text-white/70 text-sm font-medium">ICU Event Management</p>
+          <h1 className="font-display text-2xl">OpsCheckIn</h1>
+          <p className="text-white/70 text-sm font-medium">Platform Admin · Event Management</p>
         </div>
         <button
           onClick={handleLogout}
