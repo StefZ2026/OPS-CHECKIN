@@ -24,7 +24,7 @@ export interface OrgConfig {
 
 const seedConfig: OrgConfig = {
   slug: "icu",
-  name: "ICU - Indivisible Caucus United",
+  name: "Indivisible Cherokee United",
   events: [
     {
       slug: "nk3",
@@ -37,17 +37,6 @@ const seedConfig: OrgConfig = {
         { roleKey: "de_escalator",         displayName: "De-escalator",   sortOrder: 3 },
         { roleKey: "chant_lead",           displayName: "Chant Lead",     sortOrder: 4 },
         { roleKey: "information_services", displayName: "Info Services",  sortOrder: 5 },
-      ],
-    },
-    {
-      slug: "bb-cafe-1",
-      name: "Building Bridges Cafe Series — Session 1",
-      eventDate: "2026-05-10",
-      giveawayEnabled: false,
-      roles: [
-        { roleKey: "safety_marshal",       displayName: "Safety Marshal", sortOrder: 1 },
-        { roleKey: "de_escalator",         displayName: "De-escalator",   sortOrder: 2 },
-        { roleKey: "information_services", displayName: "Info Services",  sortOrder: 3 },
       ],
     },
   ],
