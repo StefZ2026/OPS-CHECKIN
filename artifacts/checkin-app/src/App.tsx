@@ -6,6 +6,8 @@ import HomePage from "@/pages/home";
 import CheckInFlow from "@/pages/checkin";
 import AdminDashboard from "@/pages/admin";
 import SuperadminPage from "@/pages/superadmin";
+import EntryPage from "@/pages/entry";
+import ScanPage from "@/pages/scan";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -26,8 +28,10 @@ function Router() {
       <Route path="/" component={HomePage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/superadmin" component={SuperadminPage} />
-      <Route path="/:eventSlug" component={CheckInFlow} />
+      <Route path="/:eventSlug/entry/:token" component={EntryPage} />
+      <Route path="/:eventSlug/scan" component={ScanPage} />
       <Route path="/:eventSlug/admin" component={AdminDashboard} />
+      <Route path="/:eventSlug" component={CheckInFlow} />
       <Route component={NotFound} />
     </Switch>
   );

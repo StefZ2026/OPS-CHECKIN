@@ -29,6 +29,8 @@ export const eventsTable = pgTable("events", {
   // Plain password for the event's admin — scoped token is derived from this at login time
   adminPassword: text("admin_password"),
   isActive: boolean("is_active").notNull().default(true),
+  // When true: day-1 check-in sends an SMS with a QR wristband link for re-entry on subsequent days
+  smsWristbandEnabled: boolean("sms_wristband_enabled").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -65,6 +67,10 @@ export const attendeesTable = pgTable("attendees", {
   isNoIceWinner: boolean("is_no_ice_winner").notNull().default(false),
   // null = never asked; true = yes; false = explicitly declined
   wantsToBeContacted: boolean("wants_to_be_contacted"),
+  // QR wristband re-entry token (set after day-1 check-in at consecutive-day events)
+  entryToken: text("entry_token").unique(),
+  // ISO date "YYYY-MM-DD" of the most recent day this token was scanned for entry
+  entryTokenUsedDate: text("entry_token_used_date"),
 }, (table) => ({
   eventEmailUnique: uniqueIndex("attendees_event_id_email_idx").on(table.eventId, table.email),
 }));

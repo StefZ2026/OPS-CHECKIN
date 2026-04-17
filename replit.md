@@ -27,7 +27,8 @@ Tablet-optimized event check-in for ICU (Indivisible Cherokee United). Supports 
 
 #### Data Model
 - `organizations` → top-level tenant (e.g. ICU)
-- `events` → individual rallies/sessions under an org; each has `slug`, `adminPassword`, `mobilizeEventId`, `giveawayEnabled`
+- `events` → individual rallies/sessions under an org; each has `slug`, `adminPassword`, `mobilizeEventId`, `giveawayEnabled`, `smsWristbandEnabled`
+- `attendees` → each row has optional `entryToken` (40-char hex, unique) + `entryTokenUsedDate` (ISO date string) for QR wristband re-entry
 - `event_roles` → volunteer roles available per event (dynamic, replaces hardcoded enum)
 - All data tables carry `event_id` FK for multi-tenancy
 
@@ -40,6 +41,7 @@ All routes are prefixed `/api/events/:eventSlug/`:
 - `POST /check-in/submit` — check-in scoped to event
 - `GET  /admin/export-xlsx` — XLSX with no-shows, scoped to event
 - `GET  /admin/pre-registrations` — all pre-regs for this event
+- `GET  /check-in/scan/:token` — gate scanner: verify QR wristband token, mark used for today
 - Upload endpoints: `/admin/upload-registrations`, `/admin/upload-volunteers`
 
 #### Legacy Routes (NK3 backwards-compat, event_id=1)

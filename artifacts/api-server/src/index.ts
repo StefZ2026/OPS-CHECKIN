@@ -33,6 +33,14 @@ async function runStartupMigrations() {
       WHERE event_id IS NULL
     `);
 
+    // ── QR wristband columns (idempotent) ────────────────────────────────────
+    await client.query(`
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS sms_wristband_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE attendees ADD COLUMN IF NOT EXISTS entry_token TEXT;
+      ALTER TABLE attendees ADD COLUMN IF NOT EXISTS entry_token_used_date TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS attendees_entry_token_unique ON attendees (entry_token) WHERE entry_token IS NOT NULL;
+    `);
+
     // ── RLS Phase 1 (idempotent — re-applied every startup so drizzle-kit push
     //    can't wipe it) ──────────────────────────────────────────────────────────
     // Enables Row Level Security on all tenant-data tables. The app user (postgres,

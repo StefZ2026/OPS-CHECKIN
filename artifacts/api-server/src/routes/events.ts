@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { createHash, timingSafeEqual } from "crypto";
+import { createHash, timingSafeEqual, randomBytes } from "crypto";
 import rateLimit from "express-rate-limit";
+import { sendSms } from "../lib/sms";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import {
@@ -987,6 +988,34 @@ router.post("/check-in/submit", checkinLimiter, async (req: Request, res: Respon
       await db.insert(attendeeRolesTable).values(resolvedRoles);
     }
 
+    // ── QR wristband: generate token + send SMS ──────────────────────────────
+    // Only for consecutive-day events (smsWristbandEnabled) with a phone number.
+    // Fire-and-forget — don't block the check-in response.
+    const phoneDigits = (phone?.replace(/\D/g, "") ?? "");
+    if (event.smsWristbandEnabled && phoneDigits.length >= 10) {
+      const token = randomBytes(20).toString("hex");
+      // Persist token on the attendee record
+      db.update(attendeesTable)
+        .set({ entryToken: token })
+        .where(eq(attendeesTable.id, newAttendee.id))
+        .catch((e) => console.error("[wristband] token save failed:", e));
+
+      // Build the re-entry URL
+      const baseUrl = process.env.CHECKIN_BASE_URL?.replace(/\/$/, "")
+        ?? `${req.protocol}://${req.get("host")}`;
+      const entryUrl = `${baseUrl}/${event.slug}/entry/${token}`;
+
+      const smsBody = [
+        `You're checked in to ${event.name}! 🎉`,
+        `Save this — it's your re-entry code for the rest of the event:`,
+        entryUrl,
+        `(This message was sent from ${process.env.TELNYX_FROM_NUMBER ?? "the event system"}. Save it now!)`,
+      ].join("\n");
+
+      sendSms(phoneDigits, smsBody)
+        .catch((e) => console.error("[wristband] SMS send failed:", e));
+    }
+
     res.status(201).json({ id: newAttendee.id, message: "Check-in successful!", wonNoIceButton });
   } catch (err) {
     console.error("POST /check-in/submit error:", err);
@@ -1013,6 +1042,73 @@ router.post("/check-in/correct-name", async (req: Request, res: Response): Promi
   } catch (err) {
     console.error("POST /check-in/correct-name error:", err);
     res.status(500).json({ error: "Name correction failed" });
+  }
+});
+
+// ── QR Wristband: scan / verify token ────────────────────────────────────────
+// Called by the gate-staff scanner page after reading an attendee's QR code.
+// Marks the token as used for today and returns attendee name.
+//
+// Rate-limited separately so a bad actor can't enumerate tokens.
+const scanRateLimit = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false });
+
+router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Response): Promise<void> => {
+  const { token } = req.params as { token: string };
+  if (!token || !/^[0-9a-f]{40}$/i.test(token)) {
+    res.status(400).json({ error: "Invalid token format" });
+    return;
+  }
+
+  const event = res.locals.event;
+  const todayISO = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+  try {
+    const [attendee] = await db
+      .select({
+        id: attendeesTable.id,
+        firstName: attendeesTable.firstName,
+        lastName: attendeesTable.lastName,
+        email: attendeesTable.email,
+        entryToken: attendeesTable.entryToken,
+        entryTokenUsedDate: attendeesTable.entryTokenUsedDate,
+        preRegistered: attendeesTable.preRegistered,
+      })
+      .from(attendeesTable)
+      .where(
+        and(
+          eq(attendeesTable.eventId, event.id),
+          eq(attendeesTable.entryToken, token),
+        ),
+      )
+      .limit(1);
+
+    if (!attendee) {
+      res.status(404).json({ ok: false, error: "Token not found" });
+      return;
+    }
+
+    const alreadyUsedToday = attendee.entryTokenUsedDate === todayISO;
+
+    // Always update the used date (gate staff can re-scan; idempotent for same day)
+    await db
+      .update(attendeesTable)
+      .set({ entryTokenUsedDate: todayISO })
+      .where(eq(attendeesTable.id, attendee.id));
+
+    res.json({
+      ok: true,
+      alreadyUsedToday,
+      attendee: {
+        id: attendee.id,
+        firstName: attendee.firstName,
+        lastName: attendee.lastName,
+        email: attendee.email,
+        preRegistered: attendee.preRegistered,
+      },
+    });
+  } catch (err) {
+    console.error("GET /check-in/scan/:token error:", err);
+    res.status(500).json({ ok: false, error: "Scan failed" });
   }
 });
 
