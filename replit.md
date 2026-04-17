@@ -56,6 +56,67 @@ Original routes at `/api/check-in/*`, `/api/admin/*`, `/api/attendees` — still
 - API key stored at org level (`organizations.mobilize_api_key`) or falls back to `MOBILIZE_API_KEY` env var
 - Event ID stored at event level (`events.mobilize_event_id`) or falls back to `MOBILIZE_EVENT_ID` env var
 
+#### Superadmin auth (separate from event-level admin)
+- Superadmin login: `POST /api/superadmin/login` — verifies against `SUPERADMIN_PASSWORD` env var, returns token derived with salt `:icu-superadmin-2026`
+- All `/api/superadmin/*` routes use `requireSuperadminAuth` (separate from `requireAdminAuth`)
+- Frontend: `/superadmin` page calls `/api/superadmin/login`
+
+#### Volunteer Roles Master List
+All 19 roles stored in `ALL_ROLES` in `artifacts/checkin-app/src/pages/superadmin.tsx`.
+When creating an event, organizers check which roles they want. NK3's 4 are pre-checked.
+Organizers can also type a custom role not in the list — it gets added as free-form text.
+
+Pre-built list: Safety Marshal, Medic, De-Escalator, Chant Lead, Info Services,
+Registration, Greeter, Timekeeper, Facilitator, Canvasser, Phone Banker,
+AV / Tech, Photographer / Videographer, Setup & Teardown, Childcare,
+Interpreter / Translation, Accessibility Support, Social Media, Outreach Coordinator.
+
+#### Security — RLS Status (PHASE 1 COMPLETE, PHASE 2 PENDING)
+
+**Phase 1 — DONE (2026-04-17):**
+- RLS enabled on all 7 tenant tables: `organizations`, `events`, `event_roles`,
+  `attendees`, `attendee_roles`, `pre_registrations`, `volunteer_pre_registrations`
+- Permissive `allow_all` policy (`USING (true)`) created on each table
+- Effect: any non-owner DB user who somehow gets a connection cannot read any rows
+- The app user (`postgres`, table owner) bypasses RLS by default — nothing broke
+
+**Phase 2 — PENDING (do next session):**
+Goal: enforce per-org tenant isolation even for the app user itself,
+so a buggy query that forgets a `WHERE event_id = X` clause cannot leak Org A's
+data to Org B's admin.
+
+Implementation plan:
+1. Add a DB middleware helper that sets `SET LOCAL app.current_org_id` and
+   `SET LOCAL app.is_superadmin` at the start of every request's DB transaction
+2. Replace `allow_all` policies with org-scoped policies:
+   ```sql
+   CREATE POLICY org_isolation ON attendees
+     USING (
+       current_setting('app.is_superadmin', true) = 'true'
+       OR event_id IN (
+         SELECT id FROM events
+         WHERE org_id = current_setting('app.current_org_id', true)::integer
+       )
+     );
+   ```
+3. Apply `FORCE ROW LEVEL SECURITY` so the owner is also subject to policies
+4. Wrap all route-level DB calls in transactions that set the context first
+5. Files to modify: `artifacts/api-server/src/routes/events.ts`,
+   `admin.ts`, `attendees.ts`, `checkin.ts`, `upload.ts` — each needs a
+   `db.transaction` wrapper that starts with `SET LOCAL app.current_org_id = X`
+
+Key constraint: `SET LOCAL` only lives within a transaction. Connection pool
+connections that aren't in a transaction retain no session state between requests.
+
+**Other security notes:**
+- Rate limiting: 120 req/IP/10min on `/check-in/lookup` and `/check-in/submit` (both event-scoped and legacy routes)
+- Admin login: 20 failed attempts/IP/15min rate limit
+- Superadmin login: same rate limit, separate token
+- CORS: fully open — intentional for a public check-in kiosk accessible from any device
+- Event admin passwords: stored plaintext in `events.adminPassword` — acceptable
+  for now (server-side only), revisit if this becomes a regulated-data app
+- Helmet middleware: enabled
+
 ## Structure
 
 ```text
