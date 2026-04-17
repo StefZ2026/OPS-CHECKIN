@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import {
   Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut,
-  Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X,
+  Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -379,16 +379,184 @@ function CreateEventForm({ onCreated }: CreateEventFormProps) {
   );
 }
 
+// ── Edit Event Form ────────────────────────────────────────────────────────────
+
+type EditEventFormProps = {
+  event: EventRecord;
+  onSaved: (event: EventRecord) => void;
+  onCancel: () => void;
+};
+
+function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
+  const [name, setName] = useState(event.name);
+  const [eventDate, setEventDate] = useState(
+    event.eventDate ? event.eventDate.slice(0, 10) : ""
+  );
+  const [adminPassword, setAdminPassword] = useState("");
+  const [mobilizeEventId, setMobilizeEventId] = useState(event.mobilizeEventId ?? "");
+  const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
+  const [isActive, setIsActive] = useState(event.isActive);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) { setError("Event name is required"); return; }
+
+    const payload: Record<string, unknown> = {
+      name: name.trim(),
+      eventDate: eventDate || null,
+      mobilizeEventId: mobilizeEventId.trim() || null,
+      giveawayEnabled,
+      isActive,
+    };
+    if (adminPassword.trim()) {
+      payload.adminPassword = adminPassword.trim();
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/superadmin/events/${event.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json() as { event?: EventRecord; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to update event");
+      toast({ title: "Event updated", description: `"${data.event!.name}" has been saved.` });
+      onSaved(data.event!);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update event");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 pt-4 border-t-2 border-primary/30 space-y-4">
+      <p className="font-display text-sm uppercase tracking-wider text-primary flex items-center gap-1">
+        <Pencil className="w-4 h-4" /> Edit Event
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2">
+          <label className="font-display text-xs uppercase tracking-wider block mb-1">
+            Event Name <span className="text-destructive">*</span>
+          </label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Event name"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="font-display text-xs uppercase tracking-wider block mb-1">
+            <Calendar className="w-3 h-3 inline mr-1" />Event Date
+          </label>
+          <Input
+            type="date"
+            value={eventDate}
+            onChange={(e) => setEventDate(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="font-display text-xs uppercase tracking-wider block mb-1">
+            <Key className="w-3 h-3 inline mr-1" />Admin Password
+          </label>
+          <Input
+            type="text"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            placeholder="Leave blank to keep current"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Only set if you want to change it</p>
+        </div>
+
+        <div>
+          <label className="font-display text-xs uppercase tracking-wider block mb-1">
+            Mobilize Event ID
+          </label>
+          <Input
+            value={mobilizeEventId}
+            onChange={(e) => setMobilizeEventId(e.target.value)}
+            placeholder="Leave blank to clear"
+          />
+        </div>
+
+        <div className="flex items-start gap-6 pt-1">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setGiveawayEnabled((v) => !v)}
+              className={`relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${giveawayEnabled ? "bg-primary" : "bg-gray-200"}`}
+            >
+              <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${giveawayEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+            <div>
+              <p className="font-display text-xs uppercase tracking-wider"><Zap className="w-3 h-3 inline mr-0.5" />Giveaway</p>
+              <p className="text-xs text-muted-foreground">{giveawayEnabled ? "On" : "Off"}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsActive((v) => !v)}
+              className={`relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${isActive ? "bg-green-500" : "bg-gray-200"}`}
+            >
+              <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+            <div>
+              <p className="font-display text-xs uppercase tracking-wider">Active</p>
+              <p className="text-xs text-muted-foreground">{isActive ? "Yes" : "No"}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
+          {error}
+        </p>
+      )}
+
+      <div className="flex gap-3">
+        <Button type="submit" isLoading={loading} size="sm">
+          {loading ? "Saving..." : "Save Changes"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 // ── Event card ─────────────────────────────────────────────────────────────────
 
-function EventCard({ event }: { event: EventRecord }) {
+function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event: EventRecord) => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const handleSaved = (updated: EventRecord) => {
+    onUpdated(updated);
+    setEditing(false);
+  };
+
   return (
     <Card className="border-2 border-foreground">
       <CardContent className="p-5">
         <button
           className="w-full text-left"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => { if (!editing) setExpanded((v) => !v); }}
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
@@ -459,6 +627,26 @@ function EventCard({ event }: { event: EventRecord }) {
               <p className="font-mono text-xs text-gray-700 break-all">{window.location.origin}/?event={event.slug}</p>
               <p className="text-xs text-muted-foreground mt-1">Attendees use the root check-in flow; event config is loaded by slug.</p>
             </div>
+
+            {!editing && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
+                >
+                  <Pencil className="w-4 h-4" /> Edit Event
+                </button>
+              </div>
+            )}
+
+            {editing && (
+              <EditEventForm
+                event={event}
+                onSaved={handleSaved}
+                onCancel={() => setEditing(false)}
+              />
+            )}
           </div>
         )}
       </CardContent>
@@ -511,6 +699,10 @@ export default function SuperadminPage() {
     setEvents((prev) => [...prev, event]);
   };
 
+  const handleEventUpdated = (updated: EventRecord) => {
+    setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+  };
+
   if (!authed) {
     return <LoginGate onLogin={() => setAuthed(true)} />;
   }
@@ -559,7 +751,7 @@ export default function SuperadminPage() {
 
           <div className="space-y-3">
             {events.map((event) => (
-              <EventCard key={event.id} event={event} />
+              <EventCard key={event.id} event={event} onUpdated={handleEventUpdated} />
             ))}
           </div>
         </div>

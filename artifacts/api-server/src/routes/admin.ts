@@ -360,6 +360,108 @@ router.post("/superadmin/events", requireAdminAuth, async (req, res) => {
   }
 });
 
+// Update an existing event (name, date, password, mobilize ID, giveaway, active status)
+router.patch("/superadmin/events/:id", requireAdminAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid event id" });
+    return;
+  }
+
+  const {
+    name,
+    eventDate,
+    adminPassword,
+    mobilizeEventId,
+    giveawayEnabled,
+    isActive,
+  } = req.body as {
+    name?: string;
+    eventDate?: string | null;
+    adminPassword?: string | null;
+    mobilizeEventId?: string | null;
+    giveawayEnabled?: boolean;
+    isActive?: boolean;
+  };
+
+  const updates: Partial<typeof eventsTable.$inferInsert> = {};
+
+  if (name !== undefined) {
+    if (!name.trim()) {
+      res.status(400).json({ error: "name cannot be empty" });
+      return;
+    }
+    updates.name = name.trim();
+  }
+  if (eventDate !== undefined) {
+    if (eventDate) {
+      const parsed = new Date(eventDate);
+      if (isNaN(parsed.getTime())) {
+        res.status(400).json({ error: "Invalid eventDate — expected ISO date string or null" });
+        return;
+      }
+      updates.eventDate = parsed;
+    } else {
+      updates.eventDate = null;
+    }
+  }
+  if (adminPassword !== undefined) {
+    updates.adminPassword = adminPassword?.trim() || null;
+  }
+  if (mobilizeEventId !== undefined) {
+    updates.mobilizeEventId = mobilizeEventId?.trim() || null;
+  }
+  if (giveawayEnabled !== undefined) {
+    updates.giveawayEnabled = giveawayEnabled;
+  }
+  if (isActive !== undefined) {
+    updates.isActive = isActive;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
+  try {
+    const [updated] = await db
+      .update(eventsTable)
+      .set(updates)
+      .where(eq(eventsTable.id, id))
+      .returning();
+
+    if (!updated) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    const roles = await db
+      .select()
+      .from(eventRolesTable)
+      .where(eq(eventRolesTable.eventId, id))
+      .orderBy(eventRolesTable.sortOrder);
+
+    const orgRows = await db
+      .select()
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, updated.orgId))
+      .limit(1);
+
+    const org = orgRows[0];
+
+    res.json({
+      event: {
+        ...updated,
+        org: { id: org?.id ?? updated.orgId, name: org?.name ?? null, slug: org?.slug ?? null },
+        roles: roles.map((r) => ({ id: r.id, roleKey: r.roleKey, displayName: r.displayName, sortOrder: r.sortOrder })),
+      },
+    });
+  } catch (err) {
+    console.error("PATCH /superadmin/events/:id error:", err);
+    res.status(500).json({ error: "Failed to update event" });
+  }
+});
+
 router.delete("/admin/attendees", requireAdminAuth, async (req, res) => {
   const { emails } = req.body as { emails?: string[] };
   if (!emails || !Array.isArray(emails) || emails.length === 0) {
