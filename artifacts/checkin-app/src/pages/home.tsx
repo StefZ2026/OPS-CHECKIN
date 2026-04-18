@@ -225,7 +225,7 @@ export default function HomePage() {
             {FEATURES.map((f) => (
               <div
                 key={f.title}
-                className="border-4 border-foreground p-6 shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
+                className="border-4 border-foreground p-6 shadow-brutal-sm"
               >
                 <div className="text-3xl mb-3">{f.icon}</div>
                 <h3 className="font-display text-base uppercase mb-2">

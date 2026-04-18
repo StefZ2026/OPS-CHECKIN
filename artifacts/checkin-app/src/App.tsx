@@ -45,8 +45,14 @@ function Router() {
 
   return (
     <Switch>
-      {/* Homepage */}
-      <Route path="/" component={HomePage} />
+      {/* Homepage — redirect if already logged in */}
+      <Route path="/">
+        {user ? (
+          (() => { redirectByRole(user, setLocation); return null; })()
+        ) : (
+          <HomePage />
+        )}
+      </Route>
 
       {/* Static named pages — must come before /:eventSlug wildcard */}
       <Route path="/privacy" component={PrivacyPage} />
