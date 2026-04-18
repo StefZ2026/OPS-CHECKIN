@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import Logo from "../components/Logo";
 
 const FEATURES = [
@@ -105,12 +105,12 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Logo className="h-9 w-auto" variant="color" />
           <div className="flex items-center gap-3">
-            <a
-              href="/checkin-app/superadmin"
+            <Link
+              href="/superadmin"
               className="text-foreground/60 hover:text-foreground text-sm font-semibold transition-colors hidden sm:block"
             >
               Platform Admin
-            </a>
+            </Link>
           </div>
         </div>
       </nav>
@@ -320,24 +320,15 @@ export default function HomePage() {
             >
               Contact
             </a>
-            <a
-              href="/checkin-app/privacy"
-              className="text-white/60 hover:text-white transition-colors"
-            >
+            <Link href="/privacy" className="text-white/60 hover:text-white transition-colors">
               Privacy
-            </a>
-            <a
-              href="/checkin-app/terms"
-              className="text-white/60 hover:text-white transition-colors"
-            >
+            </Link>
+            <Link href="/terms" className="text-white/60 hover:text-white transition-colors">
               Terms
-            </a>
-            <a
-              href="/checkin-app/superadmin"
-              className="text-white/30 hover:text-white/60 transition-colors"
-            >
+            </Link>
+            <Link href="/superadmin" className="text-white/30 hover:text-white/60 transition-colors">
               Platform Admin
-            </a>
+            </Link>
           </div>
         </div>
       </footer>

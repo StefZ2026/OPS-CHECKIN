@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import Logo from "../components/Logo";
 
 export default function TermsPage() {
@@ -5,9 +6,9 @@ export default function TermsPage() {
     <div className="min-h-screen bg-background font-sans">
       <nav className="border-b-4 border-foreground bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center">
-          <a href="/checkin-app/">
+          <Link href="/">
             <Logo className="h-9 w-auto" variant="color" />
-          </a>
+          </Link>
         </div>
       </nav>
 
