@@ -235,7 +235,7 @@ export default function ScanPage() {
           </span>
           <p className="mt-4 font-bold text-xl text-yellow-300">Already admitted today</p>
           <p className="text-yellow-200 text-sm mt-1">
-            This pass was already scanned for today. Verify with a supervisor before granting re-entry.
+            This QR code was already scanned today. Verify with a supervisor before granting re-entry.
           </p>
           <button onClick={reset} className="mt-5 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-colors">
             Scan Next

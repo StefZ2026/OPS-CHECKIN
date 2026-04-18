@@ -24,7 +24,7 @@ export default function EntryPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-950 text-white p-6 gap-6">
       <div className="text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Your Re-Entry Pass</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Your Re-Entry QR Code</h1>
         <p className="text-gray-400 mt-1 text-sm">
           Show this QR code to gate staff each day to re-enter.
         </p>
@@ -44,7 +44,7 @@ export default function EntryPage() {
           Screenshot this page or keep this tab open.
         </p>
         <p className="text-gray-500 text-xs mt-2">
-          One scan per day. Valid for the full duration of the event.
+          One scan per day — good for the full duration of the event.
         </p>
       </div>
 

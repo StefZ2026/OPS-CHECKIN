@@ -1078,8 +1078,8 @@ router.get("/check-in/scan/:token", scanRateLimit, async (req: Request, res: Res
 
   // Session coverage: inactive events are already rejected with 403 (NOT_COVERED)
   // by the event resolver middleware above — they never reach this handler.
-  // A "WRISTBAND" pass covers all sessions for the duration of an active event.
-  const passType = "WRISTBAND" as const;
+  // A QR_PASS covers all sessions for the duration of an active event.
+  const passType = "QR_PASS" as const;
 
   const todayISO = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
