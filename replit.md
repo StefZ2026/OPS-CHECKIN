@@ -47,9 +47,26 @@ All routes are prefixed `/api/events/:eventSlug/`:
 #### Legacy Routes (NK3 backwards-compat, event_id=1)
 Original routes at `/api/check-in/*`, `/api/admin/*`, `/api/attendees` — still work with global `ADMIN_PASSWORD` env var.
 
-#### Auth
-- **New (event-scoped)**: token = SHA-256(event.adminPassword + `:icu-checkin-2026`)
-- **Legacy (global)**: token = SHA-256(ADMIN_PASSWORD env var + `:icu-admin-2026`)
+#### Auth — Three Layers
+1. **User auth (JWT, new)**: Email + bcrypt password. Cookie `auth_token` (httpOnly, 7d). Roles: `superadmin`, `org_contact`, `event_manager`. Routes: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/set-password`. Secret in `JWT_SECRET` env var.
+2. **Event-scoped admin (legacy)**: token = SHA-256(event.adminPassword + `:icu-checkin-2026`). Still works for NK3.
+3. **Superadmin (env var)**: `POST /api/superadmin/login` — verifies `SUPERADMIN_PASSWORD` env var.
+
+#### User Accounts in DB
+- `users` table: id, email, password_hash (bcrypt), name, role, org_id FK, event_id FK, password_set (bool), created_at
+- **First-time login**: if `password_set = false`, `/login` returns `{firstLogin: true}` → frontend shows set-password form
+- Seed: Stefanie Zucker (`safety@indivisiblecherokeeunited.com`) as `org_contact` for ICU (org_id=1)
+- `organizations` now has `contact_name`, `contact_email` columns
+- `events` now has `manager_email` column (set when org contact creates event for a manager)
+
+#### New API Routes
+- `GET /api/orgs/:orgId` — org info (JWT auth, org_contact or superadmin)
+- `GET /api/orgs/:orgId/events` — events list with check-in counts (JWT auth)
+
+#### New Frontend Pages
+- `/login` — email/password login + first-time set-password flow
+- `/org` — org contact dashboard (lists their events, links to each event admin)
+- Homepage `/` restored with **Sign In** button in top-right nav
 
 #### Current Events in DB
 - `nk3` (id=1) — No Kings 3 rally, March 28 2026, password=`CherokeeBoo*2026`, mobilize=`901026`

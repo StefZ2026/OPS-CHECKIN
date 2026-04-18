@@ -75,7 +75,6 @@ const TESTIMONIALS = [
 
 export default function HomePage() {
   const [attendeeCode, setAttendeeCode] = useState("");
-  const [managerCode, setManagerCode] = useState("");
   const [, navigate] = useLocation();
   const [activeTestimonial, setActiveTestimonial] = useState(0);
 
@@ -92,12 +91,6 @@ export default function HomePage() {
     if (slug) navigate(`/${slug}`);
   }
 
-  function handleManagerGo(e: React.FormEvent) {
-    e.preventDefault();
-    const slug = managerCode.trim().toLowerCase();
-    if (slug) navigate(`/${slug}/admin`);
-  }
-
   return (
     <div className="min-h-screen bg-background font-sans">
       {/* ── Nav ── */}
@@ -106,10 +99,10 @@ export default function HomePage() {
           <Logo className="h-9 w-auto" variant="color" />
           <div className="flex items-center gap-3">
             <Link
-              href="/superadmin"
-              className="text-foreground/60 hover:text-foreground text-sm font-semibold transition-colors hidden sm:block"
+              href="/login"
+              className="bg-foreground text-white font-display text-sm uppercase tracking-wider px-5 py-2 border-2 border-foreground shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
             >
-              Platform Admin
+              Sign In
             </Link>
           </div>
         </div>
@@ -157,12 +150,10 @@ export default function HomePage() {
               <p className="font-display text-sm uppercase tracking-widest text-foreground mb-3">
                 Event or Campaign Manager?
               </p>
-              <form onSubmit={handleManagerGo} className="flex gap-2">
+              <form onSubmit={(e) => { e.preventDefault(); const slug = (e.currentTarget.querySelector('input') as HTMLInputElement)?.value.trim().toLowerCase(); if (slug) navigate(`/${slug}/admin`); }} className="flex gap-2">
                 <input
                   type="text"
                   placeholder="Enter event code"
-                  value={managerCode}
-                  onChange={(e) => setManagerCode(e.target.value)}
                   className="flex-1 border-2 border-foreground px-3 py-2 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button

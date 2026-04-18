@@ -9,8 +9,9 @@ export const organizationsTable = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  // Stored at org level — one key covers all their events
   mobilizeApiKey: text("mobilize_api_key"),
+  contactName: text("contact_name"),
+  contactEmail: text("contact_email"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -28,6 +29,7 @@ export const eventsTable = pgTable("events", {
   mobilizeEventId: text("mobilize_event_id"),
   // Plain password for the event's admin — scoped token is derived from this at login time
   adminPassword: text("admin_password"),
+  managerEmail: text("manager_email"),
   isActive: boolean("is_active").notNull().default(true),
   // When true: day-1 check-in sends an SMS with a QR code link for re-entry on subsequent days
   smsReentryEnabled: boolean("sms_reentry_enabled").notNull().default(false),
@@ -119,6 +121,24 @@ export const volunteerPreRegistrationsTable = pgTable("volunteer_pre_registratio
   roleName: text("role_name").notNull(),
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
 });
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+// Platform users: superadmins, org contacts, and event managers.
+// Participants/volunteers are NOT users — they use event codes.
+
+export const usersTable = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash"),           // null until first-time password is set
+  name: text("name").notNull(),
+  role: text("role").notNull(),                  // "superadmin" | "org_contact" | "event_manager"
+  orgId: integer("org_id").references(() => organizationsTable.id),
+  eventId: integer("event_id").references(() => eventsTable.id),
+  passwordSet: boolean("password_set").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type User = typeof usersTable.$inferSelect;
 
 // ── Types & Insert Schemas ────────────────────────────────────────────────────
 
