@@ -8,6 +8,8 @@ import AdminDashboard from "@/pages/admin";
 import SuperadminPage from "@/pages/superadmin";
 import EntryPage from "@/pages/entry";
 import ScanPage from "@/pages/scan";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -26,6 +28,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/superadmin" component={SuperadminPage} />
       <Route path="/:eventSlug/entry/:token" component={EntryPage} />

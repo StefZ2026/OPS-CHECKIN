@@ -321,6 +321,18 @@ export default function HomePage() {
               Contact
             </a>
             <a
+              href="/checkin-app/privacy"
+              className="text-white/60 hover:text-white transition-colors"
+            >
+              Privacy
+            </a>
+            <a
+              href="/checkin-app/terms"
+              className="text-white/60 hover:text-white transition-colors"
+            >
+              Terms
+            </a>
+            <a
               href="/checkin-app/superadmin"
               className="text-white/30 hover:text-white/60 transition-colors"
             >
