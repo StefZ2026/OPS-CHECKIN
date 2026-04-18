@@ -13,6 +13,7 @@ export type EventConfig = {
   slug: string;
   eventDate: string | null;
   giveawayEnabled: boolean;
+  isActive: boolean;
   roles: EventRole[];
 };
 

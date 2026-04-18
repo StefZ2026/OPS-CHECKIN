@@ -79,6 +79,15 @@ async function runStartupMigrations() {
       `);
     }
 
+    // Auto-complete events: if eventDate + 28 days has passed and event is still active, mark it completed
+    await client.query(`
+      UPDATE events
+      SET is_active = false
+      WHERE is_active = true
+        AND event_date IS NOT NULL
+        AND event_date + INTERVAL '28 days' < NOW()
+    `);
+
     console.log("Startup migrations OK");
   } catch (err) {
     console.warn("Startup migration warning (non-fatal):", err);

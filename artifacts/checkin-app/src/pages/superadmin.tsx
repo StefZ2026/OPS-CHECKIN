@@ -732,7 +732,7 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
                 {event.isActive ? (
                   <span className="text-xs font-bold bg-green-100 text-green-800 border border-green-600 rounded-full px-2 py-0.5">Active</span>
                 ) : (
-                  <span className="text-xs font-bold bg-gray-100 text-gray-600 border border-gray-400 rounded-full px-2 py-0.5">Inactive</span>
+                  <span className="text-xs font-bold bg-gray-100 text-gray-600 border border-gray-400 rounded-full px-2 py-0.5">Completed</span>
                 )}
                 {event.giveawayEnabled && (
                   <span className="text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-600 rounded-full px-2 py-0.5">
@@ -861,6 +861,7 @@ export default function SuperadminPage() {
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
 
   const fetchAll = async () => {
     setLoading(true);
@@ -989,12 +990,33 @@ export default function SuperadminPage() {
 
         {/* Organizations → Events */}
         <div className="space-y-8">
+          {/* Status filter */}
+          <div className="flex gap-2 flex-wrap">
+            {(["all", "active", "completed"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`px-5 py-2 rounded-full font-display text-sm uppercase tracking-wider border-2 transition-colors ${
+                  statusFilter === f
+                    ? "bg-foreground text-white border-foreground"
+                    : "bg-white text-foreground border-foreground/30 hover:border-foreground"
+                }`}
+              >
+                {f === "all" ? "All Events" : f === "active" ? "Active" : "Completed"}
+              </button>
+            ))}
+          </div>
+
           {allOrgs.length === 0 && !loading && (
             <div className="text-center text-muted-foreground py-12 font-medium">No organizations yet. Add one above.</div>
           )}
 
           {allOrgs.map((org) => {
-            const orgEvents = eventsByOrg.get(org.slug) ?? [];
+            const allOrgEvents = eventsByOrg.get(org.slug) ?? [];
+            const orgEvents = allOrgEvents.filter((e) =>
+              statusFilter === "all" ? true : statusFilter === "active" ? e.isActive : !e.isActive
+            );
+            if (orgEvents.length === 0 && statusFilter !== "all") return null;
             return (
               <div key={org.slug} className="border-4 border-foreground rounded-2xl overflow-hidden shadow-brutal">
                 {/* Org header */}

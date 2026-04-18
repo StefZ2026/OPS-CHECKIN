@@ -7,6 +7,7 @@ import {
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
   Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle, Pencil, X,
+  ToggleLeft, ToggleRight,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
@@ -581,6 +582,29 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [editForm, setEditForm] = useState<EditForm>({ firstName: "", lastName: "", phone: "", email: "", roles: [] });
   const [editSaving, setEditSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [statusToggling, setStatusToggling] = useState(false);
+
+  const handleStatusToggle = async () => {
+    if (!window.confirm(
+      eventConfig?.isActive
+        ? "Mark this event as Completed? Attendees can still be viewed but check-in will be disabled."
+        : "Mark this event as Active again?"
+    )) return;
+    setStatusToggling(true);
+    try {
+      const res = await fetch(`${eventApiBase()}/admin/status`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
+      });
+      if (!res.ok) throw new Error("Failed");
+      refetch();
+      toast({ title: eventConfig?.isActive ? "Event marked Completed" : "Event marked Active" });
+    } catch {
+      toast({ title: "Could not update status", variant: "destructive" });
+    } finally {
+      setStatusToggling(false);
+    }
+  };
 
   const handleSort = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -756,7 +780,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <img src="/icu-logo.jpg" alt="ICU" className="w-14 h-14 rounded-full object-cover hidden md:block" />
             <div>
               <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
-              <p className="text-lg text-gray-300 font-medium">ICU {eventTitle} · {eventDateDisplay}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-lg text-gray-300 font-medium">ICU {eventTitle} · {eventDateDisplay}</p>
+                <span className={`px-3 py-1 rounded-full text-sm font-bold border-2 ${eventConfig?.isActive === false ? "bg-gray-700 border-gray-500 text-gray-300" : "bg-green-500 border-green-300 text-white"}`}>
+                  {eventConfig?.isActive === false ? "Completed" : "Active"}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto flex-wrap">
@@ -768,6 +797,18 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             >
               <RefreshCw className={`w-5 h-5 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button
+              variant="outline"
+              className={`bg-transparent border-white text-white hover:bg-white/10 hover:text-white ${statusToggling ? "opacity-50" : ""}`}
+              onClick={handleStatusToggle}
+              disabled={statusToggling}
+              title={eventConfig?.isActive === false ? "Mark Active" : "Mark Completed"}
+            >
+              {eventConfig?.isActive === false
+                ? <><ToggleLeft className="w-5 h-5 mr-2" />Mark Active</>
+                : <><ToggleRight className="w-5 h-5 mr-2" />Mark Completed</>
+              }
             </Button>
             <Button
               variant="secondary"

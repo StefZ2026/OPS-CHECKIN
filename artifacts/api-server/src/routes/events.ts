@@ -44,10 +44,11 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
       res.status(404).json({ error: "Event not found" });
       return;
     }
-    // Inactive events are explicitly rejected with 403 (not 404) so that the
-    // scanner frontend can distinguish "event ended" (NOT_COVERED) from
-    // "token not in this event" (NOT_FOUND).
-    if (!rows[0].event.isActive) {
+    // Inactive events block public check-in routes, but allow:
+    // - /admin/* (event managers need full access to attendee data/exports)
+    // - /config (admin UI fetches this to display event name/status)
+    const isAdminOrConfig = req.path.startsWith("/admin") || req.path === "/config";
+    if (!rows[0].event.isActive && !isAdminOrConfig) {
       res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — re-entry is no longer permitted." });
       return;
     }
@@ -126,6 +127,7 @@ router.get("/config", async (_req: Request, res: Response): Promise<void> => {
       slug: event.slug,
       eventDate: event.eventDate,
       giveawayEnabled: event.giveawayEnabled,
+      isActive: event.isActive,
       roles: roles.map((r) => ({
         key: r.roleKey,
         displayName: r.displayName,
@@ -874,6 +876,22 @@ async function lookupInMobilize(
     return { found: false };
   }
 }
+
+// ── Admin: toggle event active/completed status ───────────────────────────────
+router.patch("/admin/status", requireEventAuth, async (_req: Request, res: Response): Promise<void> => {
+  const event = res.locals.event;
+  try {
+    const updated = await db
+      .update(eventsTable)
+      .set({ isActive: !event.isActive })
+      .where(eq(eventsTable.id, event.id))
+      .returning({ isActive: eventsTable.isActive });
+    res.json({ isActive: updated[0].isActive });
+  } catch (err) {
+    console.error("PATCH /admin/status error:", err);
+    res.status(500).json({ error: "Failed to update status" });
+  }
+});
 
 router.post("/check-in/lookup", checkinLimiter, async (req: Request, res: Response): Promise<void> => {
   const parsed = LookupAttendeeBody.safeParse(req.body);
