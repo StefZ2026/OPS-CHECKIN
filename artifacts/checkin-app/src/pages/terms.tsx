@@ -77,7 +77,7 @@ export default function TermsPage() {
             <h2 className="font-display text-xl uppercase mb-3">Contact</h2>
             <p>
               Questions about these terms? Email us at{" "}
-              <a href="mailto:hello@opscheckin.com" className="text-primary underline">hello@opscheckin.com</a>.
+              <a href="mailto:info@opscheckin.com" className="text-primary underline">info@opscheckin.com</a>.
             </p>
           </section>
         </div>

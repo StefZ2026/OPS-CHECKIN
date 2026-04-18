@@ -293,7 +293,7 @@ export default function HomePage() {
             Get your organization set up and your first event live. Reach out to request access.
           </p>
           <a
-            href="mailto:hello@opscheckin.com"
+            href="mailto:info@opscheckin.com"
             className="inline-block bg-white text-foreground border-4 border-foreground font-display uppercase text-lg px-8 py-4 shadow-brutal hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_hsl(var(--foreground))] transition-all"
           >
             Request Access →
@@ -310,7 +310,7 @@ export default function HomePage() {
           </p>
           <div className="flex gap-4 text-xs">
             <a
-              href="mailto:hello@opscheckin.com"
+              href="mailto:info@opscheckin.com"
               className="text-white/60 hover:text-white transition-colors"
             >
               Contact

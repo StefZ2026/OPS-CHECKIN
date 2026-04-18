@@ -49,7 +49,7 @@ export default function PrivacyPage() {
             <p>
               Attendee records are retained for the duration of the event and a reasonable period
               thereafter for reporting purposes. Organizations may request deletion of their data
-              by contacting us at <a href="mailto:hello@opscheckin.com" className="text-primary underline">hello@opscheckin.com</a>.
+              by contacting us at <a href="mailto:info@opscheckin.com" className="text-primary underline">info@opscheckin.com</a>.
             </p>
           </section>
 
@@ -66,7 +66,7 @@ export default function PrivacyPage() {
             <h2 className="font-display text-xl uppercase mb-3">Contact</h2>
             <p>
               Questions about this policy? Email us at{" "}
-              <a href="mailto:hello@opscheckin.com" className="text-primary underline">hello@opscheckin.com</a>.
+              <a href="mailto:info@opscheckin.com" className="text-primary underline">info@opscheckin.com</a>.
             </p>
           </section>
         </div>
