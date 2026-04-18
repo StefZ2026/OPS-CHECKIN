@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { organizationsTable, eventsTable, attendeesTable } from "@workspace/db/schema";
+import { organizationsTable, eventsTable, attendeesTable, eventRolesTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { requireUserAuth } from "./auth";
 
@@ -45,6 +45,65 @@ router.get("/:orgId/events", requireUserAuth, async (req: Request, res: Response
   );
 
   res.json(withCounts);
+});
+
+// POST /api/orgs/:orgId/events — create a new event for this org (org_contact or superadmin)
+router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = parseInt(req.params.orgId);
+  const user = res.locals.user;
+
+  if (user.role !== "superadmin" && user.orgId !== orgId) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  const { name, slug, eventDate, roles } = req.body as {
+    name?: string;
+    slug?: string;
+    eventDate?: string;
+    roles?: { roleKey: string; displayName: string }[];
+  };
+
+  if (!name?.trim() || !slug?.trim()) {
+    res.status(400).json({ error: "name and slug are required" });
+    return;
+  }
+
+  const slugClean = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const existing = await db
+    .select({ id: eventsTable.id })
+    .from(eventsTable)
+    .where(eq(eventsTable.slug, slugClean))
+    .limit(1);
+  if (existing[0]) {
+    res.status(409).json({ error: "An event with this slug already exists. Choose a different one." });
+    return;
+  }
+
+  const [event] = await db
+    .insert(eventsTable)
+    .values({
+      name: name.trim(),
+      slug: slugClean,
+      orgId,
+      eventDate: eventDate ? new Date(eventDate) : null,
+      isActive: true,
+      giveawayEnabled: false,
+    })
+    .returning();
+
+  if (roles && roles.length > 0) {
+    await db.insert(eventRolesTable).values(
+      roles.map((r, i) => ({
+        eventId: event.id,
+        roleKey: r.roleKey,
+        displayName: r.displayName,
+        sortOrder: i,
+      }))
+    );
+  }
+
+  res.status(201).json({ event });
 });
 
 export default router;

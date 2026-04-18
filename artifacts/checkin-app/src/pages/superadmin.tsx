@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import {
   Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
   Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil, QrCode, Download,
+  Mail, UserPlus, ShieldCheck, Building2,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,19 @@ type OrgRecord = {
   slug: string;
   eventCount: number;
   createdAt: string;
+};
+
+type UserRecord = {
+  id: number;
+  name: string;
+  email: string;
+  role: "org_contact" | "event_manager";
+  orgId: number | null;
+  eventId: number | null;
+  passwordSet: boolean;
+  createdAt: string;
+  org: { id: number; name: string; slug: string } | null;
+  event: { id: number; name: string; slug: string } | null;
 };
 
 // ── Login gate ─────────────────────────────────────────────────────────────────
@@ -402,6 +416,185 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
                 >
                   Cancel
                 </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Create User Form ───────────────────────────────────────────────────────────
+
+type CreateUserFormProps = {
+  orgs: OrgRecord[];
+  events: EventRecord[];
+  onCreated: () => void;
+};
+
+function CreateUserForm({ orgs, events, onCreated }: CreateUserFormProps) {
+  const [open, setOpen] = useState(false);
+  const [role, setRole] = useState<"org_contact" | "event_manager">("org_contact");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [orgId, setOrgId] = useState<number | "">("");
+  const [eventId, setEventId] = useState<number | "">("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim() || !email.trim()) { setError("Name and email are required"); return; }
+    if (role === "org_contact" && !orgId) { setError("Select an organization"); return; }
+    if (role === "event_manager" && !eventId) { setError("Select an event"); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/superadmin/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          role,
+          orgId: role === "org_contact" ? Number(orgId) : undefined,
+          eventId: role === "event_manager" ? Number(eventId) : undefined,
+        }),
+      });
+      const data = await res.json() as { user?: UserRecord; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to create user");
+
+      toast({
+        title: "User created",
+        description: `${name} will set their password on first login to ${email}`,
+      });
+      onCreated();
+      setName(""); setEmail(""); setOrgId(""); setEventId("");
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 font-display text-lg text-primary hover:text-primary/80 transition-colors"
+      >
+        <UserPlus className="w-5 h-5" />
+        Add User
+        {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+
+      {open && (
+        <Card className="border-4 border-primary">
+          <CardContent className="p-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
+
+              {/* Role toggle */}
+              <div>
+                <label className="font-display text-sm uppercase tracking-wider block mb-2">Role</label>
+                <div className="flex gap-3">
+                  {(["org_contact", "event_manager"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setRole(r)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl border-4 font-bold text-sm transition-all ${
+                        role === r
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-foreground/20 bg-white text-muted-foreground hover:border-foreground/60"
+                      }`}
+                    >
+                      {r === "org_contact" ? <Building2 className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
+                      {r === "org_contact" ? "Org Contact" : "Event Manager"}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {role === "org_contact"
+                    ? "Can log in, see their org's events, and create new events."
+                    : "Can log in and manage a single event's admin page."}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider block mb-1">
+                    Full Name <span className="text-destructive">*</span>
+                  </label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" required />
+                </div>
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider block mb-1">
+                    <Mail className="w-4 h-4 inline mr-1" />Email <span className="text-destructive">*</span>
+                  </label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@org.com" required />
+                </div>
+
+                {role === "org_contact" && (
+                  <div className="sm:col-span-2">
+                    <label className="font-display text-sm uppercase tracking-wider block mb-1">
+                      Organization <span className="text-destructive">*</span>
+                    </label>
+                    <select
+                      value={orgId}
+                      onChange={(e) => setOrgId(e.target.value ? Number(e.target.value) : "")}
+                      required
+                      className="w-full border-4 border-foreground rounded-lg px-4 py-2 font-medium text-sm focus:outline-none focus:border-primary bg-white"
+                    >
+                      <option value="">— Select organization —</option>
+                      {orgs.map((o) => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {role === "event_manager" && (
+                  <div className="sm:col-span-2">
+                    <label className="font-display text-sm uppercase tracking-wider block mb-1">
+                      Event <span className="text-destructive">*</span>
+                    </label>
+                    <select
+                      value={eventId}
+                      onChange={(e) => setEventId(e.target.value ? Number(e.target.value) : "")}
+                      required
+                      className="w-full border-4 border-foreground rounded-lg px-4 py-2 font-medium text-sm focus:outline-none focus:border-primary bg-white"
+                    >
+                      <option value="">— Select event —</option>
+                      {events.map((ev) => (
+                        <option key={ev.id} value={ev.id}>{ev.name} ({ev.org.slug})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
+                  {error}
+                </p>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                The user will set their own password on first login — no password is sent.
+              </p>
+
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" isLoading={loading} className="flex-1">
+                  {loading ? "Creating..." : "Create User"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               </div>
             </form>
           </CardContent>
@@ -859,6 +1052,7 @@ export default function SuperadminPage() {
   const [authed, setAuthed] = useState(!!getSuperadminToken());
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
@@ -868,9 +1062,10 @@ export default function SuperadminPage() {
     setLoadError("");
     const token = getSuperadminToken() ?? "";
     try {
-      const [eventsRes, orgsRes] = await Promise.all([
+      const [eventsRes, orgsRes, usersRes] = await Promise.all([
         fetch("/api/superadmin/events", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/superadmin/orgs", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/users", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (eventsRes.status === 401 || orgsRes.status === 401) {
         clearSuperadminToken();
@@ -884,12 +1079,14 @@ export default function SuperadminPage() {
         const errBody = await (eventsRes.ok ? orgsRes : eventsRes).json().catch(() => ({})) as { error?: string };
         throw new Error(errBody.error ?? "Server returned an error. Try refreshing.");
       }
-      const [eventsData, orgsData] = await Promise.all([
+      const [eventsData, orgsData, usersData] = await Promise.all([
         eventsRes.json() as Promise<{ events: EventRecord[] }>,
         orgsRes.json() as Promise<{ orgs: OrgRecord[] }>,
+        usersRes.ok ? usersRes.json() as Promise<{ users: UserRecord[] }> : Promise.resolve({ users: [] }),
       ]);
       setEvents(eventsData.events);
       setOrgs(orgsData.orgs);
+      setUsers(usersData.users);
     } catch {
       setLoadError("Could not load data. Check your connection and try again.");
     } finally {
@@ -899,7 +1096,7 @@ export default function SuperadminPage() {
 
   useEffect(() => { if (authed) void fetchAll(); }, [authed]);
 
-  const handleLogout = () => { clearSuperadminToken(); setAuthed(false); setEvents([]); setOrgs([]); };
+  const handleLogout = () => { clearSuperadminToken(); setAuthed(false); setEvents([]); setOrgs([]); setUsers([]); };
 
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
@@ -983,10 +1180,57 @@ export default function SuperadminPage() {
           </div>
         )}
 
-        {/* Add Organization */}
-        <div className="border-4 border-foreground rounded-2xl p-6 bg-white shadow-brutal">
-          <CreateOrgForm onCreated={() => void fetchAll()} />
+        {/* Add Organization + Add User (side by side or stacked) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="border-4 border-foreground rounded-2xl p-6 bg-white shadow-brutal">
+            <CreateOrgForm onCreated={() => void fetchAll()} />
+          </div>
+          <div className="border-4 border-foreground rounded-2xl p-6 bg-white shadow-brutal">
+            <CreateUserForm orgs={allOrgs} events={events} onCreated={() => void fetchAll()} />
+          </div>
         </div>
+
+        {/* Users list */}
+        {users.length > 0 && (
+          <div className="border-4 border-foreground rounded-2xl overflow-hidden shadow-brutal">
+            <div className="bg-foreground text-white px-6 py-4 flex items-center gap-3">
+              <Users className="w-5 h-5" />
+              <h2 className="font-display text-2xl">Platform Users</h2>
+              <span className="ml-auto text-gray-400 text-sm font-mono">{users.length} total</span>
+            </div>
+            <div className="divide-y-2 divide-foreground/10 bg-white">
+              {users.map((u) => (
+                <div key={u.id} className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-display text-lg">{u.name}</span>
+                      <span className={`text-xs font-bold rounded-full px-2 py-0.5 border ${
+                        u.role === "org_contact"
+                          ? "bg-blue-100 text-blue-800 border-blue-400"
+                          : "bg-purple-100 text-purple-800 border-purple-400"
+                      }`}>
+                        {u.role === "org_contact" ? "Org Contact" : "Event Manager"}
+                      </span>
+                      {u.passwordSet ? (
+                        <span className="text-xs font-bold bg-green-100 text-green-800 border border-green-400 rounded-full px-2 py-0.5">Active</span>
+                      ) : (
+                        <span className="text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-400 rounded-full px-2 py-0.5">Pending first login</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5 text-sm text-muted-foreground flex-wrap">
+                      <span><Mail className="w-3 h-3 inline mr-1" />{u.email}</span>
+                      {u.org && <span><Building2 className="w-3 h-3 inline mr-1" />{u.org.name}</span>}
+                      {u.event && <span className="font-mono">{u.event.name}</span>}
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {format(new Date(u.createdAt), "MMM d, yyyy")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Organizations → Events */}
         <div className="space-y-8">

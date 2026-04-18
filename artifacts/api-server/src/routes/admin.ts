@@ -3,7 +3,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import rateLimit from "express-rate-limit";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
-import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable } from "@workspace/db/schema";
+import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
 import { eq, inArray, count } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -565,6 +565,111 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     console.error("PATCH /superadmin/events/:id error:", err);
     res.status(500).json({ error: "Failed to update event" });
   }
+});
+
+// ── User Management (superadmin) ─────────────────────────────────────────────
+
+// GET /api/superadmin/users — list all platform users (org contacts + event managers)
+router.get("/superadmin/users", requireSuperadminAuth, async (_req, res) => {
+  const users = await db
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      role: usersTable.role,
+      orgId: usersTable.orgId,
+      eventId: usersTable.eventId,
+      passwordSet: usersTable.passwordSet,
+      createdAt: usersTable.createdAt,
+    })
+    .from(usersTable)
+    .orderBy(usersTable.createdAt);
+
+  const orgIds = [...new Set(users.filter((u) => u.orgId).map((u) => u.orgId!))];
+  const eventIds = [...new Set(users.filter((u) => u.eventId).map((u) => u.eventId!))];
+
+  const [orgs, events] = await Promise.all([
+    orgIds.length > 0
+      ? db.select({ id: organizationsTable.id, name: organizationsTable.name, slug: organizationsTable.slug }).from(organizationsTable).where(inArray(organizationsTable.id, orgIds))
+      : [],
+    eventIds.length > 0
+      ? db.select({ id: eventsTable.id, name: eventsTable.name, slug: eventsTable.slug }).from(eventsTable).where(inArray(eventsTable.id, eventIds))
+      : [],
+  ]);
+
+  const orgMap = new Map(orgs.map((o) => [o.id, o]));
+  const eventMap = new Map(events.map((e) => [e.id, e]));
+
+  res.json({
+    users: users.map((u) => ({
+      ...u,
+      org: u.orgId ? (orgMap.get(u.orgId) ?? null) : null,
+      event: u.eventId ? (eventMap.get(u.eventId) ?? null) : null,
+    })),
+  });
+});
+
+// POST /api/superadmin/users — create a new org contact or event manager
+router.post("/superadmin/users", requireSuperadminAuth, async (req, res) => {
+  const { name, email, role, orgId, eventId } = req.body as {
+    name?: string;
+    email?: string;
+    role?: string;
+    orgId?: number;
+    eventId?: number;
+  };
+
+  if (!name?.trim() || !email?.trim() || !role) {
+    res.status(400).json({ error: "name, email, and role are required" });
+    return;
+  }
+  if (!["org_contact", "event_manager"].includes(role)) {
+    res.status(400).json({ error: "role must be org_contact or event_manager" });
+    return;
+  }
+  if (role === "org_contact" && !orgId) {
+    res.status(400).json({ error: "orgId is required for org_contact" });
+    return;
+  }
+  if (role === "event_manager" && !eventId) {
+    res.status(400).json({ error: "eventId is required for event_manager" });
+    return;
+  }
+
+  const existing = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, email.trim().toLowerCase()))
+    .limit(1);
+  if (existing[0]) {
+    res.status(409).json({ error: "A user with this email already exists" });
+    return;
+  }
+
+  // For event_manager, pull orgId from the event so the user is linked to the right org too
+  let resolvedOrgId = orgId ?? null;
+  if (role === "event_manager" && eventId) {
+    const eventRow = await db
+      .select({ orgId: eventsTable.orgId })
+      .from(eventsTable)
+      .where(eq(eventsTable.id, eventId))
+      .limit(1);
+    resolvedOrgId = eventRow[0]?.orgId ?? null;
+  }
+
+  const [user] = await db
+    .insert(usersTable)
+    .values({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      role,
+      orgId: resolvedOrgId,
+      eventId: role === "event_manager" ? (eventId ?? null) : null,
+      passwordSet: false,
+    })
+    .returning();
+
+  res.status(201).json({ user });
 });
 
 router.delete("/admin/attendees", requireAdminAuth, async (req, res) => {
