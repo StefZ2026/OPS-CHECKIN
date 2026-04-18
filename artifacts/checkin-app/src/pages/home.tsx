@@ -120,16 +120,16 @@ export default function HomePage() {
               Get to work.
             </span>
           </h1>
-          <p className="text-white/90 text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-white/90 text-xl sm:text-2xl max-w-2xl mx-auto mb-12 leading-relaxed">
             OpsCheckIn is the event check-in platform built for organizations
             that run events — from community gatherings to large-scale campaigns.
           </p>
 
           {/* Entry cards */}
-          <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+          <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
             {/* Attendee/Volunteer */}
-            <div className="bg-background border-4 border-foreground shadow-brutal p-5 text-left">
-              <p className="font-display text-sm uppercase tracking-widest text-foreground mb-3">
+            <div className="bg-background border-4 border-foreground shadow-brutal p-7 text-left">
+              <p className="font-display text-base uppercase tracking-widest text-foreground mb-4">
                 Attendee or Volunteer?
               </p>
               <form onSubmit={handleAttendeeGo} className="flex gap-2">
@@ -138,11 +138,11 @@ export default function HomePage() {
                   placeholder="Enter event code"
                   value={attendeeCode}
                   onChange={(e) => setAttendeeCode(e.target.value)}
-                  className="flex-1 border-2 border-foreground px-3 py-2 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 border-2 border-foreground px-4 py-3 text-base font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button
                   type="submit"
-                  className="bg-primary text-white border-2 border-foreground px-4 py-2 font-display uppercase text-sm shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
+                  className="bg-primary text-white border-2 border-foreground px-5 py-3 font-display uppercase text-base shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
                 >
                   Go →
                 </button>
@@ -150,19 +150,19 @@ export default function HomePage() {
             </div>
 
             {/* Org / Event Manager */}
-            <div className="bg-secondary border-4 border-foreground shadow-brutal p-5 text-left">
-              <p className="font-display text-sm uppercase tracking-widest text-foreground mb-3">
+            <div className="bg-secondary border-4 border-foreground shadow-brutal p-7 text-left">
+              <p className="font-display text-base uppercase tracking-widest text-foreground mb-4">
                 Event or Campaign Manager?
               </p>
               <form onSubmit={(e) => { e.preventDefault(); const slug = (e.currentTarget.querySelector('input') as HTMLInputElement)?.value.trim().toLowerCase(); if (slug) navigate(`/${slug}/admin`); }} className="flex gap-2">
                 <input
                   type="text"
                   placeholder="Enter event code"
-                  className="flex-1 border-2 border-foreground px-3 py-2 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 border-2 border-foreground px-4 py-3 text-base font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button
                   type="submit"
-                  className="bg-foreground text-white border-2 border-foreground px-4 py-2 font-display uppercase text-sm shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
+                  className="bg-foreground text-white border-2 border-foreground px-5 py-3 font-display uppercase text-base shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
                 >
                   Go →
                 </button>
