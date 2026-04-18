@@ -82,10 +82,10 @@ router.post("/admin/login", loginLimiter, (req, res) => {
 router.post("/superadmin/login", loginLimiter, (req, res) => {
   const { password } = req.body as { password?: string };
   if (!password || !process.env.SUPERADMIN_PASSWORD) {
-    res.status(401).json({ error: "Invalid password" });
+    res.status(503).json({ error: "Superadmin auth is not configured on this server." });
     return;
   }
-  if (password !== process.env.SUPERADMIN_PASSWORD) {
+  if (password.trim() !== process.env.SUPERADMIN_PASSWORD.trim()) {
     res.status(401).json({ error: "Invalid password" });
     return;
   }
@@ -235,7 +235,7 @@ router.get("/admin/export-xlsx", requireAdminAuth, async (_req, res) => {
 // ── Superadmin: Organization Management ───────────────────────────────────────
 
 // List all organizations with event counts
-router.get("/superadmin/orgs", requireAdminAuth, async (_req, res) => {
+router.get("/superadmin/orgs", requireSuperadminAuth, async (_req, res) => {
   try {
     const orgs = await db.select().from(organizationsTable).orderBy(organizationsTable.name);
     const eventCounts = await db
@@ -263,7 +263,7 @@ router.get("/superadmin/orgs", requireAdminAuth, async (_req, res) => {
 });
 
 // Create a new organization
-router.post("/superadmin/orgs", requireAdminAuth, async (req, res) => {
+router.post("/superadmin/orgs", requireSuperadminAuth, async (req, res) => {
   const { name, slug, mobilizeApiKey } = req.body as {
     name?: string; slug?: string; mobilizeApiKey?: string;
   };

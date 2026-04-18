@@ -28,7 +28,12 @@ async function loginSuperadmin(password: string): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
   });
-  if (!res.ok) throw new Error("Invalid credentials");
+  if (res.status === 429) throw new Error("Too many attempts. Wait 15 minutes and try again.");
+  if (res.status === 503) throw new Error("Server config error: SUPERADMIN_PASSWORD not set.");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? "Invalid credentials");
+  }
   const data = (await res.json()) as { token: string };
   return data.token;
 }
