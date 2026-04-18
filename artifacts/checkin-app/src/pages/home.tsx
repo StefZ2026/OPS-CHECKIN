@@ -111,10 +111,14 @@ export default function HomePage() {
       {/* ── Hero ── */}
       <section className="bg-primary border-b-4 border-foreground">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
-          <h1 className="font-display text-white text-4xl sm:text-6xl lg:text-7xl uppercase leading-none tracking-tight mb-6">
-            Show up.{" "}
-            <span className="text-secondary">Check in.</span>{" "}
-            Get to work.
+          <h1 className="font-display text-white uppercase leading-none tracking-tight mb-6">
+            <span className="block text-3xl sm:text-5xl lg:text-6xl mb-1 opacity-90">
+              Show up.{" "}
+              <span className="text-secondary">Check in.</span>
+            </span>
+            <span className="block text-5xl sm:text-7xl lg:text-8xl">
+              Get to work.
+            </span>
           </h1>
           <p className="text-white/90 text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
             OpsCheckIn is the event check-in platform built for organizations
