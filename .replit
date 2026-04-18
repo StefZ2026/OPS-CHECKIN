@@ -30,6 +30,7 @@ timeoutMs = 20000
 [userenv.shared]
 ADMIN_PASSWORD = "SylviBoo*2026"
 ADMIN_USERNAME = "SAZOPSCHECKIN08"
+CHECKIN_BASE_URL = "https://d703b720-1b7f-47a9-b40f-3ada67ffcb64-00-28oze2zk8h48b.worf.replit.dev/checkin-app"
 
 [nix]
 channel = "stable-25_05"
