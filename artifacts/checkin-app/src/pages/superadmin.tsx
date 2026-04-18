@@ -871,7 +871,13 @@ export default function SuperadminPage() {
         setAuthed(false);
         return;
       }
-      if (!eventsRes.ok || !orgsRes.ok) throw new Error("Failed to load data");
+      if (eventsRes.status === 503 || orgsRes.status === 503) {
+        throw new Error("Server configuration error: SUPERADMIN_PASSWORD is not set. Add it in the Replit Secrets panel and restart the API server.");
+      }
+      if (!eventsRes.ok || !orgsRes.ok) {
+        const errBody = await (eventsRes.ok ? orgsRes : eventsRes).json().catch(() => ({})) as { error?: string };
+        throw new Error(errBody.error ?? "Server returned an error. Try refreshing.");
+      }
       const [eventsData, orgsData] = await Promise.all([
         eventsRes.json() as Promise<{ events: EventRecord[] }>,
         orgsRes.json() as Promise<{ orgs: OrgRecord[] }>,
