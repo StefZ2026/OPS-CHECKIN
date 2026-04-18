@@ -45,12 +45,12 @@ function Router() {
 
   return (
     <Switch>
-      {/* Public routes */}
+      {/* Homepage */}
+      <Route path="/" component={HomePage} />
+
+      {/* Static named pages — must come before /:eventSlug wildcard */}
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
-      <Route path="/:eventSlug/entry/:token" component={EntryPage} />
-      <Route path="/:eventSlug/scan" component={ScanPage} />
-      <Route path="/:eventSlug" component={CheckInFlow} />
 
       {/* Auth */}
       <Route path="/login">
@@ -73,12 +73,14 @@ function Router() {
       {/* Superadmin */}
       <Route path="/superadmin" component={SuperadminPage} />
 
-      {/* Event admin — existing password-based auth still works */}
-      <Route path="/:eventSlug/admin" component={AdminDashboard} />
+      {/* Event admin */}
       <Route path="/admin" component={AdminDashboard} />
 
-      {/* Homepage */}
-      <Route path="/" component={HomePage} />
+      {/* Event-scoped routes — wildcard last */}
+      <Route path="/:eventSlug/entry/:token" component={EntryPage} />
+      <Route path="/:eventSlug/scan" component={ScanPage} />
+      <Route path="/:eventSlug/admin" component={AdminDashboard} />
+      <Route path="/:eventSlug" component={CheckInFlow} />
 
       <Route component={NotFound} />
     </Switch>
