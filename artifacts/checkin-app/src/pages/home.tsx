@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import Logo from "../components/Logo";
 
 const FEATURES = [
   {
@@ -15,7 +16,7 @@ const FEATURES = [
   {
     icon: "🎭",
     title: "Role-Based Sign-Ups",
-    desc: "Safety marshals, canvassers, phone bankers — assign roles at the door.",
+    desc: "Greeters, staff, marshals — assign and track roles right at the door.",
   },
   {
     icon: "📊",
@@ -24,21 +25,21 @@ const FEATURES = [
   },
   {
     icon: "🏛️",
-    title: "Multi-Campaign & Multi-Org",
-    desc: "One platform for your whole organization across every campaign and event.",
+    title: "Multi-Event & Multi-Org",
+    desc: "One platform for your whole organization across every event and campaign.",
   },
   {
-    icon: "🆓",
-    title: "Free to Start",
-    desc: "No contracts, no credit card. Get your first event live in minutes.",
+    icon: "🔁",
+    title: "Multi-Day Re-Entry",
+    desc: "Attendees get a QR code by text on day one. Scan it for instant re-entry on day two.",
   },
 ];
 
 const STEPS = [
   {
     num: "01",
-    title: "Set Up Your Campaign",
-    desc: "Your org admin creates a campaign and its events. Takes two minutes.",
+    title: "Set Up Your Event",
+    desc: "Create your event and share an event code. Takes two minutes.",
   },
   {
     num: "02",
@@ -54,15 +55,36 @@ const STEPS = [
 
 const FOR_ORGS = [
   { emoji: "🗳️", label: "Political Campaigns & Candidates" },
-  { emoji: "✊", label: "Indivisible Chapters & Progressive Coalitions" },
-  { emoji: "📣", label: "Issue Advocacy Organizations" },
-  { emoji: "🏘️", label: "Community Organizers & Civic Groups" },
+  { emoji: "🏘️", label: "Community Organizations & Nonprofits" },
+  { emoji: "📣", label: "Issue Advocacy & Coalitions" },
+  { emoji: "🎟️", label: "Conferences, Meetups & Live Events" },
+];
+
+const TESTIMONIALS = [
+  {
+    quote: "This was fantastic — so easy to check in. Took two seconds. This was great!",
+    name: "Priscilla N.",
+    role: "Volunteer, NK3 Rally",
+  },
+  {
+    quote: "That worked great. So much better than how we did it last time. Thanks so much!",
+    name: "Gail P.",
+    role: "Organizer, NK3 Rally",
+  },
 ];
 
 export default function HomePage() {
   const [attendeeCode, setAttendeeCode] = useState("");
   const [managerCode, setManagerCode] = useState("");
   const [, navigate] = useLocation();
+  const [activeTestimonial, setActiveTestimonial] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveTestimonial((prev) => (prev + 1) % TESTIMONIALS.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   function handleAttendeeGo(e: React.FormEvent) {
     e.preventDefault();
@@ -79,25 +101,13 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background font-sans">
       {/* ── Nav ── */}
-      <nav className="border-b-4 border-foreground bg-primary">
+      <nav className="border-b-4 border-foreground bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src="/opscheckin-mark.png"
-              alt="OpsCheckIn"
-              className="w-9 h-9 object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-            <span className="font-display text-white text-xl tracking-tight uppercase">
-              OpsCheckIn
-            </span>
-          </div>
+          <Logo className="h-9 w-auto" variant="color" />
           <div className="flex items-center gap-3">
             <a
-              href="/superadmin"
-              className="text-white/80 hover:text-white text-sm font-semibold transition-colors hidden sm:block"
+              href="/checkin-app/superadmin"
+              className="text-foreground/60 hover:text-foreground text-sm font-semibold transition-colors hidden sm:block"
             >
               Platform Admin
             </a>
@@ -108,18 +118,14 @@ export default function HomePage() {
       {/* ── Hero ── */}
       <section className="bg-primary border-b-4 border-foreground">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
-          <div className="inline-block bg-secondary text-foreground text-xs font-display uppercase tracking-widest px-4 py-1 border-2 border-foreground shadow-brutal-sm mb-6">
-            Free for progressive organizations
-          </div>
           <h1 className="font-display text-white text-4xl sm:text-6xl lg:text-7xl uppercase leading-none tracking-tight mb-6">
             Show up.{" "}
             <span className="text-secondary">Check in.</span>{" "}
             Get to work.
           </h1>
           <p className="text-white/90 text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-            OpsCheckIn is the event check-in platform built for progressive
-            organizing — from candidate meet-and-greets to weekly community
-            campaigns.
+            OpsCheckIn is the event check-in platform built for organizations
+            that run events — from community gatherings to large-scale campaigns.
           </p>
 
           {/* Entry cards */}
@@ -200,7 +206,7 @@ export default function HomePage() {
       <section className="border-b-4 border-foreground bg-secondary">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
           <h2 className="font-display text-3xl sm:text-4xl uppercase text-center mb-10">
-            Built for the movement
+            Built for your organization
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {FOR_ORGS.map((org) => (
@@ -243,27 +249,40 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Social Proof ── */}
+      {/* ── Testimonials ── */}
       <section className="border-b-4 border-foreground bg-primary">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 text-center">
-          <h2 className="font-display text-3xl sm:text-4xl uppercase text-white mb-4">
-            What organizers are saying
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 text-center">
+          <h2 className="font-display text-3xl sm:text-4xl uppercase text-white mb-10">
+            What people are saying
           </h2>
-          <p className="text-white/70 mb-10 text-sm uppercase tracking-widest font-display">
-            Testimonials coming soon — this summer's Building Bridges campaign is just getting started.
-          </p>
-          <div className="grid sm:grid-cols-3 gap-4">
-            {[1, 2, 3].map((n) => (
+
+          <div className="relative">
+            {TESTIMONIALS.map((t, i) => (
               <div
-                key={n}
-                className="bg-white/10 border-4 border-white/30 p-8 text-left"
+                key={i}
+                className={`transition-all duration-500 ${i === activeTestimonial ? "opacity-100" : "opacity-0 absolute inset-0"}`}
               >
-                <div className="w-10 h-10 rounded-full bg-white/20 border-2 border-white/40 mb-4" />
-                <div className="h-3 bg-white/20 rounded mb-2 w-3/4" />
-                <div className="h-3 bg-white/20 rounded mb-2 w-full" />
-                <div className="h-3 bg-white/20 rounded w-2/3" />
-                <div className="mt-4 h-2 bg-white/10 rounded w-1/2" />
+                <blockquote className="bg-white/10 border-4 border-white/30 p-8 sm:p-12 text-left">
+                  <p className="text-white text-lg sm:text-2xl font-display leading-relaxed mb-6">
+                    "{t.quote}"
+                  </p>
+                  <footer className="text-white/70 text-sm uppercase tracking-widest font-display">
+                    — {t.name}, {t.role}
+                  </footer>
+                </blockquote>
               </div>
+            ))}
+          </div>
+
+          {/* Dots */}
+          <div className="flex justify-center gap-3 mt-8">
+            {TESTIMONIALS.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveTestimonial(i)}
+                className={`w-3 h-3 border-2 border-white transition-all ${i === activeTestimonial ? "bg-white" : "bg-transparent"}`}
+                aria-label={`Testimonial ${i + 1}`}
+              />
             ))}
           </div>
         </div>
@@ -276,7 +295,7 @@ export default function HomePage() {
             Ready to get started?
           </h2>
           <p className="text-white/90 mb-8 max-w-lg mx-auto">
-            Set up your organization and your first event for free. No credit card, no contract.
+            Get your organization set up and your first event live. Reach out to request access.
           </p>
           <a
             href="mailto:hello@opscheckin.com"
@@ -290,19 +309,7 @@ export default function HomePage() {
       {/* ── Footer ── */}
       <footer className="bg-foreground border-t-4 border-foreground">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img
-              src="/opscheckin-mark.png"
-              alt="OpsCheckIn"
-              className="w-7 h-7 object-contain"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-            <span className="font-display text-white text-sm uppercase">
-              OpsCheckIn
-            </span>
-          </div>
+          <Logo className="h-7 w-auto" variant="white" />
           <p className="text-white/50 text-xs text-center">
             Show Up. Check In. Get to Work. © {new Date().getFullYear()} OpsCheckIn
           </p>
@@ -314,7 +321,7 @@ export default function HomePage() {
               Contact
             </a>
             <a
-              href="/superadmin"
+              href="/checkin-app/superadmin"
               className="text-white/30 hover:text-white/60 transition-colors"
             >
               Platform Admin
