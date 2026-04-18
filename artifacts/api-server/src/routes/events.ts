@@ -995,11 +995,11 @@ router.post("/check-in/submit", checkinLimiter, async (req: Request, res: Respon
       await db.insert(attendeeRolesTable).values(resolvedRoles);
     }
 
-    // ── QR wristband: generate token + send SMS ──────────────────────────────
-    // Only for consecutive-day events (smsWristbandEnabled) with a phone number.
+    // ── QR re-entry: generate token + send SMS ───────────────────────────────
+    // Only for consecutive-day events (smsReentryEnabled) with a phone number.
     // Fire-and-forget — don't block the check-in response.
     const phoneDigits = (phone?.replace(/\D/g, "") ?? "");
-    if (event.smsWristbandEnabled && phoneDigits.length >= 10) {
+    if (event.smsReentryEnabled && phoneDigits.length >= 10) {
       const token = randomBytes(20).toString("hex");
 
       // Await token persistence so the link is guaranteed resolvable before we SMS it

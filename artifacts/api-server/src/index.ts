@@ -33,12 +33,23 @@ async function runStartupMigrations() {
       WHERE event_id IS NULL
     `);
 
-    // ── QR wristband columns (idempotent) ────────────────────────────────────
+    // ── QR re-entry columns (idempotent) ─────────────────────────────────────
     await client.query(`
-      ALTER TABLE events ADD COLUMN IF NOT EXISTS sms_wristband_enabled BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE attendees ADD COLUMN IF NOT EXISTS entry_token TEXT;
       ALTER TABLE attendees ADD COLUMN IF NOT EXISTS entry_token_used_date TEXT;
       CREATE UNIQUE INDEX IF NOT EXISTS attendees_entry_token_unique ON attendees (entry_token) WHERE entry_token IS NOT NULL;
+    `);
+    // Rename sms_wristband_enabled → sms_reentry_enabled (safe: only runs if old name exists)
+    await client.query(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'events' AND column_name = 'sms_wristband_enabled'
+        ) THEN
+          ALTER TABLE events RENAME COLUMN sms_wristband_enabled TO sms_reentry_enabled;
+        END IF;
+      END $$;
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS sms_reentry_enabled BOOLEAN NOT NULL DEFAULT false;
     `);
 
     // ── RLS Phase 1 (idempotent — re-applied every startup so drizzle-kit push

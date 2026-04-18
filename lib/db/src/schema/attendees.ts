@@ -29,8 +29,8 @@ export const eventsTable = pgTable("events", {
   // Plain password for the event's admin — scoped token is derived from this at login time
   adminPassword: text("admin_password"),
   isActive: boolean("is_active").notNull().default(true),
-  // When true: day-1 check-in sends an SMS with a QR wristband link for re-entry on subsequent days
-  smsWristbandEnabled: boolean("sms_wristband_enabled").notNull().default(false),
+  // When true: day-1 check-in sends an SMS with a QR code link for re-entry on subsequent days
+  smsReentryEnabled: boolean("sms_reentry_enabled").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

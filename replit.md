@@ -27,7 +27,7 @@ Tablet-optimized event check-in for ICU (Indivisible Cherokee United). Supports 
 
 #### Data Model
 - `organizations` → top-level tenant (e.g. ICU)
-- `events` → individual rallies/sessions under an org; each has `slug`, `adminPassword`, `mobilizeEventId`, `giveawayEnabled`, `smsWristbandEnabled`
+- `events` → individual rallies/sessions under an org; each has `slug`, `adminPassword`, `mobilizeEventId`, `giveawayEnabled`, `smsReentryEnabled`
 - `attendees` → each row has optional `entryToken` (40-char hex, unique) + `entryTokenUsedDate` (ISO date string) for QR wristband re-entry
 - `event_roles` → volunteer roles available per event (dynamic, replaces hardcoded enum)
 - All data tables carry `event_id` FK for multi-tenancy
