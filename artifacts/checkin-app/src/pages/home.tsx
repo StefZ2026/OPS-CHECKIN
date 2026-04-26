@@ -62,14 +62,14 @@ const FOR_ORGS = [
 
 const TESTIMONIALS = [
   {
-    quote: "This was fantastic — so easy to check in. Took two seconds. This was great!",
+    quote: "I just wanted to congratulate you on building such a fantastic check-in application for our No Kings 3 rally where we had over 1500 people attend. With just a few keystrokes we were able to sign in a massive number of people in a very short period of time whether they had sent an RSVP in or not. This is a true game changer for any organization wanting to register their attendance easily, quickly and painlessly via phone or tablet. WIN WIN for everyone!",
     name: "Priscilla N.",
     role: "Volunteer, NK3 Rally",
   },
   {
-    quote: "That worked great. So much better than how we did it last time. Thanks so much!",
-    name: "Gail P.",
-    role: "Organizer, NK3 Rally",
+    quote: "This Rally Check-in app and system was a game-changer for me. It is seamless, private, and efficient. It gave every member of our group a direct lifeline to leadership, other group members, de-escalation support, and real-time information when it mattered most!",
+    name: "Susan L.",
+    role: "Volunteer, NK3 Rally",
   },
 ];
 
