@@ -81,7 +81,7 @@ export default function HomePage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveTestimonial((prev) => (prev + 1) % TESTIMONIALS.length);
-    }, 5000);
+    }, 9000);
     return () => clearInterval(timer);
   }, []);
 
