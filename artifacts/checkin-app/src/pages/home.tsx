@@ -62,7 +62,7 @@ const FOR_ORGS = [
 
 const TESTIMONIALS = [
   {
-    quote: "I just wanted to congratulate you on building such a fantastic check-in application for our No Kings 3 rally where we had over 1500 people attend. With just a few keystrokes we were able to sign in a massive number of people in a very short period of time whether they had sent an RSVP in or not. This is a true game changer for any organization wanting to register their attendance easily, quickly and painlessly via phone or tablet. WIN WIN for everyone!",
+    quote: "I just wanted to congratulate you on building such a fantastic check-in application for our No Kings 3 rally, where over 1,500 people attended. With just a few keystrokes, we were able to sign in a massive number of people in a very short time, whether they had sent an RSVP or not. This is a true game changer for any organization wanting to register attendance easily, quickly, and painlessly by phone or tablet. Win-win for all!",
     name: "Priscilla N.",
     role: "Volunteer, NK3 Rally",
   },
