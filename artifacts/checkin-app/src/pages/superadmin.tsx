@@ -1300,7 +1300,7 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
               <div>
                 <button
                   type="button"
-                  onClick={() => setEditing(true)}
+                  onClick={(e) => { e.stopPropagation(); setEditing(true); }}
                   className="flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
                 >
                   <Pencil className="w-4 h-4" /> Edit Event
