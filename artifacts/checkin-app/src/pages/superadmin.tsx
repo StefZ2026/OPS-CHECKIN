@@ -23,6 +23,7 @@ type EventRecord = {
   eventDate: string | null;
   eventDates: string | null;
   giveawayEnabled: boolean;
+  smsReentryEnabled: boolean;
   mobilizeEventId: string | null;
   isActive: boolean;
   createdAt: string;
@@ -175,6 +176,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
+  const [smsReentryEnabled, setSmsReentryEnabled] = useState(false);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "clear" });
   const ALL_ROLES: NewRoleRow[] = [
     { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
@@ -256,6 +258,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
       adminPassword: adminPassword.trim() || undefined,
       mobilizeEventId: mobilizeEventId.trim() || undefined,
       giveawayEnabled,
+      smsReentryEnabled,
       roles: validRoles,
     };
     if (builtEventDates) {
@@ -284,7 +287,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
       setIsMultiDay(false); setExtraDates([""]);
       setSelectedRoleKeys(new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"]));
-      setMobilizeEventId(""); setGiveawayEnabled(false);
+      setMobilizeEventId(""); setGiveawayEnabled(false); setSmsReentryEnabled(false);
       setCustomRoles([]); setCustomRoleInput("");
       setOpen(false);
     } catch (err) {
@@ -415,19 +418,36 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
                     placeholder="Leave blank if not using Mobilize"
                   />
                 </div>
-                <div className="flex items-center gap-3 pt-6">
-                  <button
-                    type="button"
-                    onClick={() => setGiveawayEnabled((v) => !v)}
-                    className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors ${giveawayEnabled ? "bg-primary" : "bg-gray-200"}`}
-                  >
-                    <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${giveawayEnabled ? "translate-x-7" : "translate-x-1"}`} />
-                  </button>
-                  <div>
-                    <p className="font-display text-sm uppercase tracking-wider">
-                      <Zap className="w-4 h-4 inline mr-1" />Giveaway
-                    </p>
-                    <p className="text-xs text-muted-foreground">{giveawayEnabled ? "Enabled" : "Disabled"}</p>
+                <div className="sm:col-span-2 flex flex-col sm:flex-row gap-4 pt-2">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setGiveawayEnabled((v) => !v)}
+                      className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors ${giveawayEnabled ? "bg-primary" : "bg-gray-200"}`}
+                    >
+                      <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${giveawayEnabled ? "translate-x-7" : "translate-x-1"}`} />
+                    </button>
+                    <div>
+                      <p className="font-display text-sm uppercase tracking-wider">
+                        <Zap className="w-4 h-4 inline mr-1" />Giveaway
+                      </p>
+                      <p className="text-xs text-muted-foreground">{giveawayEnabled ? "Enabled" : "Disabled"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSmsReentryEnabled((v) => !v)}
+                      className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors ${smsReentryEnabled ? "bg-primary" : "bg-gray-200"}`}
+                    >
+                      <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${smsReentryEnabled ? "translate-x-7" : "translate-x-1"}`} />
+                    </button>
+                    <div>
+                      <p className="font-display text-sm uppercase tracking-wider">
+                        SMS Re-Entry Wristbands
+                      </p>
+                      <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR code sent via SMS after Day 1 check-in" : "Off"}</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -795,6 +815,7 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState(event.mobilizeEventId ?? "");
   const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
+  const [smsReentryEnabled, setSmsReentryEnabled] = useState(event.smsReentryEnabled);
   const [isActive, setIsActive] = useState(event.isActive);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "keep" });
   const [loading, setLoading] = useState(false);
@@ -822,6 +843,7 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
       name: name.trim(),
       mobilizeEventId: mobilizeEventId.trim() || null,
       giveawayEnabled,
+      smsReentryEnabled,
       isActive,
     };
     if (builtEventDates) {
@@ -951,7 +973,7 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           />
         </div>
 
-        <div className="flex items-start gap-6 pt-1">
+        <div className="sm:col-span-2 flex flex-wrap items-start gap-6 pt-1">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -963,6 +985,20 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
             <div>
               <p className="font-display text-xs uppercase tracking-wider"><Zap className="w-3 h-3 inline mr-0.5" />Giveaway</p>
               <p className="text-xs text-muted-foreground">{giveawayEnabled ? "On" : "Off"}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSmsReentryEnabled((v) => !v)}
+              className={`relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${smsReentryEnabled ? "bg-primary" : "bg-gray-200"}`}
+            >
+              <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${smsReentryEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+            <div>
+              <p className="font-display text-xs uppercase tracking-wider">SMS Re-Entry</p>
+              <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR wristband SMS enabled" : "Off"}</p>
             </div>
           </div>
 

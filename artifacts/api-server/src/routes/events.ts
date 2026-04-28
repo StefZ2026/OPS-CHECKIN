@@ -52,6 +52,17 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
       res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — re-entry is no longer permitted." });
       return;
     }
+    // For multi-day events: today must be one of the scheduled event dates.
+    // Single-day events (eventDates null) rely solely on isActive above.
+    if (!isAdminOrConfig && rows[0].event.eventDates) {
+      const todayISO = new Date().toISOString().slice(0, 10);
+      let validDates: string[] = [];
+      try { validDates = JSON.parse(rows[0].event.eventDates as string) as string[]; } catch { /* ignore */ }
+      if (validDates.length > 0 && !validDates.includes(todayISO)) {
+        res.status(403).json({ ok: false, state: "NOT_COVERED", error: "Check-in is not open today. Please come back on an event day." });
+        return;
+      }
+    }
     res.locals.event = rows[0].event;
     res.locals.orgMobilizeApiKey = rows[0].mobilizeApiKey;
     next();

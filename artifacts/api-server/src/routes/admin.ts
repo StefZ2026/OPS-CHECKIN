@@ -331,6 +331,7 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         eventDate: eventsTable.eventDate,
         eventDates: eventsTable.eventDates,
         giveawayEnabled: eventsTable.giveawayEnabled,
+        smsReentryEnabled: eventsTable.smsReentryEnabled,
         mobilizeEventId: eventsTable.mobilizeEventId,
         isActive: eventsTable.isActive,
         createdAt: eventsTable.createdAt,
@@ -368,6 +369,7 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
       eventDate: e.eventDate,
       eventDates: e.eventDates,
       giveawayEnabled: e.giveawayEnabled,
+      smsReentryEnabled: e.smsReentryEnabled,
       mobilizeEventId: e.mobilizeEventId,
       isActive: e.isActive,
       createdAt: e.createdAt,
@@ -401,6 +403,7 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     adminPassword,
     mobilizeEventId,
     giveawayEnabled,
+    smsReentryEnabled,
     roles,
     eventManagerId,
     newEventManager,
@@ -413,6 +416,7 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     adminPassword?: string;
     mobilizeEventId?: string;
     giveawayEnabled?: boolean;
+    smsReentryEnabled?: boolean;
     roles?: NewRoleInput[];
     eventManagerId?: number;
     newEventManager?: { name: string; email: string };
@@ -469,6 +473,7 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
           adminPassword: adminPassword?.trim() || null,
           mobilizeEventId: mobilizeEventId?.trim() || null,
           giveawayEnabled: giveawayEnabled ?? false,
+          smsReentryEnabled: smsReentryEnabled ?? false,
           isActive: true,
         })
         .returning();
@@ -530,6 +535,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     adminPassword,
     mobilizeEventId,
     giveawayEnabled,
+    smsReentryEnabled,
     isActive,
     eventManagerId,
     newEventManager,
@@ -540,6 +546,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     adminPassword?: string | null;
     mobilizeEventId?: string | null;
     giveawayEnabled?: boolean;
+    smsReentryEnabled?: boolean;
     isActive?: boolean;
     eventManagerId?: number | null;
     newEventManager?: { name: string; email: string };
@@ -573,6 +580,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   if (adminPassword !== undefined) updates.adminPassword = adminPassword?.trim() || null;
   if (mobilizeEventId !== undefined) updates.mobilizeEventId = mobilizeEventId?.trim() || null;
   if (giveawayEnabled !== undefined) updates.giveawayEnabled = giveawayEnabled;
+  if (smsReentryEnabled !== undefined) updates.smsReentryEnabled = smsReentryEnabled;
   if (isActive !== undefined) updates.isActive = isActive;
 
   const hasManagerChange = eventManagerId !== undefined || newEventManager !== undefined;
