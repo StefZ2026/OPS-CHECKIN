@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
-import { eq, inArray, count } from "drizzle-orm";
+import { eq, inArray, count, countDistinct } from "drizzle-orm";
 import { signToken, verifyToken, type AuthPayload } from "./auth";
 
 const router: IRouter = Router();
@@ -273,11 +273,16 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
       .leftJoin(organizationsTable, eq(eventsTable.orgId, organizationsTable.id))
       .orderBy(eventsTable.createdAt);
 
-    const [allRoles, attendeeCounts] = await Promise.all([
+    const [allRoles, attendeeCounts, volunteerCounts] = await Promise.all([
       db.select().from(eventRolesTable).orderBy(eventRolesTable.sortOrder),
       db
         .select({ eventId: attendeesTable.eventId, checkedInCount: count() })
         .from(attendeesTable)
+        .groupBy(attendeesTable.eventId),
+      db
+        .select({ eventId: attendeesTable.eventId, volunteerCount: countDistinct(attendeesTable.id) })
+        .from(attendeesTable)
+        .innerJoin(attendeeRolesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
         .groupBy(attendeesTable.eventId),
     ]);
 
@@ -292,26 +297,37 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
       if (row.eventId !== null) countMap.set(row.eventId, row.checkedInCount);
     }
 
-    const result = events.map((e) => ({
-      id: e.id,
-      name: e.name,
-      slug: e.slug,
-      eventDate: e.eventDate,
-      eventDates: e.eventDates,
-      giveawayEnabled: e.giveawayEnabled,
-      smsReentryEnabled: e.smsReentryEnabled,
-      mobilizeEventId: e.mobilizeEventId,
-      isActive: e.isActive,
-      createdAt: e.createdAt,
-      checkedInCount: countMap.get(e.id) ?? 0,
-      org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
-      roles: (rolesMap.get(e.id) ?? []).map((r) => ({
-        id: r.id,
-        roleKey: r.roleKey,
-        displayName: r.displayName,
-        sortOrder: r.sortOrder,
-      })),
-    }));
+    const volMap = new Map<number, number>();
+    for (const row of volunteerCounts) {
+      if (row.eventId !== null) volMap.set(row.eventId, row.volunteerCount);
+    }
+
+    const result = events.map((e) => {
+      const total = countMap.get(e.id) ?? 0;
+      const volunteers = volMap.get(e.id) ?? 0;
+      return {
+        id: e.id,
+        name: e.name,
+        slug: e.slug,
+        eventDate: e.eventDate,
+        eventDates: e.eventDates,
+        giveawayEnabled: e.giveawayEnabled,
+        smsReentryEnabled: e.smsReentryEnabled,
+        mobilizeEventId: e.mobilizeEventId,
+        isActive: e.isActive,
+        createdAt: e.createdAt,
+        checkedInCount: total,
+        volunteerCount: volunteers,
+        attendeeCount: total - volunteers,
+        org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
+        roles: (rolesMap.get(e.id) ?? []).map((r) => ({
+          id: r.id,
+          roleKey: r.roleKey,
+          displayName: r.displayName,
+          sortOrder: r.sortOrder,
+        })),
+      };
+    });
 
     res.json({ events: result });
   } catch (err) {
@@ -458,6 +474,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     smsReentryEnabled,
     isActive,
     eventManagerId,
+    roles,
   } = req.body as {
     name?: string;
     eventDate?: string | null;
@@ -468,6 +485,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     smsReentryEnabled?: boolean;
     isActive?: boolean;
     eventManagerId?: number | null;
+    roles?: { roleKey: string; displayName: string }[];
   };
 
   const updates: Partial<typeof eventsTable.$inferInsert> = {};
@@ -502,8 +520,9 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   if (isActive !== undefined) updates.isActive = isActive;
 
   const hasManagerChange = eventManagerId !== undefined;
+  const hasRolesChange = roles !== undefined;
 
-  if (Object.keys(updates).length === 0 && !hasManagerChange) {
+  if (Object.keys(updates).length === 0 && !hasManagerChange && !hasRolesChange) {
     res.status(400).json({ error: "No fields to update" });
     return;
   }
@@ -522,24 +541,48 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
 
     // Handle event manager assignment (existing org user only)
     if (hasManagerChange) {
-      // Clear any existing event_id assignments for this event
       await db.update(usersTable).set({ eventId: null }).where(eq(usersTable.eventId, id));
       if (eventManagerId) {
         await db.update(usersTable).set({ eventId: id }).where(eq(usersTable.id, eventManagerId));
       }
     }
 
-    const [roles, orgRows] = await Promise.all([
+    // Handle role replacement — delete all existing and re-insert
+    if (hasRolesChange && roles) {
+      await db.delete(eventRolesTable).where(eq(eventRolesTable.eventId, id));
+      if (roles.length > 0) {
+        await db.insert(eventRolesTable).values(
+          roles.map((r, i) => ({
+            eventId: id,
+            roleKey: r.roleKey,
+            displayName: r.displayName,
+            sortOrder: i,
+          }))
+        );
+      }
+    }
+
+    const [updatedRoles, orgRows, totalCount, volCount] = await Promise.all([
       db.select().from(eventRolesTable).where(eq(eventRolesTable.eventId, id)).orderBy(eventRolesTable.sortOrder),
       db.select().from(organizationsTable).where(eq(organizationsTable.id, updated.orgId)).limit(1),
+      db.select({ total: count() }).from(attendeesTable).where(eq(attendeesTable.eventId, id)),
+      db.select({ vol: countDistinct(attendeesTable.id) })
+        .from(attendeesTable)
+        .innerJoin(attendeeRolesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
+        .where(eq(attendeesTable.eventId, id)),
     ]);
     const org = orgRows[0];
+    const total = totalCount[0]?.total ?? 0;
+    const volunteers = volCount[0]?.vol ?? 0;
 
     res.json({
       event: {
         ...updated,
+        checkedInCount: total,
+        volunteerCount: volunteers,
+        attendeeCount: total - volunteers,
         org: { id: org?.id ?? updated.orgId, name: org?.name ?? null, slug: org?.slug ?? null },
-        roles: roles.map((r) => ({ id: r.id, roleKey: r.roleKey, displayName: r.displayName, sortOrder: r.sortOrder })),
+        roles: updatedRoles.map((r) => ({ id: r.id, roleKey: r.roleKey, displayName: r.displayName, sortOrder: r.sortOrder })),
       },
     });
   } catch (err) {

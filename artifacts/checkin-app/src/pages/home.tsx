@@ -321,9 +321,6 @@ export default function HomePage() {
             <Link href="/terms" className="text-white/60 hover:text-white transition-colors">
               Terms
             </Link>
-            <Link href="/superadmin" className="text-white/30 hover:text-white/60 transition-colors">
-              Platform Admin
-            </Link>
           </div>
         </div>
       </footer>

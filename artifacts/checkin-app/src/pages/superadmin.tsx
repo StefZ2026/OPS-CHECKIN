@@ -28,6 +28,8 @@ type EventRecord = {
   isActive: boolean;
   createdAt: string;
   checkedInCount: number;
+  volunteerCount: number;
+  attendeeCount: number;
   org: { id: number; name: string | null; slug: string | null };
   roles: EventRole[];
 };
@@ -81,29 +83,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
   const [smsReentryEnabled, setSmsReentryEnabled] = useState(false);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "clear" });
-  const ALL_ROLES: NewRoleRow[] = [
-    { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
-    { roleKey: "medic",                  displayName: "Medic" },
-    { roleKey: "de_escalator",           displayName: "De-Escalator" },
-    { roleKey: "chant_lead",             displayName: "Chant Lead" },
-    { roleKey: "information_services",   displayName: "Info Services" },
-    { roleKey: "registration",           displayName: "Registration" },
-    { roleKey: "greeter",                displayName: "Greeter" },
-    { roleKey: "timekeeper",             displayName: "Timekeeper" },
-    { roleKey: "facilitator",            displayName: "Facilitator" },
-    { roleKey: "canvasser",              displayName: "Canvasser" },
-    { roleKey: "phone_banker",           displayName: "Phone Banker" },
-    { roleKey: "av_tech",                displayName: "AV / Tech" },
-    { roleKey: "photographer",           displayName: "Photographer / Videographer" },
-    { roleKey: "setup_teardown",         displayName: "Setup & Teardown" },
-    { roleKey: "childcare",              displayName: "Childcare" },
-    { roleKey: "interpreter",            displayName: "Interpreter / Translation" },
-    { roleKey: "accessibility_support",  displayName: "Accessibility Support" },
-    { roleKey: "social_media",           displayName: "Social Media" },
-    { roleKey: "outreach_coordinator",   displayName: "Outreach Coordinator" },
-    { roleKey: "merchandise_sales",      displayName: "Merchandise Sales" },
-    { roleKey: "emcee",                  displayName: "Emcee" },
-  ];
+  const ALL_ROLES = PREDEFINED_ROLES;
 
   const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
     new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"])
@@ -687,6 +667,30 @@ type EditEventFormProps = {
   onCancel: () => void;
 };
 
+const PREDEFINED_ROLES: NewRoleRow[] = [
+  { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
+  { roleKey: "medic",                  displayName: "Medic" },
+  { roleKey: "de_escalator",           displayName: "De-Escalator" },
+  { roleKey: "chant_lead",             displayName: "Chant Lead" },
+  { roleKey: "information_services",   displayName: "Info Services" },
+  { roleKey: "registration",           displayName: "Registration" },
+  { roleKey: "greeter",                displayName: "Greeter" },
+  { roleKey: "timekeeper",             displayName: "Timekeeper" },
+  { roleKey: "facilitator",            displayName: "Facilitator" },
+  { roleKey: "canvasser",              displayName: "Canvasser" },
+  { roleKey: "phone_banker",           displayName: "Phone Banker" },
+  { roleKey: "av_tech",                displayName: "AV / Tech" },
+  { roleKey: "photographer",           displayName: "Photographer / Videographer" },
+  { roleKey: "setup_teardown",         displayName: "Setup & Teardown" },
+  { roleKey: "childcare",              displayName: "Childcare" },
+  { roleKey: "interpreter",            displayName: "Interpreter / Translation" },
+  { roleKey: "accessibility_support",  displayName: "Accessibility Support" },
+  { roleKey: "social_media",           displayName: "Social Media" },
+  { roleKey: "outreach_coordinator",   displayName: "Outreach Coordinator" },
+  { roleKey: "merchandise_sales",      displayName: "Merchandise Sales" },
+  { roleKey: "emcee",                  displayName: "Emcee" },
+];
+
 function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFormProps) {
   const [name, setName] = useState(event.name);
   const parsedDates: string[] = event.eventDates ? (JSON.parse(event.eventDates) as string[]) : [];
@@ -700,10 +704,36 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
   const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
   const [smsReentryEnabled, setSmsReentryEnabled] = useState(event.smsReentryEnabled);
   const [isActive, setIsActive] = useState(event.isActive);
+  const [showDeactivateWarning, setShowDeactivateWarning] = useState(false);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "keep" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { toast } = useToast();
+
+  // Role editing state — initialized from current event roles
+  const predefinedKeys = new Set(PREDEFINED_ROLES.map((r) => r.roleKey));
+  const initialSelected = new Set(event.roles.filter((r) => predefinedKeys.has(r.roleKey)).map((r) => r.roleKey));
+  const initialCustom = event.roles.filter((r) => !predefinedKeys.has(r.roleKey)).map((r) => ({ roleKey: r.roleKey, displayName: r.displayName }));
+  const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(initialSelected);
+  const [customRoles, setCustomRoles] = useState<NewRoleRow[]>(initialCustom);
+  const [customRoleInput, setCustomRoleInput] = useState("");
+
+  const toggleRole = (key: string) =>
+    setSelectedRoleKeys((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+
+  const addCustomRole = () => {
+    const display = customRoleInput.trim();
+    if (!display) return;
+    const key = display.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (selectedRoleKeys.has(key) || customRoles.some((r) => r.roleKey === key)) return;
+    setCustomRoles((prev) => [...prev, { roleKey: key, displayName: display }]);
+    setCustomRoleInput("");
+  };
+
+  const removeCustomRole = (key: string) => setCustomRoles((prev) => prev.filter((r) => r.roleKey !== key));
+
+  const selectedFromList = PREDEFINED_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
+  const editRoles = [...selectedFromList, ...customRoles];
 
   const currentManager = orgUsers.find((u) => u.event?.id === event.id) ?? null;
 
@@ -725,6 +755,7 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
       giveawayEnabled,
       smsReentryEnabled,
       isActive,
+      roles: editRoles.filter((r) => r.roleKey.trim() && r.displayName.trim()),
     };
     if (builtEventDates) {
       payload.eventDates = builtEventDates;
@@ -881,20 +912,76 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <button
               type="button"
-              onClick={() => setIsActive((v) => !v)}
-              className={`relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${isActive ? "bg-green-500" : "bg-gray-200"}`}
+              onClick={() => {
+                if (isActive && event.checkedInCount > 0) {
+                  setShowDeactivateWarning(true);
+                } else {
+                  setIsActive((v) => !v);
+                  setShowDeactivateWarning(false);
+                }
+              }}
+              className={`mt-0.5 relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${isActive ? "bg-green-500" : "bg-gray-200"}`}
             >
               <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
             </button>
             <div>
               <p className="font-display text-xs uppercase tracking-wider">Active</p>
-              <p className="text-xs text-muted-foreground">{isActive ? "Yes" : "No"}</p>
+              <p className="text-xs text-muted-foreground">{isActive ? "Yes — accepting check-ins" : "No — check-in page disabled"}</p>
+              {showDeactivateWarning && (
+                <div className="mt-2 p-3 bg-amber-50 border-2 border-amber-400 rounded-lg text-xs text-amber-800 space-y-2">
+                  <p className="font-bold">This event has {event.checkedInCount} check-ins. Deactivating will disable the check-in page.</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setIsActive(false); setShowDeactivateWarning(false); }} className="px-3 py-1 rounded border-2 border-amber-600 bg-amber-600 text-white font-bold text-xs">Deactivate anyway</button>
+                    <button type="button" onClick={() => setShowDeactivateWarning(false)} className="px-3 py-1 rounded border-2 border-amber-600 font-bold text-xs">Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Role editing */}
+      <div className="space-y-3 pt-3 border-t-2 border-foreground/10">
+        <label className="font-display text-xs uppercase tracking-wider block">
+          <Users className="w-3 h-3 inline mr-1" />Volunteer Roles
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {PREDEFINED_ROLES.map((r) => (
+            <button
+              key={r.roleKey}
+              type="button"
+              onClick={() => toggleRole(r.roleKey)}
+              className={`text-xs px-3 py-1.5 rounded-lg border-2 font-medium transition-colors ${selectedRoleKeys.has(r.roleKey) ? "bg-primary text-white border-primary" : "bg-white border-foreground/30 hover:border-foreground"}`}
+            >
+              {r.displayName}
+            </button>
+          ))}
+        </div>
+        {customRoles.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {customRoles.map((r) => (
+              <span key={r.roleKey} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border-2 bg-secondary border-foreground font-medium">
+                {r.displayName}
+                <button type="button" onClick={() => removeCustomRole(r.roleKey)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <Input
+            value={customRoleInput}
+            onChange={(e) => setCustomRoleInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomRole(); } }}
+            placeholder="Custom role name..."
+            className="text-sm h-8"
+          />
+          <Button type="button" variant="outline" size="sm" onClick={addCustomRole}><Plus className="w-3 h-3" /></Button>
+        </div>
+        {editRoles.length === 0 && <p className="text-xs text-amber-600 font-medium">No roles selected — attendees won't see a volunteer option.</p>}
       </div>
 
       <EventManagerPicker
@@ -1104,6 +1191,11 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
                   <Users className="w-4 h-4 inline mr-1" />
                   {event.checkedInCount} checked in
                 </span>
+                {event.volunteerCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({event.attendeeCount} attendees · {event.volunteerCount} volunteers)
+                  </span>
+                )}
               </div>
             </div>
             {expanded ? <ChevronUp className="w-5 h-5 flex-shrink-0 mt-1 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 flex-shrink-0 mt-1 text-muted-foreground" />}
@@ -1247,6 +1339,13 @@ export default function SuperadminPage() {
   };
 
   useEffect(() => { if (user?.role === "superadmin") void fetchAll(); }, [user?.role]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (user?.role !== "superadmin") return;
+    const id = setInterval(() => { void fetchAll(); }, 30_000);
+    return () => clearInterval(id);
+  }, [user?.role]);
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== "superadmin")) {
