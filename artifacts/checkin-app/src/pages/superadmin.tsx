@@ -1388,7 +1388,7 @@ export default function SuperadminPage() {
                     <p className="font-mono text-sm text-gray-400">/{org.slug} · {orgEvents.length} event{orgEvents.length !== 1 ? "s" : ""} · {orgEvents.reduce((s, e) => s + e.checkedInCount, 0)} checked in</p>
                   </div>
                   <button
-                    onClick={() => setLocation(`/org?orgId=${org.id}`)}
+                    onClick={() => setLocation(`/org/${org.id}`)}
                     className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" /> Open Org Dashboard

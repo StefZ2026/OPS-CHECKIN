@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useSearch } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { Calendar, Users, ChevronRight, LogOut, Shield, Plus, ChevronDown, ChevronUp, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -222,10 +222,10 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const search = useSearch();
+  const params = useParams<{ orgId?: string }>();
   const isSuperadmin = currentUser.role === "superadmin";
   const urlOrgId = isSuperadmin
-    ? (parseInt(new URLSearchParams(search).get("orgId") ?? "") || null)
+    ? (parseInt(params.orgId ?? "") || null)
     : null;
   const orgId = urlOrgId ?? currentUser.orgId;
 

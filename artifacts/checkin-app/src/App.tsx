@@ -67,7 +67,14 @@ function Router() {
         )}
       </Route>
 
-      {/* Org dashboard */}
+      {/* Org dashboard — /org for org_contact, /org/:orgId for superadmin */}
+      <Route path="/org/:orgId">
+        {user && (user.role === "org_contact" || user.role === "superadmin") ? (
+          <OrgDashboard currentUser={user} onLogout={handleLogout} />
+        ) : (
+          <LoginPage onLogin={handleLogin} />
+        )}
+      </Route>
       <Route path="/org">
         {user && (user.role === "org_contact" || user.role === "superadmin") ? (
           <OrgDashboard currentUser={user} onLogout={handleLogout} />
