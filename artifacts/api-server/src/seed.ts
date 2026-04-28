@@ -67,24 +67,19 @@ export async function runSeed(): Promise<void> {
     }
 
     // ── Platform admin seeding ─────────────────────────────────────────────────
-    // If no superadmin user exists yet and the env vars are set, create one.
-    // This makes a fresh deployment immediately usable without touching the DB.
+    // Always upsert the platform admin account so password changes take effect
+    // on next server restart without touching the DB manually.
     const adminEmail = process.env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
     const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD?.trim();
     if (adminEmail && adminPassword) {
-      const existing = await client.query(
-        `SELECT 1 FROM users WHERE role = 'superadmin' LIMIT 1`,
+      const passwordHash = await bcrypt.hash(adminPassword, 12);
+      await client.query(
+        `INSERT INTO users (name, email, role, password_hash, password_set, org_id, event_id)
+         VALUES ('Platform Admin', $1, 'superadmin', $2, true, NULL, NULL)
+         ON CONFLICT (email) DO UPDATE SET password_hash = $2, password_set = true, role = 'superadmin'`,
+        [adminEmail, passwordHash],
       );
-      if (existing.rowCount === 0) {
-        const passwordHash = await bcrypt.hash(adminPassword, 12);
-        await client.query(
-          `INSERT INTO users (name, email, role, password_hash, password_set, org_id, event_id)
-           VALUES ('Platform Admin', $1, 'superadmin', $2, true, NULL, NULL)
-           ON CONFLICT (email) DO NOTHING`,
-          [adminEmail, passwordHash],
-        );
-        console.log(`Seed: platform admin created for ${adminEmail}`);
-      }
+      console.log(`Seed: platform admin upserted for ${adminEmail}`);
     }
 
     console.log("Seed OK — org, events, and roles are up to date.");
