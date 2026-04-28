@@ -667,7 +667,7 @@ type EditEventFormProps = {
   onCancel: () => void;
 };
 
-const PREDEFINED_ROLES: NewRoleRow[] = [
+const EDIT_ALL_ROLES: NewRoleRow[] = [
   { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
   { roleKey: "medic",                  displayName: "Medic" },
   { roleKey: "de_escalator",           displayName: "De-Escalator" },
@@ -690,6 +690,7 @@ const PREDEFINED_ROLES: NewRoleRow[] = [
   { roleKey: "merchandise_sales",      displayName: "Merchandise Sales" },
   { roleKey: "emcee",                  displayName: "Emcee" },
 ];
+const EDIT_ALL_ROLES_KEY_SET = new Set(EDIT_ALL_ROLES.map((r) => r.roleKey));
 
 function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFormProps) {
   const [name, setName] = useState(event.name);
@@ -710,16 +711,24 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
   const [error, setError] = useState("");
   const { toast } = useToast();
 
-  // Role editing state — initialized from current event roles
-  const predefinedKeys = new Set(PREDEFINED_ROLES.map((r) => r.roleKey));
-  const initialSelected = new Set(event.roles.filter((r) => predefinedKeys.has(r.roleKey)).map((r) => r.roleKey));
-  const initialCustom = event.roles.filter((r) => !predefinedKeys.has(r.roleKey)).map((r) => ({ roleKey: r.roleKey, displayName: r.displayName }));
-  const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(initialSelected);
-  const [customRoles, setCustomRoles] = useState<NewRoleRow[]>(initialCustom);
+  // Roles state — initialise from current event roles
+  const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
+    () => new Set(event.roles.map((r) => r.roleKey))
+  );
+  const [customRoles, setCustomRoles] = useState<NewRoleRow[]>(
+    () => event.roles
+      .filter((r) => !EDIT_ALL_ROLES_KEY_SET.has(r.roleKey))
+      .map((r) => ({ roleKey: r.roleKey, displayName: r.displayName }))
+  );
   const [customRoleInput, setCustomRoleInput] = useState("");
+  const [rolesWithCheckins, setRolesWithCheckins] = useState<string[]>([]);
 
   const toggleRole = (key: string) =>
-    setSelectedRoleKeys((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+    setSelectedRoleKeys((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
 
   const addCustomRole = () => {
     const display = customRoleInput.trim();
@@ -727,36 +736,34 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     const key = display.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
     if (selectedRoleKeys.has(key) || customRoles.some((r) => r.roleKey === key)) return;
     setCustomRoles((prev) => [...prev, { roleKey: key, displayName: display }]);
+    setSelectedRoleKeys((prev) => new Set([...prev, key]));
     setCustomRoleInput("");
   };
 
-  const removeCustomRole = (key: string) => setCustomRoles((prev) => prev.filter((r) => r.roleKey !== key));
-
-  const selectedFromList = PREDEFINED_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
-  const editRoles = [...selectedFromList, ...customRoles];
+  const removeCustomRole = (key: string) => {
+    setCustomRoles((prev) => prev.filter((r) => r.roleKey !== key));
+    setSelectedRoleKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+  };
 
   const currentManager = orgUsers.find((u) => u.event?.id === event.id) ?? null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (!name.trim()) { setError("Event name is required"); return; }
-
-    // Build dates for multi-day
+  const buildPayload = (forceDeleteRoles: boolean): Record<string, unknown> => {
     let builtEventDates: string[] | undefined;
     if (isMultiDay && eventDate) {
       const allDates = [eventDate, ...extraDates.filter((d) => d.trim())];
       if (allDates.length > 1) builtEventDates = allDates;
     }
-
+    const selectedFromList = EDIT_ALL_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
+    const allRoles: NewRoleRow[] = [...selectedFromList, ...customRoles];
     const payload: Record<string, unknown> = {
       name: name.trim(),
       mobilizeEventId: mobilizeEventId.trim() || null,
       giveawayEnabled,
       smsReentryEnabled,
       isActive,
-      roles: editRoles.filter((r) => r.roleKey.trim() && r.displayName.trim()),
+      roles: allRoles,
     };
+    if (forceDeleteRoles) payload.forceDeleteRoles = true;
     if (builtEventDates) {
       payload.eventDates = builtEventDates;
       payload.eventDate = builtEventDates[0];
@@ -765,11 +772,14 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
       payload.eventDates = null;
     }
     if (adminPassword.trim()) payload.adminPassword = adminPassword.trim();
-
     if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
     else if (managerSelection.type === "clear") payload.eventManagerId = null;
+    return payload;
+  };
 
+  const submitPayload = async (payload: Record<string, unknown>) => {
     setLoading(true);
+    setRolesWithCheckins([]);
     try {
       const res = await fetch(`/api/superadmin/events/${event.id}`, {
         method: "PATCH",
@@ -777,7 +787,11 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      const data = await res.json() as { event?: EventRecord; error?: string };
+      const data = await res.json() as { event?: EventRecord; error?: string; rolesWithCheckins?: string[] };
+      if (res.status === 422 && data.rolesWithCheckins && data.rolesWithCheckins.length > 0) {
+        setRolesWithCheckins(data.rolesWithCheckins);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Failed to update event");
       toast({ title: "Event updated", description: `"${data.event!.name}" has been saved.` });
       onSaved(data.event!);
@@ -786,6 +800,18 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) { setError("Event name is required"); return; }
+    await submitPayload(buildPayload(false));
+  };
+
+  const handleForceDeleteRoles = async () => {
+    setError("");
+    await submitPayload(buildPayload(true));
   };
 
   return (
@@ -944,44 +970,62 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
         </div>
       </div>
 
-      {/* Role editing */}
-      <div className="space-y-3 pt-3 border-t-2 border-foreground/10">
-        <label className="font-display text-xs uppercase tracking-wider block">
+      <div>
+        <label className="font-display text-xs uppercase tracking-wider block mb-3">
           <Users className="w-3 h-3 inline mr-1" />Volunteer Roles
         </label>
-        <div className="flex flex-wrap gap-2">
-          {PREDEFINED_ROLES.map((r) => (
+        <div className="grid grid-cols-2 gap-2">
+          {EDIT_ALL_ROLES.map((role) => (
             <button
-              key={r.roleKey}
+              key={role.roleKey}
               type="button"
-              onClick={() => toggleRole(r.roleKey)}
-              className={`text-xs px-3 py-1.5 rounded-lg border-2 font-medium transition-colors ${selectedRoleKeys.has(r.roleKey) ? "bg-primary text-white border-primary" : "bg-white border-foreground/30 hover:border-foreground"}`}
+              onClick={() => toggleRole(role.roleKey)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-4 text-left font-bold text-xs transition-all ${
+                selectedRoleKeys.has(role.roleKey)
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-foreground/20 bg-white text-muted-foreground hover:border-foreground/60"
+              }`}
             >
-              {r.displayName}
+              <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                selectedRoleKeys.has(role.roleKey) ? "border-primary bg-primary" : "border-foreground/30"
+              }`}>
+                {selectedRoleKeys.has(role.roleKey) && <CheckCircle2 className="w-3 h-3 text-white" />}
+              </span>
+              {role.displayName}
             </button>
           ))}
         </div>
+
         {customRoles.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-3 space-y-1">
             {customRoles.map((r) => (
-              <span key={r.roleKey} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border-2 bg-secondary border-foreground font-medium">
-                {r.displayName}
-                <button type="button" onClick={() => removeCustomRole(r.roleKey)} className="ml-1 hover:text-destructive"><X className="w-3 h-3" /></button>
-              </span>
+              <div key={r.roleKey} className="flex items-center gap-2 px-3 py-2 rounded-xl border-4 border-primary bg-primary/10">
+                <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-xs font-bold text-primary flex-1">{r.displayName}</span>
+                <button
+                  type="button"
+                  onClick={() => removeCustomRole(r.roleKey)}
+                  className="p-0.5 rounded hover:bg-destructive hover:text-white transition-colors text-muted-foreground"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
             ))}
           </div>
         )}
-        <div className="flex gap-2">
+
+        <div className="mt-3 flex gap-2">
           <Input
             value={customRoleInput}
             onChange={(e) => setCustomRoleInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomRole(); } }}
-            placeholder="Custom role name..."
-            className="text-sm h-8"
+            placeholder="Add custom role…"
+            className="text-xs h-8"
           />
-          <Button type="button" variant="outline" size="sm" onClick={addCustomRole}><Plus className="w-3 h-3" /></Button>
+          <Button type="button" size="sm" variant="outline" onClick={addCustomRole} className="h-8 px-3 text-xs">
+            <Plus className="w-3 h-3 mr-1" />Add
+          </Button>
         </div>
-        {editRoles.length === 0 && <p className="text-xs text-amber-600 font-medium">No roles selected — attendees won't see a volunteer option.</p>}
       </div>
 
       <EventManagerPicker
@@ -989,6 +1033,36 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
         currentManager={currentManager}
         onChange={setManagerSelection}
       />
+
+      {rolesWithCheckins.length > 0 && (
+        <div className="border-4 border-yellow-500 rounded-lg p-4 bg-yellow-50 space-y-3">
+          <p className="font-bold text-sm text-yellow-800">
+            The following roles have existing check-in data and cannot be removed without confirmation:
+          </p>
+          <ul className="list-disc list-inside text-sm text-yellow-800 space-y-0.5">
+            {rolesWithCheckins.map((name) => <li key={name}>{name}</li>)}
+          </ul>
+          <p className="text-xs text-yellow-700">Check-in records referencing these roles will remain in the database but the roles will no longer be selectable for new check-ins.</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => { void handleForceDeleteRoles(); }}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white border-yellow-700"
+            >
+              Remove Anyway
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setRolesWithCheckins([])}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">

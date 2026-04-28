@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
-import { eq, inArray, count, countDistinct } from "drizzle-orm";
+import { eq, inArray, count, countDistinct, and } from "drizzle-orm";
 import { signToken, verifyToken, type AuthPayload } from "./auth";
 
 const router: IRouter = Router();
@@ -476,7 +476,9 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     smsReentryEnabled,
     isActive,
     eventManagerId,
+    newEventManager,
     roles,
+    forceDeleteRoles,
   } = req.body as {
     name?: string;
     eventDate?: string | null;
@@ -487,7 +489,9 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     smsReentryEnabled?: boolean;
     isActive?: boolean;
     eventManagerId?: number | null;
-    roles?: { roleKey: string; displayName: string }[];
+    newEventManager?: { name: string; email: string };
+    roles?: NewRoleInput[] | null;
+    forceDeleteRoles?: boolean;
   };
 
   const updates: Partial<typeof eventsTable.$inferInsert> = {};
@@ -521,7 +525,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   if (smsReentryEnabled !== undefined) updates.smsReentryEnabled = smsReentryEnabled;
   if (isActive !== undefined) updates.isActive = isActive;
 
-  const hasManagerChange = eventManagerId !== undefined;
+  const hasManagerChange = eventManagerId !== undefined || newEventManager !== undefined;
   const hasRolesChange = roles !== undefined;
 
   if (Object.keys(updates).length === 0 && !hasManagerChange && !hasRolesChange) {
@@ -541,26 +545,78 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
       updated = rows[0];
     }
 
-    // Handle event manager assignment (existing org user only)
+    // Handle event manager assignment
     if (hasManagerChange) {
       await db.update(usersTable).set({ eventId: null }).where(eq(usersTable.eventId, id));
       if (eventManagerId) {
         await db.update(usersTable).set({ eventId: id }).where(eq(usersTable.id, eventManagerId));
+      } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
+        await db.insert(usersTable).values({
+          name: newEventManager.name.trim(),
+          email: newEventManager.email.trim().toLowerCase(),
+          role: "event_manager",
+          orgId: updated.orgId,
+          eventId: id,
+        });
       }
     }
 
-    // Handle role replacement — delete all existing and re-insert
-    if (hasRolesChange && roles) {
-      await db.delete(eventRolesTable).where(eq(eventRolesTable.eventId, id));
-      if (roles.length > 0) {
-        await db.insert(eventRolesTable).values(
-          roles.map((r, i) => ({
-            eventId: id,
-            roleKey: r.roleKey,
-            displayName: r.displayName,
-            sortOrder: i,
-          }))
-        );
+    // Handle volunteer roles update — preflight check happens before mutations
+    if (hasRolesChange) {
+      const validNewRoles = (roles ?? [])
+        .filter((r) => r.roleKey?.trim() && r.displayName?.trim())
+        .map((r, i) => ({
+          roleKey: r.roleKey.trim(),
+          displayName: r.displayName.trim(),
+          sortOrder: r.sortOrder ?? i + 1,
+        }));
+      const newRoleKeySet = new Set(validNewRoles.map((r) => r.roleKey));
+
+      const currentRoles = await db
+        .select()
+        .from(eventRolesTable)
+        .where(eq(eventRolesTable.eventId, id));
+      const removedRoleKeys = currentRoles.map((r) => r.roleKey).filter((k) => !newRoleKeySet.has(k));
+
+      // Warn before deleting roles that have existing check-in data
+      if (removedRoleKeys.length > 0 && !forceDeleteRoles) {
+        const checkedInRoleRows = await db
+          .selectDistinct({ roleName: attendeeRolesTable.roleName })
+          .from(attendeeRolesTable)
+          .innerJoin(attendeesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
+          .where(
+            and(
+              eq(attendeesTable.eventId, id),
+              inArray(attendeeRolesTable.roleName, removedRoleKeys)
+            )
+          );
+        const blockedKeys = new Set(checkedInRoleRows.map((r) => r.roleName));
+        if (blockedKeys.size > 0) {
+          const blockedDisplayNames = currentRoles
+            .filter((r) => blockedKeys.has(r.roleKey))
+            .map((r) => r.displayName);
+          res.status(422).json({
+            error: "Some roles being removed have existing check-in data.",
+            rolesWithCheckins: blockedDisplayNames,
+          });
+          return;
+        }
+      }
+
+      if (removedRoleKeys.length > 0) {
+        await db
+          .delete(eventRolesTable)
+          .where(and(eq(eventRolesTable.eventId, id), inArray(eventRolesTable.roleKey, removedRoleKeys)));
+      }
+
+      for (const role of validNewRoles) {
+        await db
+          .insert(eventRolesTable)
+          .values({ eventId: id, roleKey: role.roleKey, displayName: role.displayName, sortOrder: role.sortOrder })
+          .onConflictDoUpdate({
+            target: [eventRolesTable.eventId, eventRolesTable.roleKey],
+            set: { displayName: role.displayName, sortOrder: role.sortOrder },
+          });
       }
     }
 
