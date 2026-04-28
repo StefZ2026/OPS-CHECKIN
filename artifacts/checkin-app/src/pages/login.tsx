@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Lock, Shield } from "lucide-react";
+import { Lock, Shield, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authLogin, authSetPassword, redirectByRole, type AuthUser } from "@/hooks/use-auth";
@@ -10,6 +10,41 @@ interface Props {
   onLogin: (user: AuthUser) => void;
 }
 
+function PasswordInput({
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  autoComplete?: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        required
+        className="pr-11"
+      />
+      <button
+        type="button"
+        onClick={() => setShow((v) => !v)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        tabIndex={-1}
+      >
+        {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+      </button>
+    </div>
+  );
+}
+
 export default function LoginPage({ onLogin }: Props) {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
@@ -17,7 +52,6 @@ export default function LoginPage({ onLogin }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // First-time password setup state
   const [firstLogin, setFirstLogin] = useState(false);
   const [firstLoginEmail, setFirstLoginEmail] = useState("");
   const [firstLoginName, setFirstLoginName] = useState("");
@@ -89,11 +123,21 @@ export default function LoginPage({ onLogin }: Props) {
           <form onSubmit={handleSetPassword} className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider mb-1">New Password</label>
-              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 8 characters" required />
+              <PasswordInput
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Min. 8 characters"
+                autoComplete="new-password"
+              />
             </div>
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider mb-1">Confirm Password</label>
-              <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" required />
+              <PasswordInput
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+              />
             </div>
             {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
@@ -128,14 +172,20 @@ export default function LoginPage({ onLogin }: Props) {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1">Password</label>
-            <Input
-              type="password"
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold uppercase tracking-wider">Password</label>
+              <a
+                href="mailto:info@opscheckin.com?subject=Password%20Reset%20Request"
+                className="text-xs text-muted-foreground hover:text-primary transition-colors underline"
+              >
+                Forgot your password?
+              </a>
+            </div>
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Your password"
               autoComplete="current-password"
-              required
             />
           </div>
           {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
@@ -160,4 +210,3 @@ export default function LoginPage({ onLogin }: Props) {
     </div>
   );
 }
-
