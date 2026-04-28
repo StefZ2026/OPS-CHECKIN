@@ -23,6 +23,8 @@ interface OrgEvent {
   eventDate: string | null;
   isActive: boolean;
   checkedInCount: number;
+  volunteerCount: number;
+  attendeeCount: number;
 }
 
 interface OrgInfo {
@@ -322,7 +324,15 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
                           {event.eventDate && (
                             <span><Calendar className="w-4 h-4 inline mr-1" />{format(new Date(event.eventDate), "MMM d, yyyy")}</span>
                           )}
-                          <span><Users className="w-4 h-4 inline mr-1" />{event.checkedInCount} checked in</span>
+                          <span>
+                            <Users className="w-4 h-4 inline mr-1" />
+                            {event.checkedInCount} checked in
+                            {event.checkedInCount > 0 && (
+                              <span className="ml-1 text-xs">
+                                ({event.volunteerCount} volunteer{event.volunteerCount !== 1 ? "s" : ""}, {event.attendeeCount} attendee{event.attendeeCount !== 1 ? "s" : ""})
+                              </span>
+                            )}
+                          </span>
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />

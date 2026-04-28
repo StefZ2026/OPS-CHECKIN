@@ -1371,13 +1371,6 @@ export default function SuperadminPage() {
     };
   }, [user?.role]);
 
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    if (user?.role !== "superadmin") return;
-    const id = setInterval(() => { void fetchAll(); }, 30_000);
-    return () => clearInterval(id);
-  }, [user?.role]);
-
   useEffect(() => {
     if (!authLoading && (!user || user.role !== "superadmin")) {
       setLocation("/login");
