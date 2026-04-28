@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
 import { eq, inArray, count } from "drizzle-orm";
-import { signToken, type AuthPayload } from "./auth";
+import { signToken, verifyToken, type AuthPayload } from "./auth";
 
 const router: IRouter = Router();
 
@@ -29,6 +29,16 @@ function checkBearer(token: string, expected: string): boolean {
 }
 
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
+  // Superadmin JWT cookie bypass — platform admin can access any event admin
+  const jwtToken = req.cookies?.auth_token as string | undefined;
+  if (jwtToken) {
+    const payload = verifyToken(jwtToken);
+    if (payload?.role === "superadmin") {
+      next();
+      return;
+    }
+  }
+
   if (!process.env.ADMIN_PASSWORD) {
     res.status(503).json({ error: "Admin auth is not configured on this server." });
     return;
@@ -43,17 +53,15 @@ export function requireAdminAuth(req: Request, res: Response, next: NextFunction
 }
 
 function requireSuperadminAuth(req: Request, res: Response, next: NextFunction): void {
-  if (!process.env.SUPERADMIN_PASSWORD) {
-    res.status(503).json({ error: "Superadmin auth is not configured on this server." });
-    return;
+  const jwtToken = req.cookies?.auth_token as string | undefined;
+  if (jwtToken) {
+    const payload = verifyToken(jwtToken);
+    if (payload?.role === "superadmin") {
+      next();
+      return;
+    }
   }
-  const auth = req.headers["authorization"] ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!checkBearer(token, expectedSuperadminToken())) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
+  res.status(401).json({ error: "Unauthorized" });
 }
 
 // 20 failed attempts per IP per 15 minutes
@@ -93,7 +101,22 @@ router.post("/superadmin/login", loginLimiter, (req, res) => {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-  res.json({ token: expectedSuperadminToken() });
+  const payload: AuthPayload = {
+    userId: 0,
+    email: username.trim().toLowerCase(),
+    name: "Platform Admin",
+    role: "superadmin",
+    orgId: null,
+    eventId: null,
+    eventSlug: null,
+  };
+  res.cookie("auth_token", signToken(payload), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+  res.json({ ok: true });
 });
 
 // Returns all pre-registrations (regular + volunteer) for full export

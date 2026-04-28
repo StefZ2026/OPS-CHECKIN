@@ -13,6 +13,8 @@ import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
 import { useToast } from "@/hooks/use-toast";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
+import { useAuth } from "@/hooks/use-auth";
+import { Link } from "wouter";
 import { useEventConfig } from "@/hooks/use-event-config";
 import { eventApiBase, getEventSlug } from "@/lib/event-slug";
 import { Input } from "@/components/ui/input";
@@ -1271,11 +1273,29 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 export default function AdminDashboard() {
+  const { user, loading: authLoading } = useAuth();
+  const isSuperadmin = user?.role === "superadmin";
   const [authed, setAuthed] = useState(() => !!getAdminToken());
 
-  if (!authed) {
+  if (authLoading) return null;
+
+  if (!authed && !isSuperadmin) {
     return <LoginGate onLogin={() => setAuthed(true)} />;
   }
 
-  return <Dashboard onLogout={() => setAuthed(false)} />;
+  return (
+    <>
+      {isSuperadmin && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <Link href="/superadmin">
+            <Button size="sm" className="shadow-brutal border-4 border-foreground gap-2">
+              <Shield className="w-4 h-4" />
+              Admin Panel
+            </Button>
+          </Link>
+        </div>
+      )}
+      <Dashboard onLogout={isSuperadmin ? () => {} : () => setAuthed(false)} />
+    </>
+  );
 }

@@ -223,7 +223,10 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
   const [error, setError] = useState("");
 
   const isSuperadmin = currentUser.role === "superadmin";
-  const orgId = currentUser.orgId;
+  const urlOrgId = isSuperadmin
+    ? (parseInt(new URLSearchParams(window.location.search).get("orgId") ?? "") || null)
+    : null;
+  const orgId = urlOrgId ?? currentUser.orgId;
 
   const loadEvents = async () => {
     try {

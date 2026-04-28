@@ -6,37 +6,12 @@ import {
   Mail, UserPlus, ShieldCheck, Building2, ExternalLink,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-
-const SUPERADMIN_TOKEN_KEY = "superadmin-token";
-
-function getSuperadminToken(): string | null {
-  return sessionStorage.getItem(SUPERADMIN_TOKEN_KEY);
-}
-function setSuperadminToken(t: string) {
-  sessionStorage.setItem(SUPERADMIN_TOKEN_KEY, t);
-}
-function clearSuperadminToken() {
-  sessionStorage.removeItem(SUPERADMIN_TOKEN_KEY);
-}
-
-async function loginSuperadmin(username: string, password: string): Promise<string> {
-  const res = await fetch("/api/superadmin/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (res.status === 429) throw new Error("Too many attempts. Wait 15 minutes and try again.");
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? "Invalid credentials");
-  }
-  const data = (await res.json()) as { token: string };
-  return data.token;
-}
+import { useAuth, authLogout } from "@/hooks/use-auth";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -92,8 +67,17 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
     setError("");
     setLoading(true);
     try {
-      const token = await loginSuperadmin(username.trim(), password);
-      setSuperadminToken(token);
+      const res = await fetch("/api/superadmin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      if (res.status === 429) throw new Error("Too many attempts. Wait 15 minutes and try again.");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Invalid credentials");
+      }
       onLogin();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid credentials. Try again.");
@@ -1047,7 +1031,7 @@ function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }
   );
 }
 
-function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void; onImpersonate: (userId: number, path: string) => void }) {
+function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -1134,10 +1118,7 @@ function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: Event
 
             {showQR && <QrModal event={event} onClose={() => setShowQR(false)} />}
 
-            {(() => {
-              const adminUser = orgUsers.find((u) => u.event?.id === event.id) ?? orgUsers.find((u) => u.role === "org_contact") ?? null;
-              return (
-                <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap">
                   <a
                     href={`/${event.slug}`}
                     target="_blank"
@@ -1147,22 +1128,20 @@ function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: Event
                   >
                     <Users className="w-5 h-5" /> Open Check-In
                   </a>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); if (adminUser) onImpersonate(adminUser.id, `/${event.slug}/admin`); }}
-                    disabled={!adminUser}
-                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal disabled:opacity-50 disabled:cursor-not-allowed"
+                  <a
+                    href={`/${event.slug}/admin`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal"
                   >
                     <Lock className="w-5 h-5" /> Open Event Admin
-                  </button>
-                  <button
+                  </a>
+                <button
                     onClick={(e) => { e.stopPropagation(); setShowQR(true); }}
                     className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-secondary hover:bg-secondary/70 font-display text-base transition-colors shadow-brutal"
                   >
                     <QrCode className="w-5 h-5" /> QR Code
                   </button>
                 </div>
-              );
-            })()}
 
             <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-lg">
               <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Check-in URL</p>
@@ -1199,7 +1178,8 @@ function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: Event
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function SuperadminPage() {
-  const [authed, setAuthed] = useState(!!getSuperadminToken());
+  const { user, loading: authLoading, refetch: refetchAuth } = useAuth();
+  const [, setLocation] = useLocation();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -1208,42 +1188,16 @@ export default function SuperadminPage() {
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
 
-  const impersonateAndOpen = async (userId: number, path: string) => {
-    const token = getSuperadminToken() ?? "";
-    try {
-      const res = await fetch("/api/superadmin/impersonate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ userId }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { error?: string };
-        alert(err.error ?? "Failed to open dashboard");
-        return;
-      }
-      window.location.href = path;
-    } catch {
-      alert("Network error — could not open dashboard");
-    }
-  };
-
   const fetchAll = async () => {
     setLoading(true);
     setLoadError("");
-    const token = getSuperadminToken() ?? "";
     try {
       const [eventsRes, orgsRes, usersRes, meRes] = await Promise.all([
-        fetch("/api/superadmin/events", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/superadmin/orgs", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/superadmin/users", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/superadmin/me", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/events", { credentials: "include" }),
+        fetch("/api/superadmin/orgs", { credentials: "include" }),
+        fetch("/api/superadmin/users", { credentials: "include" }),
+        fetch("/api/superadmin/me", { credentials: "include" }),
       ]);
-      if (eventsRes.status === 401 || orgsRes.status === 401) {
-        clearSuperadminToken();
-        setAuthed(false);
-        return;
-      }
       if (eventsRes.status === 503 || orgsRes.status === 503) {
         throw new Error("Server configuration error: SUPERADMIN_PASSWORD is not set. Add it in the Replit Secrets panel and restart the API server.");
       }
@@ -1268,14 +1222,27 @@ export default function SuperadminPage() {
     }
   };
 
-  useEffect(() => { if (authed) void fetchAll(); }, [authed]);
+  useEffect(() => { if (user?.role === "superadmin") void fetchAll(); }, [user?.role]);
 
-  const handleLogout = () => { clearSuperadminToken(); setAuthed(false); setEvents([]); setOrgs([]); setUsers([]); };
+  const handleLogout = async () => {
+    await authLogout();
+    setEvents([]); setOrgs([]); setUsers([]);
+    setLocation("/superadmin");
+  };
 
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
 
-  if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-foreground flex items-center justify-center">
+        <p className="text-white font-display text-2xl">Loading...</p>
+      </div>
+    );
+  }
+  if (!user || user.role !== "superadmin") {
+    return <LoginGate onLogin={() => void refetchAuth()} />;
+  }
 
   // Group events by org slug
   const eventsByOrg = new Map<string, EventRecord[]>();
@@ -1308,7 +1275,7 @@ export default function SuperadminPage() {
             <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
               <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
             </Button>
-            <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={handleLogout}>
+            <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => void handleLogout()}>
               <LogOut className="w-4 h-4 mr-2" />Sign Out
             </Button>
           </div>
@@ -1420,17 +1387,12 @@ export default function SuperadminPage() {
                     <h2 className="font-display text-2xl">{org.name}</h2>
                     <p className="font-mono text-sm text-gray-400">/{org.slug} · {orgEvents.length} event{orgEvents.length !== 1 ? "s" : ""} · {orgEvents.reduce((s, e) => s + e.checkedInCount, 0)} checked in</p>
                   </div>
-                  {(() => {
-                    const orgContact = users.find((u) => u.role === "org_contact" && u.org?.id === org.id);
-                    return orgContact ? (
-                      <button
-                        onClick={() => void impersonateAndOpen(orgContact.id, "/org")}
-                        className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" /> Open Org Dashboard
-                      </button>
-                    ) : null;
-                  })()}
+                  <a
+                    href={`/org?orgId=${org.id}`}
+                    className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
+                  >
+                    <ExternalLink className="w-4 h-4" /> Open Org Dashboard
+                  </a>
                 </div>
 
                 {/* Org contacts for this org */}
@@ -1457,7 +1419,7 @@ export default function SuperadminPage() {
                   )}
                   {orgEvents.map((event) => (
                     <div key={event.id} className="space-y-0">
-                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} onImpersonate={impersonateAndOpen} />
+                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} />
                       {/* Event managers for this event */}
                       {users.filter((u) => u.event?.id === event.id).map((u) => (
                         <div key={u.id} className="bg-purple-50 border-2 border-t-0 border-foreground/20 rounded-b-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
