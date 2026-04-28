@@ -268,6 +268,7 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         orgId: eventsTable.orgId,
         orgName: organizationsTable.name,
         orgSlug: organizationsTable.slug,
+        managerEmail: eventsTable.managerEmail,
       })
       .from(eventsTable)
       .leftJoin(organizationsTable, eq(eventsTable.orgId, organizationsTable.id))
@@ -321,6 +322,7 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         checkedInCount,
         volunteerCount,
         attendeeCount,
+        managerEmail: e.managerEmail ?? null,
         org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
         roles: (rolesMap.get(e.id) ?? []).map((r) => ({
           id: r.id,
@@ -568,15 +570,23 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     if (hasManagerChange) {
       await db.update(usersTable).set({ eventId: null }).where(eq(usersTable.eventId, id));
       if (eventManagerId) {
+        const [assignedUser] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, eventManagerId)).limit(1);
         await db.update(usersTable).set({ eventId: id }).where(eq(usersTable.id, eventManagerId));
+        if (assignedUser) {
+          await db.update(eventsTable).set({ managerEmail: assignedUser.email }).where(eq(eventsTable.id, id));
+        }
       } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
+        const newEmail = newEventManager.email.trim().toLowerCase();
         await db.insert(usersTable).values({
           name: newEventManager.name.trim(),
-          email: newEventManager.email.trim().toLowerCase(),
+          email: newEmail,
           role: "event_manager",
           orgId: updated.orgId,
           eventId: id,
         });
+        await db.update(eventsTable).set({ managerEmail: newEmail }).where(eq(eventsTable.id, id));
+      } else {
+        await db.update(eventsTable).set({ managerEmail: null }).where(eq(eventsTable.id, id));
       }
     }
 

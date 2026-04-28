@@ -40,6 +40,7 @@ type EventRecord = {
   checkedInCount: number;
   volunteerCount: number;
   attendeeCount: number;
+  managerEmail: string | null;
   org: { id: number; name: string | null; slug: string | null };
   roles: EventRole[];
 };
@@ -784,7 +785,9 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     }
   };
 
-  const currentManager = orgUsers.find((u) => u.event?.id === event.id) ?? null;
+  const currentManager = orgUsers.find((u) => u.event?.id === event.id)
+    ?? (event.managerEmail ? orgUsers.find((u) => u.email.toLowerCase() === event.managerEmail!.toLowerCase()) : null)
+    ?? null;
 
   const buildPayload = (forceDeleteRoles: boolean): Record<string, unknown> => {
     let builtEventDates: string[] | undefined;
