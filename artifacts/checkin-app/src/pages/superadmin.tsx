@@ -183,7 +183,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
       const data = await res.json() as { event?: EventRecord; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to create event");
 
-      toast({ title: "Event created!", description: `"${data.event!.name}" is ready at /api/events/${data.event!.slug}/...` });
+      toast({ title: "Event created!", description: `"${data.event!.name}" is live at /${data.event!.slug}` });
       onCreated();
 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
@@ -244,7 +244,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
                       title="Lowercase letters, numbers, and hyphens only"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Used in the URL: /api/events/<strong>{slug || "slug"}</strong>/...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Used in the URL: /<strong>{slug || "slug"}</strong></p>
                 </div>
                 <div className="sm:col-span-2 space-y-2">
                   <div className="flex items-center justify-between">
@@ -1092,7 +1092,7 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
               </div>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="font-mono text-sm text-muted-foreground bg-gray-100 px-2 py-0.5 rounded">
-                  /api/events/{event.slug}/
+                  /{event.slug}
                 </span>
                 {event.eventDate && (
                   <span className="text-sm text-muted-foreground">
