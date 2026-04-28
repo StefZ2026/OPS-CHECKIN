@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import {
   Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
   Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil, QrCode, Download,
-  Mail, UserPlus, ShieldCheck, Building2,
+  Mail, UserPlus, ShieldCheck, Building2, ExternalLink,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -1047,7 +1047,7 @@ function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }
   );
 }
 
-function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void }) {
+function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void; onImpersonate: (userId: number, path: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -1134,32 +1134,35 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
 
             {showQR && <QrModal event={event} onClose={() => setShowQR(false)} />}
 
-            <div className="flex gap-3 flex-wrap">
-              <a
-                href={`/${event.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-white hover:bg-secondary/30 font-display text-base transition-colors shadow-brutal"
-              >
-                <Users className="w-5 h-5" /> Open Check-In
-              </a>
-              <a
-                href={`/${event.slug}/admin`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal"
-              >
-                <Lock className="w-5 h-5" /> Open Admin
-              </a>
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowQR(true); }}
-                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-secondary hover:bg-secondary/70 font-display text-base transition-colors shadow-brutal"
-              >
-                <QrCode className="w-5 h-5" /> QR Code
-              </button>
-            </div>
+            {(() => {
+              const adminUser = orgUsers.find((u) => u.event?.id === event.id) ?? orgUsers.find((u) => u.role === "org_contact") ?? null;
+              return (
+                <div className="flex gap-3 flex-wrap">
+                  <a
+                    href={`/${event.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-white hover:bg-secondary/30 font-display text-base transition-colors shadow-brutal"
+                  >
+                    <Users className="w-5 h-5" /> Open Check-In
+                  </a>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (adminUser) onImpersonate(adminUser.id, `/${event.slug}/admin`); }}
+                    disabled={!adminUser}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Lock className="w-5 h-5" /> Open Event Admin
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowQR(true); }}
+                    className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-secondary hover:bg-secondary/70 font-display text-base transition-colors shadow-brutal"
+                  >
+                    <QrCode className="w-5 h-5" /> QR Code
+                  </button>
+                </div>
+              );
+            })()}
 
             <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-lg">
               <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Check-in URL</p>
@@ -1204,6 +1207,26 @@ export default function SuperadminPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
+
+  const impersonateAndOpen = async (userId: number, path: string) => {
+    const token = getSuperadminToken() ?? "";
+    try {
+      const res = await fetch("/api/superadmin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        alert(err.error ?? "Failed to open dashboard");
+        return;
+      }
+      window.location.href = path;
+    } catch {
+      alert("Network error — could not open dashboard");
+    }
+  };
 
   const fetchAll = async () => {
     setLoading(true);
@@ -1392,11 +1415,22 @@ export default function SuperadminPage() {
             return (
               <div key={org.slug} className="border-4 border-foreground rounded-2xl overflow-hidden shadow-brutal">
                 {/* Org header */}
-                <div className="bg-foreground text-white px-6 py-4 flex items-center justify-between">
+                <div className="bg-foreground text-white px-6 py-4 flex items-center justify-between gap-4">
                   <div>
                     <h2 className="font-display text-2xl">{org.name}</h2>
                     <p className="font-mono text-sm text-gray-400">/{org.slug} · {orgEvents.length} event{orgEvents.length !== 1 ? "s" : ""} · {orgEvents.reduce((s, e) => s + e.checkedInCount, 0)} checked in</p>
                   </div>
+                  {(() => {
+                    const orgContact = users.find((u) => u.role === "org_contact" && u.org?.id === org.id);
+                    return orgContact ? (
+                      <button
+                        onClick={() => void impersonateAndOpen(orgContact.id, "/org")}
+                        className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" /> Open Org Dashboard
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Org contacts for this org */}
@@ -1423,7 +1457,7 @@ export default function SuperadminPage() {
                   )}
                   {orgEvents.map((event) => (
                     <div key={event.id} className="space-y-0">
-                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} />
+                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} onImpersonate={impersonateAndOpen} />
                       {/* Event managers for this event */}
                       {users.filter((u) => u.event?.id === event.id).map((u) => (
                         <div key={u.id} className="bg-purple-50 border-2 border-t-0 border-foreground/20 rounded-b-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">

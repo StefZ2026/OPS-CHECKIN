@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
 import { eq, inArray, count } from "drizzle-orm";
+import { signToken, type AuthPayload } from "./auth";
 
 const router: IRouter = Router();
 
@@ -590,6 +591,50 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
 // GET /api/superadmin/me — returns the platform admin's username
 router.get("/superadmin/me", requireSuperadminAuth, (req, res) => {
   res.json({ username: process.env.SUPERADMIN_USERNAME ?? "Platform Admin" });
+});
+
+// POST /api/superadmin/impersonate — issue a JWT session for any platform user
+router.post("/superadmin/impersonate", requireSuperadminAuth, async (req, res) => {
+  const { userId } = req.body as { userId?: number };
+  if (!userId) {
+    res.status(400).json({ error: "userId required" });
+    return;
+  }
+  try {
+    const rows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+    const user = rows[0];
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    let eventSlug: string | null = null;
+    if (user.eventId) {
+      const evRows = await db.select({ slug: eventsTable.slug }).from(eventsTable).where(eq(eventsTable.id, user.eventId)).limit(1);
+      eventSlug = evRows[0]?.slug ?? null;
+    }
+    const payload: AuthPayload = {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      orgId: user.orgId,
+      eventId: user.eventId,
+      eventSlug,
+    };
+    res.cookie("auth_token", signToken(payload), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    const redirect = user.role === "event_manager" && eventSlug
+      ? `/${eventSlug}/admin`
+      : "/org";
+    res.json({ redirect });
+  } catch (err) {
+    console.error("POST /superadmin/impersonate error:", err);
+    res.status(500).json({ error: "Failed to impersonate user" });
+  }
 });
 
 // ── User Management (superadmin) ─────────────────────────────────────────────
