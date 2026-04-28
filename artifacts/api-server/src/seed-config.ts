@@ -1,6 +1,9 @@
 // ── Seed configuration ────────────────────────────────────────────────────────
-// Edit this file to change what events and roles are created in a fresh database.
-// The seed is idempotent — existing rows are never overwritten or duplicated.
+// Edit this file to change what events and roles are seeded on startup.
+// The seed is idempotent and safe to run repeatedly:
+//   - Event fields (name, event_date, giveaway_enabled) are kept in sync with this file.
+//   - Roles are upserted; roles removed from this file are deleted from the database.
+//   - Existing attendee and check-in data is never affected.
 
 export interface RoleConfig {
   roleKey: string;

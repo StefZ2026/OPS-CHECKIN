@@ -1,6 +1,9 @@
 // ── Database seed ─────────────────────────────────────────────────────────────
 // Reads from seed-config.ts and inserts the org, events, and volunteer roles
 // into the database if they don't already exist. Safe to call on every startup.
+// Event fields (name, event_date, giveaway_enabled) and role lists are kept in
+// sync with the config on every startup — existing attendee/check-in data is
+// never affected.
 
 import { pool } from "@workspace/db";
 import seedConfig from "./seed-config";
@@ -19,30 +22,47 @@ export async function runSeed(): Promise<void> {
     );
 
     for (const event of org.events) {
-      // Ensure the event exists under this org
+      // Upsert the event — update mutable fields if the slug already exists
       await client.query(
         `INSERT INTO events (org_id, name, slug, event_date, giveaway_enabled, is_active)
          SELECT o.id, $1, $2, $3::date, $4, true
          FROM organizations o
          WHERE o.slug = $5
-         ON CONFLICT (slug) DO NOTHING`,
+         ON CONFLICT (slug) DO UPDATE
+           SET name             = EXCLUDED.name,
+               event_date       = EXCLUDED.event_date,
+               giveaway_enabled = EXCLUDED.giveaway_enabled`,
         [event.name, event.slug, event.eventDate, event.giveawayEnabled, org.slug],
       );
 
-      // Ensure each volunteer role exists for this event
+      // Upsert each volunteer role (insert new rows, update display_name/sort_order on existing ones)
       for (const role of event.roles) {
         await client.query(
           `INSERT INTO event_roles (event_id, role_key, display_name, sort_order)
            SELECT e.id, $1, $2, $3
            FROM events e
            WHERE e.slug = $4
-           ON CONFLICT DO NOTHING`,
+           ON CONFLICT (event_id, role_key) DO UPDATE
+             SET display_name = EXCLUDED.display_name,
+                 sort_order   = EXCLUDED.sort_order`,
           [role.roleKey, role.displayName, role.sortOrder, event.slug],
         );
       }
+
+      // Remove roles that are no longer in the config.
+      // attendee_roles stores role names as plain text so this never deletes attendee data.
+      const configRoleKeys = event.roles.map((r) => r.roleKey);
+      await client.query(
+        `DELETE FROM event_roles er
+         USING events e
+         WHERE er.event_id = e.id
+           AND e.slug = $1
+           AND er.role_key <> ALL($2::text[])`,
+        [event.slug, configRoleKeys],
+      );
     }
 
-    console.log("Seed OK — org, events, and roles are present.");
+    console.log("Seed OK — org, events, and roles are up to date.");
   } finally {
     client.release();
   }
