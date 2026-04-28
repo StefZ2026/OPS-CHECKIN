@@ -1,6 +1,4 @@
-import { createHash, timingSafeEqual } from "crypto";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import rateLimit from "express-rate-limit";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
@@ -9,115 +7,47 @@ import { signToken, verifyToken, type AuthPayload } from "./auth";
 
 const router: IRouter = Router();
 
-function expectedToken(): string {
-  const password = process.env.ADMIN_PASSWORD ?? "";
-  return createHash("sha256").update(password + ":opscheckin-admin-2026").digest("hex");
-}
-
-function expectedSuperadminToken(): string {
-  const password = process.env.SUPERADMIN_PASSWORD ?? "";
-  return createHash("sha256").update(password + ":icu-superadmin-2026").digest("hex");
-}
-
-function checkBearer(token: string, expected: string): boolean {
-  try {
-    return token.length === expected.length &&
-      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
-  } catch {
-    return false;
-  }
-}
-
+// JWT-only admin auth — accepts superadmin on any route.
+// Org contacts and event managers are checked by requireEventAuth in events.ts
+// (which has event context). Here we only allow superadmin for the flat
+// /admin/* and /superadmin/* routes which have no event scope.
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
-  // Superadmin JWT cookie bypass — platform admin can access any event admin
   const jwtToken = req.cookies?.auth_token as string | undefined;
-  if (jwtToken) {
-    const payload = verifyToken(jwtToken);
-    if (payload?.role === "superadmin") {
-      next();
-      return;
-    }
-  }
-
-  if (!process.env.ADMIN_PASSWORD) {
-    res.status(503).json({ error: "Admin auth is not configured on this server." });
+  if (!jwtToken) {
+    res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const auth = req.headers["authorization"] ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!checkBearer(token, expectedToken())) {
-    res.status(401).json({ error: "Unauthorized" });
+  const payload = verifyToken(jwtToken);
+  if (!payload) {
+    res.status(401).json({ error: "Session expired" });
     return;
   }
-  next();
+  if (payload.role === "superadmin") {
+    res.locals.user = payload;
+    next();
+    return;
+  }
+  res.status(403).json({ error: "Forbidden" });
 }
 
 function requireSuperadminAuth(req: Request, res: Response, next: NextFunction): void {
   const jwtToken = req.cookies?.auth_token as string | undefined;
-  if (jwtToken) {
-    const payload = verifyToken(jwtToken);
-    if (payload?.role === "superadmin") {
-      next();
-      return;
-    }
+  if (!jwtToken) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
   }
-  res.status(401).json({ error: "Unauthorized" });
+  const payload = verifyToken(jwtToken);
+  if (!payload) {
+    res.status(401).json({ error: "Session expired" });
+    return;
+  }
+  if (payload.role === "superadmin") {
+    res.locals.user = payload;
+    next();
+    return;
+  }
+  res.status(403).json({ error: "Forbidden" });
 }
-
-// 20 failed attempts per IP per 15 minutes
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-  message: { error: "Too many login attempts. Please wait 15 minutes and try again." },
-});
-
-router.post("/admin/login", loginLimiter, (req, res) => {
-  const { username, password } = req.body as { username?: string; password?: string };
-  if (!password || !process.env.ADMIN_PASSWORD || !username) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
-  const expectedUsername = process.env.ADMIN_USERNAME ?? "";
-  if (username !== expectedUsername || password !== process.env.ADMIN_PASSWORD) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
-  res.json({ token: expectedToken() });
-});
-
-router.post("/superadmin/login", loginLimiter, (req, res) => {
-  const { username, password } = req.body as { username?: string; password?: string };
-  if (!username || !password || !process.env.SUPERADMIN_PASSWORD || !process.env.SUPERADMIN_USERNAME) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
-  if (
-    username.trim().toLowerCase() !== process.env.SUPERADMIN_USERNAME.trim().toLowerCase() ||
-    password.trim() !== process.env.SUPERADMIN_PASSWORD.trim()
-  ) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
-  const payload: AuthPayload = {
-    userId: 0,
-    email: username.trim().toLowerCase(),
-    name: "Platform Admin",
-    role: "superadmin",
-    orgId: null,
-    eventId: null,
-    eventSlug: null,
-  };
-  res.cookie("auth_token", signToken(payload), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-  res.json({ ok: true });
-});
 
 // Returns all pre-registrations (regular + volunteer) for full export
 router.get("/admin/pre-registrations", requireAdminAuth, async (_req, res) => {
@@ -318,7 +248,7 @@ router.post("/superadmin/orgs", requireSuperadminAuth, async (req, res) => {
 });
 
 // ── Superadmin: Event Management ──────────────────────────────────────────────
-// Protected by the dedicated SUPERADMIN_PASSWORD env var, separate from ADMIN_PASSWORD.
+// All routes below require a valid superadmin JWT cookie (set via /api/auth/login).
 
 // List all events with their orgs and roles
 router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
@@ -406,7 +336,6 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     smsReentryEnabled,
     roles,
     eventManagerId,
-    newEventManager,
   } = req.body as {
     orgSlug?: string;
     name?: string;
@@ -419,7 +348,6 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     smsReentryEnabled?: boolean;
     roles?: NewRoleInput[];
     eventManagerId?: number;
-    newEventManager?: { name: string; email: string };
   };
 
   if (!name || !name.trim()) {
@@ -488,17 +416,9 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
       return { newEvent, insertedRoles };
     });
 
-    // Assign event manager if provided
+    // Assign event manager if provided (must be an existing org user)
     if (eventManagerId) {
       await db.update(usersTable).set({ eventId: newEvent.id }).where(eq(usersTable.id, eventManagerId));
-    } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
-      await db.insert(usersTable).values({
-        name: newEventManager.name.trim(),
-        email: newEventManager.email.trim().toLowerCase(),
-        role: "event_manager",
-        orgId: org.id,
-        eventId: newEvent.id,
-      });
     }
 
     res.status(201).json({
@@ -538,7 +458,6 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     smsReentryEnabled,
     isActive,
     eventManagerId,
-    newEventManager,
   } = req.body as {
     name?: string;
     eventDate?: string | null;
@@ -549,7 +468,6 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     smsReentryEnabled?: boolean;
     isActive?: boolean;
     eventManagerId?: number | null;
-    newEventManager?: { name: string; email: string };
   };
 
   const updates: Partial<typeof eventsTable.$inferInsert> = {};
@@ -583,7 +501,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   if (smsReentryEnabled !== undefined) updates.smsReentryEnabled = smsReentryEnabled;
   if (isActive !== undefined) updates.isActive = isActive;
 
-  const hasManagerChange = eventManagerId !== undefined || newEventManager !== undefined;
+  const hasManagerChange = eventManagerId !== undefined;
 
   if (Object.keys(updates).length === 0 && !hasManagerChange) {
     res.status(400).json({ error: "No fields to update" });
@@ -602,20 +520,12 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
       updated = rows[0];
     }
 
-    // Handle event manager assignment
+    // Handle event manager assignment (existing org user only)
     if (hasManagerChange) {
       // Clear any existing event_id assignments for this event
       await db.update(usersTable).set({ eventId: null }).where(eq(usersTable.eventId, id));
       if (eventManagerId) {
         await db.update(usersTable).set({ eventId: id }).where(eq(usersTable.id, eventManagerId));
-      } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
-        await db.insert(usersTable).values({
-          name: newEventManager.name.trim(),
-          email: newEventManager.email.trim().toLowerCase(),
-          role: "event_manager",
-          orgId: updated.orgId,
-          eventId: id,
-        });
       }
     }
 
@@ -638,9 +548,10 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   }
 });
 
-// GET /api/superadmin/me — returns the platform admin's username
-router.get("/superadmin/me", requireSuperadminAuth, (req, res) => {
-  res.json({ username: process.env.SUPERADMIN_USERNAME ?? "Platform Admin" });
+// GET /api/superadmin/me — returns the platform admin's identity from JWT
+router.get("/superadmin/me", requireSuperadminAuth, (_req, res) => {
+  const user = res.locals.user as AuthPayload | undefined;
+  res.json({ username: user?.name ?? "Platform Admin", email: user?.email ?? "" });
 });
 
 // POST /api/superadmin/impersonate — issue a JWT session for any platform user

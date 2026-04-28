@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import {
-  Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
+  Lock, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
   Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil, QrCode, Download,
   Mail, UserPlus, ShieldCheck, Building2, ExternalLink,
 } from "lucide-react";
@@ -54,103 +54,6 @@ type UserRecord = {
   org: { id: number; name: string; slug: string } | null;
   event: { id: number; name: string; slug: string } | null;
 };
-
-// ── Login gate ─────────────────────────────────────────────────────────────────
-
-function LoginGate({ onLogin }: { onLogin: () => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await fetch("/api/superadmin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ username: username.trim(), password }),
-      });
-      if (res.status === 429) throw new Error("Too many attempts. Wait 15 minutes and try again.");
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? "Invalid credentials");
-      }
-      onLogin();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid credentials. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
-      <Card className="w-full max-w-md border-4 border-primary shadow-brutal-lg">
-        <CardContent className="p-10">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-4 bg-primary text-white rounded-xl border-4 border-foreground shadow-brutal">
-              <Lock className="w-8 h-8" />
-            </div>
-            <div>
-              <h1 className="font-display text-3xl leading-tight">OpsCheckIn</h1>
-              <p className="text-muted-foreground font-medium">Platform Admin</p>
-            </div>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="font-display text-lg uppercase tracking-wider block mb-2">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Admin username"
-                autoFocus
-                autoComplete="username"
-                required
-                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
-              <div className="relative">
-                <input
-                  type={show ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Admin password"
-                  autoComplete="current-password"
-                  required
-                  className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShow((p) => !p)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  tabIndex={-1}
-                >
-                  {show ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
-                </button>
-              </div>
-            </div>
-            {error && (
-              <p className="text-destructive font-bold text-base border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
-                {error}
-              </p>
-            )}
-            <Button type="submit" size="lg" className="w-full" isLoading={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 // ── Create Event Form ──────────────────────────────────────────────────────────
 
@@ -268,7 +171,6 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
       payload.eventDate = eventDate || undefined;
     }
     if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
-    else if (managerSelection.type === "new" && managerSelection.name.trim() && managerSelection.email.trim()) payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
 
     setLoading(true);
     try {
@@ -690,12 +592,11 @@ function CreateUserForm({ orgs, events, onCreated }: CreateUserFormProps) {
 
 // ── Event Manager Picker ───────────────────────────────────────────────────────
 
-type ManagerMode = "keep" | "existing" | "new" | "clear";
+type ManagerMode = "keep" | "existing" | "clear";
 export type ManagerSelection =
   | { type: "keep" }
   | { type: "clear" }
-  | { type: "existing"; userId: number }
-  | { type: "new"; name: string; email: string };
+  | { type: "existing"; userId: number };
 
 function EventManagerPicker({
   orgUsers,
@@ -708,15 +609,12 @@ function EventManagerPicker({
 }) {
   const [mode, setMode] = useState<ManagerMode>(currentManager ? "keep" : "clear");
   const [selectedUserId, setSelectedUserId] = useState<number | "">(currentManager?.id ?? "");
-  const [newName, setNewName] = useState("");
-  const [newEmail, setNewEmail] = useState("");
 
   const switchMode = (m: ManagerMode) => {
     setMode(m);
     if (m === "keep") onChange({ type: "keep" });
     else if (m === "clear") onChange({ type: "clear" });
     else if (m === "existing" && selectedUserId) onChange({ type: "existing", userId: Number(selectedUserId) });
-    else if (m === "new") onChange({ type: "new", name: newName, email: newEmail });
   };
 
   const tabClass = (active: boolean, danger = false) =>
@@ -746,10 +644,9 @@ function EventManagerPicker({
         {currentManager && (
           <button type="button" onClick={() => switchMode("keep")} className={tabClass(mode === "keep")}>Keep current</button>
         )}
-        <button type="button" onClick={() => switchMode("existing")} className={tabClass(mode === "existing")}>
-          {orgUsers.length === 0 ? "No existing users" : "Select existing user"}
+        <button type="button" onClick={() => switchMode("existing")} className={tabClass(mode === "existing")} disabled={orgUsers.length === 0}>
+          Select org user
         </button>
-        <button type="button" onClick={() => switchMode("new")} className={tabClass(mode === "new")}>Add new user</button>
         {currentManager && (
           <button type="button" onClick={() => switchMode("clear")} className={tabClass(mode === "clear", true)}>Remove</button>
         )}
@@ -757,7 +654,7 @@ function EventManagerPicker({
 
       {mode === "existing" && (
         orgUsers.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No users in this organization yet. Use "Add new user" to create one.</p>
+          <p className="text-xs text-muted-foreground italic">No users in this organization yet. Add a user to this org first, then assign them as event manager.</p>
         ) : (
           <select
             value={selectedUserId}
@@ -776,20 +673,6 @@ function EventManagerPicker({
             ))}
           </select>
         )
-      )}
-
-      {mode === "new" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider block mb-1">Name <span className="text-destructive">*</span></label>
-            <Input value={newName} onChange={(e) => { setNewName(e.target.value); onChange({ type: "new", name: e.target.value, email: newEmail }); }} placeholder="Full name" />
-          </div>
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider block mb-1">Email <span className="text-destructive">*</span></label>
-            <Input type="email" value={newEmail} onChange={(e) => { setNewEmail(e.target.value); onChange({ type: "new", name: newName, email: e.target.value }); }} placeholder="email@example.com" />
-          </div>
-          <p className="sm:col-span-2 text-xs text-muted-foreground">User will set their own password on first login.</p>
-        </div>
       )}
     </div>
   );
@@ -828,9 +711,6 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     e.preventDefault();
     setError("");
     if (!name.trim()) { setError("Event name is required"); return; }
-    if (managerSelection.type === "new" && (!managerSelection.name.trim() || !managerSelection.email.trim())) {
-      setError("New event manager requires both a name and email"); return;
-    }
 
     // Build dates for multi-day
     let builtEventDates: string[] | undefined;
@@ -856,7 +736,6 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     if (adminPassword.trim()) payload.adminPassword = adminPassword.trim();
 
     if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
-    else if (managerSelection.type === "new") payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
     else if (managerSelection.type === "clear") payload.eventManagerId = null;
 
     setLoading(true);
@@ -1326,7 +1205,7 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function SuperadminPage() {
-  const { user, loading: authLoading, refetch: refetchAuth } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
@@ -1346,9 +1225,6 @@ export default function SuperadminPage() {
         fetch("/api/superadmin/users", { credentials: "include" }),
         fetch("/api/superadmin/me", { credentials: "include" }),
       ]);
-      if (eventsRes.status === 503 || orgsRes.status === 503) {
-        throw new Error("Server configuration error: SUPERADMIN_PASSWORD is not set. Add it in the Replit Secrets panel and restart the API server.");
-      }
       if (!eventsRes.ok || !orgsRes.ok) {
         const errBody = await (eventsRes.ok ? orgsRes : eventsRes).json().catch(() => ({})) as { error?: string };
         throw new Error(errBody.error ?? "Server returned an error. Try refreshing.");
@@ -1372,24 +1248,23 @@ export default function SuperadminPage() {
 
   useEffect(() => { if (user?.role === "superadmin") void fetchAll(); }, [user?.role]);
 
+  useEffect(() => {
+    if (!authLoading && (!user || user.role !== "superadmin")) {
+      setLocation("/login");
+    }
+  }, [authLoading, user]);
+
   const handleLogout = async () => {
     await authLogout();
     setEvents([]); setOrgs([]); setUsers([]);
-    setLocation("/superadmin");
+    setLocation("/login");
   };
 
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-foreground flex items-center justify-center">
-        <p className="text-white font-display text-2xl">Loading...</p>
-      </div>
-    );
-  }
-  if (!user || user.role !== "superadmin") {
-    return <LoginGate onLogin={() => void refetchAuth()} />;
+  if (authLoading || !user || user.role !== "superadmin") {
+    return null;
   }
 
   // Group events by org slug

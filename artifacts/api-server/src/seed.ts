@@ -4,8 +4,12 @@
 // Event fields (name, event_date, giveaway_enabled) and role lists are kept in
 // sync with the config on every startup — existing attendee/check-in data is
 // never affected.
+//
+// Also seeds a platform admin user if PLATFORM_ADMIN_EMAIL and
+// PLATFORM_ADMIN_PASSWORD env vars are set and no superadmin exists yet.
 
 import { pool } from "@workspace/db";
+import bcrypt from "bcryptjs";
 import seedConfig from "./seed-config";
 
 export async function runSeed(): Promise<void> {
@@ -60,6 +64,27 @@ export async function runSeed(): Promise<void> {
            AND er.role_key <> ALL($2::text[])`,
         [event.slug, configRoleKeys],
       );
+    }
+
+    // ── Platform admin seeding ─────────────────────────────────────────────────
+    // If no superadmin user exists yet and the env vars are set, create one.
+    // This makes a fresh deployment immediately usable without touching the DB.
+    const adminEmail = process.env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
+    const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD?.trim();
+    if (adminEmail && adminPassword) {
+      const existing = await client.query(
+        `SELECT 1 FROM users WHERE role = 'superadmin' LIMIT 1`,
+      );
+      if (existing.rowCount === 0) {
+        const passwordHash = await bcrypt.hash(adminPassword, 12);
+        await client.query(
+          `INSERT INTO users (name, email, role, password_hash, password_set, org_id, event_id)
+           VALUES ('Platform Admin', $1, 'superadmin', $2, true, NULL, NULL)
+           ON CONFLICT (email) DO NOTHING`,
+          [adminEmail, passwordHash],
+        );
+        console.log(`Seed: platform admin created for ${adminEmail}`);
+      }
     }
 
     console.log("Seed OK — org, events, and roles are up to date.");

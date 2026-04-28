@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Lock, Shield, Eye, EyeOff } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authLogin, authSetPassword, redirectByRole, type AuthUser } from "@/hooks/use-auth";
@@ -198,14 +198,6 @@ export default function LoginPage({ onLogin }: Props) {
           Checking in to an event?{" "}
           <Link href="/" className="underline">Enter your event code</Link>
         </p>
-        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-center">
-          <Link href="/superadmin">
-            <button className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-              <Shield className="w-3 h-3" />
-              Platform Admin
-            </button>
-          </Link>
-        </div>
       </div>
     </div>
   );
