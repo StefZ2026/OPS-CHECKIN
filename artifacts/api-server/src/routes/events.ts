@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual, randomBytes } from "crypto";
 import rateLimit from "express-rate-limit";
 import { sendSms } from "../lib/sms";
 import * as XLSX from "xlsx";
+import { verifyToken } from "./auth";
 import { db } from "@workspace/db";
 import {
   eventsTable, eventRolesTable, organizationsTable,
@@ -78,6 +79,16 @@ function eventToken(adminPassword: string): string {
 }
 
 function requireEventAuth(req: Request, res: Response, next: NextFunction): void {
+  // Superadmin JWT cookie bypass — platform admin can access any event
+  const jwtToken = req.cookies?.auth_token as string | undefined;
+  if (jwtToken) {
+    const payload = verifyToken(jwtToken);
+    if (payload?.role === "superadmin") {
+      next();
+      return;
+    }
+  }
+
   const event = res.locals.event;
   if (!event.adminPassword) {
     res.status(503).json({ error: "Admin auth is not configured for this event." });
