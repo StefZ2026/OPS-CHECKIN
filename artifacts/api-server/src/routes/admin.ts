@@ -86,7 +86,7 @@ router.post("/superadmin/login", loginLimiter, (req, res) => {
     return;
   }
   if (
-    username.trim() !== process.env.SUPERADMIN_USERNAME.trim() ||
+    username.trim().toLowerCase() !== process.env.SUPERADMIN_USERNAME.trim().toLowerCase() ||
     password.trim() !== process.env.SUPERADMIN_PASSWORD.trim()
   ) {
     res.status(401).json({ error: "Invalid credentials" });
