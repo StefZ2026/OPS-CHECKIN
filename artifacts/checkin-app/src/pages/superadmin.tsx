@@ -12,6 +12,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, authLogout } from "@/hooks/use-auth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -705,7 +715,9 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
   const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
   const [smsReentryEnabled, setSmsReentryEnabled] = useState(event.smsReentryEnabled);
   const [isActive, setIsActive] = useState(event.isActive);
-  const [showDeactivateWarning, setShowDeactivateWarning] = useState(false);
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [deactivateCount, setDeactivateCount] = useState(0);
+  const [fetchingStats, setFetchingStats] = useState(false);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "keep" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -743,6 +755,33 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
   const removeCustomRole = (key: string) => {
     setCustomRoles((prev) => prev.filter((r) => r.roleKey !== key));
     setSelectedRoleKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+  };
+
+  const handleActiveToggle = async () => {
+    if (isActive) {
+      setFetchingStats(true);
+      try {
+        const res = await fetch(`/api/superadmin/events/${event.id}/stats`, { credentials: "include" });
+        if (!res.ok) {
+          toast({ title: "Could not check event stats", description: "Unable to verify check-in count. The event has not been deactivated.", variant: "destructive" });
+          return;
+        }
+        const data = await res.json() as { checkedInCount?: number };
+        const count = data.checkedInCount ?? 0;
+        if (count > 0) {
+          setDeactivateCount(count);
+          setConfirmDeactivate(true);
+        } else {
+          setIsActive(false);
+        }
+      } catch {
+        toast({ title: "Could not check event stats", description: "A network error occurred. The event has not been deactivated.", variant: "destructive" });
+      } finally {
+        setFetchingStats(false);
+      }
+    } else {
+      setIsActive(true);
+    }
   };
 
   const currentManager = orgUsers.find((u) => u.event?.id === event.id) ?? null;
@@ -941,30 +980,15 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           <div className="flex items-start gap-2">
             <button
               type="button"
-              onClick={() => {
-                if (isActive && event.checkedInCount > 0) {
-                  setShowDeactivateWarning(true);
-                } else {
-                  setIsActive((v) => !v);
-                  setShowDeactivateWarning(false);
-                }
-              }}
-              className={`mt-0.5 relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${isActive ? "bg-green-500" : "bg-gray-200"}`}
+              onClick={handleActiveToggle}
+              disabled={fetchingStats}
+              className={`mt-0.5 relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors disabled:opacity-60 ${isActive ? "bg-green-500" : "bg-gray-200"}`}
             >
               <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
             </button>
             <div>
               <p className="font-display text-xs uppercase tracking-wider">Active</p>
-              <p className="text-xs text-muted-foreground">{isActive ? "Yes — accepting check-ins" : "No — check-in page disabled"}</p>
-              {showDeactivateWarning && (
-                <div className="mt-2 p-3 bg-amber-50 border-2 border-amber-400 rounded-lg text-xs text-amber-800 space-y-2">
-                  <p className="font-bold">This event has {event.checkedInCount} check-ins. Deactivating will disable the check-in page.</p>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => { setIsActive(false); setShowDeactivateWarning(false); }} className="px-3 py-1 rounded border-2 border-amber-600 bg-amber-600 text-white font-bold text-xs">Deactivate anyway</button>
-                    <button type="button" onClick={() => setShowDeactivateWarning(false)} className="px-3 py-1 rounded border-2 border-amber-600 font-bold text-xs">Cancel</button>
-                  </div>
-                </div>
-              )}
+              <p className="text-xs text-muted-foreground">{fetchingStats ? "Checking..." : isActive ? "Yes — accepting check-ins" : "No — check-in page disabled"}</p>
             </div>
           </div>
         </div>
@@ -1027,6 +1051,26 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           </Button>
         </div>
       </div>
+
+      <AlertDialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
+        <AlertDialogContent className="border-4 border-foreground">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-xl">Deactivate this event?</AlertDialogTitle>
+            <AlertDialogDescription className="text-base text-foreground">
+              This event has <strong>{deactivateCount} check-in{deactivateCount !== 1 ? "s" : ""}</strong>. Deactivating it will prevent event admins from accessing the check-in flow. Are you sure you want to deactivate it?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDeactivate(false)}>Keep Active</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90 border-2 border-foreground"
+              onClick={() => { setIsActive(false); setConfirmDeactivate(false); }}
+            >
+              Yes, Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <EventManagerPicker
         orgUsers={orgUsers}

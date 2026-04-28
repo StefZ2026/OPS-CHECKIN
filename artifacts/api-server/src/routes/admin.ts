@@ -458,6 +458,25 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
   }
 });
 
+// Get stats (check-in count) for a single event — used before deactivation confirmation
+router.get("/superadmin/events/:id/stats", requireSuperadminAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid event id" });
+    return;
+  }
+  try {
+    const [row] = await db
+      .select({ checkedInCount: count() })
+      .from(attendeesTable)
+      .where(eq(attendeesTable.eventId, id));
+    res.json({ checkedInCount: row?.checkedInCount ?? 0 });
+  } catch (err) {
+    console.error("GET /superadmin/events/:id/stats error:", err);
+    res.status(500).json({ error: "Failed to load event stats" });
+  }
+});
+
 // Update an existing event (name, date, password, mobilize ID, giveaway, active status)
 router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
