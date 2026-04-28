@@ -26,17 +26,20 @@ export async function runSeed(): Promise<void> {
     );
 
     for (const event of org.events) {
-      // Upsert the event — update mutable fields if the slug already exists
+      // Upsert the event — update mutable fields if the slug already exists.
+      // admin_password is set only when the current stored value is null so
+      // that a password changed via the UI is never overwritten on restart.
       await client.query(
-        `INSERT INTO events (org_id, name, slug, event_date, giveaway_enabled, is_active)
-         SELECT o.id, $1, $2, $3::date, $4, true
+        `INSERT INTO events (org_id, name, slug, event_date, giveaway_enabled, is_active, admin_password)
+         SELECT o.id, $1, $2, $3::date, $4, true, $6
          FROM organizations o
          WHERE o.slug = $5
          ON CONFLICT (slug) DO UPDATE
            SET name             = EXCLUDED.name,
                event_date       = EXCLUDED.event_date,
-               giveaway_enabled = EXCLUDED.giveaway_enabled`,
-        [event.name, event.slug, event.eventDate, event.giveawayEnabled, org.slug],
+               giveaway_enabled = EXCLUDED.giveaway_enabled,
+               admin_password   = COALESCE(events.admin_password, EXCLUDED.admin_password)`,
+        [event.name, event.slug, event.eventDate, event.giveawayEnabled, org.slug, event.adminPassword ?? null],
       );
 
       // Upsert each volunteer role (insert new rows, update display_name/sort_order on existing ones)
