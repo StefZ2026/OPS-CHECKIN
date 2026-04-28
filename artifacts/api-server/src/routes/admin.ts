@@ -280,9 +280,10 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         .from(attendeesTable)
         .groupBy(attendeesTable.eventId),
       db
-        .select({ eventId: attendeesTable.eventId, volunteerCount: countDistinct(attendeesTable.id) })
-        .from(attendeesTable)
-        .innerJoin(attendeeRolesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
+        .select({ eventId: attendeesTable.eventId, volunteerCount: countDistinct(attendeeRolesTable.attendeeId) })
+        .from(attendeeRolesTable)
+        .innerJoin(attendeesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
+        .where(eq(attendeeRolesTable.wantsToServeToday, true))
         .groupBy(attendeesTable.eventId),
     ]);
 
@@ -297,14 +298,15 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
       if (row.eventId !== null) countMap.set(row.eventId, row.checkedInCount);
     }
 
-    const volMap = new Map<number, number>();
+    const volunteerMap = new Map<number, number>();
     for (const row of volunteerCounts) {
-      if (row.eventId !== null) volMap.set(row.eventId, row.volunteerCount);
+      if (row.eventId !== null) volunteerMap.set(row.eventId, row.volunteerCount);
     }
 
     const result = events.map((e) => {
-      const total = countMap.get(e.id) ?? 0;
-      const volunteers = volMap.get(e.id) ?? 0;
+      const checkedInCount = countMap.get(e.id) ?? 0;
+      const volunteerCount = volunteerMap.get(e.id) ?? 0;
+      const attendeeCount = checkedInCount - volunteerCount;
       return {
         id: e.id,
         name: e.name,
@@ -316,9 +318,9 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         mobilizeEventId: e.mobilizeEventId,
         isActive: e.isActive,
         createdAt: e.createdAt,
-        checkedInCount: total,
-        volunteerCount: volunteers,
-        attendeeCount: total - volunteers,
+        checkedInCount,
+        volunteerCount,
+        attendeeCount,
         org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
         roles: (rolesMap.get(e.id) ?? []).map((r) => ({
           id: r.id,

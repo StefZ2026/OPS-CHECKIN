@@ -1190,6 +1190,11 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
                 <span className="text-sm font-bold text-foreground">
                   <Users className="w-4 h-4 inline mr-1" />
                   {event.checkedInCount} checked in
+                  {event.checkedInCount > 0 && (
+                    <span className="font-normal text-muted-foreground ml-1">
+                      ({event.volunteerCount} volunteer{event.volunteerCount !== 1 ? "s" : ""} · {event.attendeeCount} attendee{event.attendeeCount !== 1 ? "s" : ""})
+                    </span>
+                  )}
                 </span>
                 {event.volunteerCount > 0 && (
                   <span className="text-xs text-muted-foreground">
