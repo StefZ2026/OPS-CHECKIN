@@ -1066,6 +1066,7 @@ export default function SuperadminPage() {
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [superadminUsername, setSuperadminUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
@@ -1075,10 +1076,11 @@ export default function SuperadminPage() {
     setLoadError("");
     const token = getSuperadminToken() ?? "";
     try {
-      const [eventsRes, orgsRes, usersRes] = await Promise.all([
+      const [eventsRes, orgsRes, usersRes, meRes] = await Promise.all([
         fetch("/api/superadmin/events", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/superadmin/orgs", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/superadmin/users", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/me", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (eventsRes.status === 401 || orgsRes.status === 401) {
         clearSuperadminToken();
@@ -1092,14 +1094,16 @@ export default function SuperadminPage() {
         const errBody = await (eventsRes.ok ? orgsRes : eventsRes).json().catch(() => ({})) as { error?: string };
         throw new Error(errBody.error ?? "Server returned an error. Try refreshing.");
       }
-      const [eventsData, orgsData, usersData] = await Promise.all([
+      const [eventsData, orgsData, usersData, meData] = await Promise.all([
         eventsRes.json() as Promise<{ events: EventRecord[] }>,
         orgsRes.json() as Promise<{ orgs: OrgRecord[] }>,
         usersRes.ok ? usersRes.json() as Promise<{ users: UserRecord[] }> : Promise.resolve({ users: [] }),
+        meRes.ok ? meRes.json() as Promise<{ username: string }> : Promise.resolve({ username: "" }),
       ]);
       setEvents(eventsData.events);
       setOrgs(orgsData.orgs);
       setUsers(usersData.users);
+      setSuperadminUsername(meData.username);
     } catch {
       setLoadError("Could not load data. Check your connection and try again.");
     } finally {
@@ -1203,47 +1207,24 @@ export default function SuperadminPage() {
           </div>
         </div>
 
-        {/* Users list */}
-        {users.length > 0 && (
-          <div className="border-4 border-foreground rounded-2xl overflow-hidden shadow-brutal">
-            <div className="bg-foreground text-white px-6 py-4 flex items-center gap-3">
-              <Users className="w-5 h-5" />
-              <h2 className="font-display text-2xl">Platform Users</h2>
-              <span className="ml-auto text-gray-400 text-sm font-mono">{users.length} total</span>
-            </div>
-            <div className="divide-y-2 divide-foreground/10 bg-white">
-              {users.map((u) => (
-                <div key={u.id} className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-display text-lg">{u.name}</span>
-                      <span className={`text-xs font-bold rounded-full px-2 py-0.5 border ${
-                        u.role === "org_contact"
-                          ? "bg-blue-100 text-blue-800 border-blue-400"
-                          : "bg-purple-100 text-purple-800 border-purple-400"
-                      }`}>
-                        {u.role === "org_contact" ? "Org Contact" : "Event Manager"}
-                      </span>
-                      {u.passwordSet ? (
-                        <span className="text-xs font-bold bg-green-100 text-green-800 border border-green-400 rounded-full px-2 py-0.5">Active</span>
-                      ) : (
-                        <span className="text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-400 rounded-full px-2 py-0.5">Pending first login</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-0.5 text-sm text-muted-foreground flex-wrap">
-                      <span><Mail className="w-3 h-3 inline mr-1" />{u.email}</span>
-                      {u.org && <span><Building2 className="w-3 h-3 inline mr-1" />{u.org.name}</span>}
-                      {u.event && <span className="font-mono">{u.event.name}</span>}
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {format(new Date(u.createdAt), "MMM d, yyyy")}
-                  </span>
-                </div>
-              ))}
+        {/* Platform Users — shows the superadmin only */}
+        <div className="border-4 border-foreground rounded-2xl overflow-hidden shadow-brutal">
+          <div className="bg-foreground text-white px-6 py-4 flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5" />
+            <h2 className="font-display text-2xl">Platform Users</h2>
+            <span className="ml-auto text-gray-400 text-sm font-mono">1 total</span>
+          </div>
+          <div className="bg-white px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-display text-lg">{superadminUsername || "Platform Admin"}</span>
+                <span className="text-xs font-bold bg-gray-100 text-gray-800 border border-gray-400 rounded-full px-2 py-0.5">Platform Admin</span>
+                <span className="text-xs font-bold bg-green-100 text-green-800 border border-green-400 rounded-full px-2 py-0.5">Active</span>
+              </div>
+              <div className="mt-0.5 text-sm text-muted-foreground">OpsCheckIn · Full platform access</div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Organizations → Events */}
         <div className="space-y-8">
@@ -1284,13 +1265,48 @@ export default function SuperadminPage() {
                   </div>
                 </div>
 
+                {/* Org contacts for this org */}
+                {users.filter((u) => u.role === "org_contact" && u.org?.id === org.id).map((u) => (
+                  <div key={u.id} className="bg-blue-50 border-b-2 border-foreground/10 px-6 py-3 flex items-center gap-3 flex-wrap">
+                    <UserPlus className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                      <span className="font-semibold text-sm">{u.name}</span>
+                      <span className="text-xs font-bold bg-blue-100 text-blue-800 border border-blue-400 rounded-full px-2 py-0.5">Org Contact</span>
+                      {u.passwordSet ? (
+                        <span className="text-xs font-bold bg-green-100 text-green-800 border border-green-400 rounded-full px-2 py-0.5">Active</span>
+                      ) : (
+                        <span className="text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-400 rounded-full px-2 py-0.5">Pending first login</span>
+                      )}
+                      <span className="text-xs text-muted-foreground"><Mail className="w-3 h-3 inline mr-1" />{u.email}</span>
+                    </div>
+                  </div>
+                ))}
+
                 {/* Events under this org */}
                 <div className="p-6 space-y-4 bg-gray-50">
                   {orgEvents.length === 0 && (
                     <p className="text-muted-foreground text-sm italic">No events yet for this organization.</p>
                   )}
                   {orgEvents.map((event) => (
-                    <EventCard key={event.id} event={event} onUpdated={() => void fetchAll()} />
+                    <div key={event.id} className="space-y-0">
+                      <EventCard event={event} onUpdated={() => void fetchAll()} />
+                      {/* Event managers for this event */}
+                      {users.filter((u) => u.role === "event_manager" && u.event?.id === event.id).map((u) => (
+                        <div key={u.id} className="bg-purple-50 border-2 border-t-0 border-foreground/20 rounded-b-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
+                          <Key className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                            <span className="font-semibold text-sm">{u.name}</span>
+                            <span className="text-xs font-bold bg-purple-100 text-purple-800 border border-purple-400 rounded-full px-2 py-0.5">Event Manager</span>
+                            {u.passwordSet ? (
+                              <span className="text-xs font-bold bg-green-100 text-green-800 border border-green-400 rounded-full px-2 py-0.5">Active</span>
+                            ) : (
+                              <span className="text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-400 rounded-full px-2 py-0.5">Pending first login</span>
+                            )}
+                            <span className="text-xs text-muted-foreground"><Mail className="w-3 h-3 inline mr-1" />{u.email}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   ))}
 
                   {/* Add event for this org */}

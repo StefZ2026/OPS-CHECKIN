@@ -570,6 +570,11 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   }
 });
 
+// GET /api/superadmin/me — returns the platform admin's username
+router.get("/superadmin/me", requireSuperadminAuth, (req, res) => {
+  res.json({ username: process.env.SUPERADMIN_USERNAME ?? "Platform Admin" });
+});
+
 // ── User Management (superadmin) ─────────────────────────────────────────────
 
 // GET /api/superadmin/users — list all platform users (org contacts + event managers)
