@@ -14,7 +14,6 @@ import { useAttendees } from "@/hooks/use-attendees";
 import { useToast } from "@/hooks/use-toast";
 import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
 import { useAuth } from "@/hooks/use-auth";
-import { Link } from "wouter";
 import { useEventConfig } from "@/hooks/use-event-config";
 import { eventApiBase, getEventSlug } from "@/lib/event-slug";
 import { Input } from "@/components/ui/input";
@@ -1283,19 +1282,5 @@ export default function AdminDashboard() {
     return <LoginGate onLogin={() => setAuthed(true)} />;
   }
 
-  return (
-    <>
-      {isSuperadmin && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <Link href="/superadmin">
-            <Button size="sm" className="shadow-brutal border-4 border-foreground gap-2">
-              <Shield className="w-4 h-4" />
-              Admin Panel
-            </Button>
-          </Link>
-        </div>
-      )}
-      <Dashboard onLogout={isSuperadmin ? () => {} : () => setAuthed(false)} />
-    </>
-  );
+  return <Dashboard onLogout={isSuperadmin ? () => {} : () => setAuthed(false)} />;
 }
