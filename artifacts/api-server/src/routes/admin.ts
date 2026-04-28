@@ -80,13 +80,16 @@ router.post("/admin/login", loginLimiter, (req, res) => {
 });
 
 router.post("/superadmin/login", loginLimiter, (req, res) => {
-  const { password } = req.body as { password?: string };
-  if (!password || !process.env.SUPERADMIN_PASSWORD) {
-    res.status(503).json({ error: "Superadmin auth is not configured on this server." });
+  const { username, password } = req.body as { username?: string; password?: string };
+  if (!username || !password || !process.env.SUPERADMIN_PASSWORD || !process.env.SUPERADMIN_USERNAME) {
+    res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-  if (password.trim() !== process.env.SUPERADMIN_PASSWORD.trim()) {
-    res.status(401).json({ error: "Invalid password" });
+  if (
+    username.trim() !== process.env.SUPERADMIN_USERNAME.trim() ||
+    password.trim() !== process.env.SUPERADMIN_PASSWORD.trim()
+  ) {
+    res.status(401).json({ error: "Invalid credentials" });
     return;
   }
   res.json({ token: expectedSuperadminToken() });

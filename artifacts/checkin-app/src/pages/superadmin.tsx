@@ -23,14 +23,13 @@ function clearSuperadminToken() {
   sessionStorage.removeItem(SUPERADMIN_TOKEN_KEY);
 }
 
-async function loginSuperadmin(password: string): Promise<string> {
+async function loginSuperadmin(username: string, password: string): Promise<string> {
   const res = await fetch("/api/superadmin/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password }),
   });
   if (res.status === 429) throw new Error("Too many attempts. Wait 15 minutes and try again.");
-  if (res.status === 503) throw new Error("Server config error: SUPERADMIN_PASSWORD not set.");
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? "Invalid credentials");
@@ -82,6 +81,7 @@ type UserRecord = {
 // ── Login gate ─────────────────────────────────────────────────────────────────
 
 function LoginGate({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
@@ -92,11 +92,11 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
     setError("");
     setLoading(true);
     try {
-      const token = await loginSuperadmin(password);
+      const token = await loginSuperadmin(username.trim(), password);
       setSuperadminToken(token);
       onLogin();
-    } catch {
-      setError("Incorrect password. Try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid credentials. Try again.");
     } finally {
       setLoading(false);
     }
@@ -117,15 +117,28 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
           </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="font-display text-lg uppercase tracking-wider block mb-2">Admin Password</label>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Admin username"
+                autoFocus
+                autoComplete="username"
+                required
+                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
               <div className="relative">
                 <input
                   type={show ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter platform admin password"
-                  autoFocus
+                  placeholder="Admin password"
                   autoComplete="current-password"
+                  required
                   className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
                 />
                 <button
@@ -144,7 +157,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               </p>
             )}
             <Button type="submit" size="lg" className="w-full" isLoading={loading}>
-              {loading ? "Signing in..." : "Unlock Event Manager"}
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
         </CardContent>
