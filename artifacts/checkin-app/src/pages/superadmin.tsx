@@ -21,6 +21,7 @@ type EventRecord = {
   name: string;
   slug: string;
   eventDate: string | null;
+  eventDates: string | null;
   giveawayEnabled: boolean;
   mobilizeEventId: string | null;
   isActive: boolean;
@@ -168,7 +169,9 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [isMultiDay, setIsMultiDay] = useState(false);
   const [eventDate, setEventDate] = useState("");
+  const [extraDates, setExtraDates] = useState<string[]>([""]);
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
@@ -193,6 +196,8 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
     { roleKey: "accessibility_support",  displayName: "Accessibility Support" },
     { roleKey: "social_media",           displayName: "Social Media" },
     { roleKey: "outreach_coordinator",   displayName: "Outreach Coordinator" },
+    { roleKey: "merchandise_sales",      displayName: "Merchandise Sales" },
+    { roleKey: "emcee",                  displayName: "Emcee" },
   ];
 
   const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
@@ -237,16 +242,28 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
 
     const validRoles = roles.filter((r) => r.roleKey.trim() && r.displayName.trim());
 
+    // Build the dates array for multi-day events
+    let builtEventDates: string[] | undefined;
+    if (isMultiDay && eventDate) {
+      const allDates = [eventDate, ...extraDates.filter((d) => d.trim())];
+      if (allDates.length > 1) builtEventDates = allDates;
+    }
+
     const payload: Record<string, unknown> = {
       orgSlug,
       name: name.trim(),
       slug: slug.trim(),
-      eventDate: eventDate || undefined,
       adminPassword: adminPassword.trim() || undefined,
       mobilizeEventId: mobilizeEventId.trim() || undefined,
       giveawayEnabled,
       roles: validRoles,
     };
+    if (builtEventDates) {
+      payload.eventDates = builtEventDates;
+      payload.eventDate = builtEventDates[0];
+    } else {
+      payload.eventDate = eventDate || undefined;
+    }
     if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
     else if (managerSelection.type === "new" && managerSelection.name.trim() && managerSelection.email.trim()) payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
 
@@ -254,10 +271,8 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
     try {
       const res = await fetch("/api/superadmin/events", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       const data = await res.json() as { event?: EventRecord; error?: string };
@@ -267,6 +282,7 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
       onCreated();
 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
+      setIsMultiDay(false); setExtraDates([""]);
       setSelectedRoleKeys(new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"]));
       setMobilizeEventId(""); setGiveawayEnabled(false);
       setCustomRoles([]); setCustomRoleInput("");
@@ -325,15 +341,57 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Used in the URL: /api/events/<strong>{slug || "slug"}</strong>/...</p>
                 </div>
-                <div>
-                  <label className="font-display text-sm uppercase tracking-wider block mb-1">
-                    <Calendar className="w-4 h-4 inline mr-1" />Event Date
-                  </label>
+                <div className="sm:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-display text-sm uppercase tracking-wider">
+                      <Calendar className="w-4 h-4 inline mr-1" />
+                      {isMultiDay ? "Event Dates" : "Event Date"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setIsMultiDay((v) => !v); setExtraDates([""]); }}
+                      className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border-2 border-foreground transition-colors ${isMultiDay ? "bg-primary text-white" : "bg-white text-foreground"}`}
+                    >
+                      Multi-day
+                    </button>
+                  </div>
                   <Input
                     type="date"
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
+                    placeholder={isMultiDay ? "Day 1" : ""}
                   />
+                  {isMultiDay && (
+                    <div className="space-y-2">
+                      {extraDates.map((d, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <Input
+                            type="date"
+                            value={d}
+                            onChange={(e) => {
+                              const updated = [...extraDates];
+                              updated[i] = e.target.value;
+                              setExtraDates(updated);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setExtraDates((prev) => prev.filter((_, idx) => idx !== i))}
+                            className="p-1 rounded border-2 border-foreground hover:bg-destructive hover:text-white transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setExtraDates((prev) => [...prev, ""])}
+                        className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80"
+                      >
+                        <Plus className="w-3 h-3" /> Add another day
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="font-display text-sm uppercase tracking-wider block mb-1">
@@ -463,10 +521,8 @@ function CreateUserForm({ orgs, events, onCreated }: CreateUserFormProps) {
     try {
       const res = await fetch("/api/superadmin/users", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
@@ -730,9 +786,12 @@ type EditEventFormProps = {
 
 function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFormProps) {
   const [name, setName] = useState(event.name);
+  const parsedDates: string[] = event.eventDates ? (JSON.parse(event.eventDates) as string[]) : [];
+  const [isMultiDay, setIsMultiDay] = useState(parsedDates.length > 1);
   const [eventDate, setEventDate] = useState(
-    event.eventDate ? event.eventDate.slice(0, 10) : ""
+    parsedDates.length > 0 ? parsedDates[0] : (event.eventDate ? event.eventDate.slice(0, 10) : "")
   );
+  const [extraDates, setExtraDates] = useState<string[]>(parsedDates.length > 1 ? parsedDates.slice(1) : [""]);
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState(event.mobilizeEventId ?? "");
   const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
@@ -752,13 +811,26 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
       setError("New event manager requires both a name and email"); return;
     }
 
+    // Build dates for multi-day
+    let builtEventDates: string[] | undefined;
+    if (isMultiDay && eventDate) {
+      const allDates = [eventDate, ...extraDates.filter((d) => d.trim())];
+      if (allDates.length > 1) builtEventDates = allDates;
+    }
+
     const payload: Record<string, unknown> = {
       name: name.trim(),
-      eventDate: eventDate || null,
       mobilizeEventId: mobilizeEventId.trim() || null,
       giveawayEnabled,
       isActive,
     };
+    if (builtEventDates) {
+      payload.eventDates = builtEventDates;
+      payload.eventDate = builtEventDates[0];
+    } else {
+      payload.eventDate = eventDate || null;
+      payload.eventDates = null;
+    }
     if (adminPassword.trim()) payload.adminPassword = adminPassword.trim();
 
     if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
@@ -769,10 +841,8 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     try {
       const res = await fetch(`/api/superadmin/events/${event.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       const data = await res.json() as { event?: EventRecord; error?: string };
@@ -805,15 +875,56 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           />
         </div>
 
-        <div>
-          <label className="font-display text-xs uppercase tracking-wider block mb-1">
-            <Calendar className="w-3 h-3 inline mr-1" />Event Date
-          </label>
+        <div className="sm:col-span-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="font-display text-xs uppercase tracking-wider">
+              <Calendar className="w-3 h-3 inline mr-1" />
+              {isMultiDay ? "Event Dates" : "Event Date"}
+            </label>
+            <button
+              type="button"
+              onClick={() => { setIsMultiDay((v) => !v); setExtraDates([""]); }}
+              className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border-2 border-foreground transition-colors ${isMultiDay ? "bg-primary text-white" : "bg-white text-foreground"}`}
+            >
+              Multi-day
+            </button>
+          </div>
           <Input
             type="date"
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
           />
+          {isMultiDay && (
+            <div className="space-y-2">
+              {extraDates.map((d, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <Input
+                    type="date"
+                    value={d}
+                    onChange={(e) => {
+                      const updated = [...extraDates];
+                      updated[i] = e.target.value;
+                      setExtraDates(updated);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setExtraDates((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="p-1 rounded border-2 border-foreground hover:bg-destructive hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setExtraDates((prev) => [...prev, ""])}
+                className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80"
+              >
+                <Plus className="w-3 h-3" /> Add another day
+              </button>
+            </div>
+          )}
         </div>
 
         <div>
@@ -918,7 +1029,8 @@ function CreateOrgForm({ onCreated }: { onCreated: (org: OrgRecord) => void }) {
     try {
       const res = await fetch("/api/superadmin/orgs", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSuperadminToken() ?? ""}` },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
       });
       const data = await res.json() as { org?: OrgRecord; error?: string };

@@ -329,6 +329,7 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         name: eventsTable.name,
         slug: eventsTable.slug,
         eventDate: eventsTable.eventDate,
+        eventDates: eventsTable.eventDates,
         giveawayEnabled: eventsTable.giveawayEnabled,
         mobilizeEventId: eventsTable.mobilizeEventId,
         isActive: eventsTable.isActive,
@@ -365,6 +366,7 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
       name: e.name,
       slug: e.slug,
       eventDate: e.eventDate,
+      eventDates: e.eventDates,
       giveawayEnabled: e.giveawayEnabled,
       mobilizeEventId: e.mobilizeEventId,
       isActive: e.isActive,
@@ -395,6 +397,7 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     name,
     slug,
     eventDate,
+    eventDates,
     adminPassword,
     mobilizeEventId,
     giveawayEnabled,
@@ -406,6 +409,7 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     name?: string;
     slug?: string;
     eventDate?: string;
+    eventDates?: string[];
     adminPassword?: string;
     mobilizeEventId?: string;
     giveawayEnabled?: boolean;
@@ -452,13 +456,16 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     // Wrap event + role creation in a transaction so a role insert failure
     // doesn't leave a partially-configured event behind.
     const { newEvent, insertedRoles } = await db.transaction(async (tx) => {
+      const allDates = eventDates && eventDates.length > 0 ? eventDates : (eventDate ? [eventDate] : []);
+      const primaryDate = allDates[0] ? new Date(allDates[0]) : (eventDate ? new Date(eventDate) : null);
       const [newEvent] = await tx
         .insert(eventsTable)
         .values({
           orgId: org.id,
           name: name.trim(),
           slug: slug.trim(),
-          eventDate: eventDate ? new Date(eventDate) : null,
+          eventDate: primaryDate,
+          eventDates: allDates.length > 1 ? JSON.stringify(allDates) : null,
           adminPassword: adminPassword?.trim() || null,
           mobilizeEventId: mobilizeEventId?.trim() || null,
           giveawayEnabled: giveawayEnabled ?? false,
@@ -519,6 +526,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   const {
     name,
     eventDate,
+    eventDates,
     adminPassword,
     mobilizeEventId,
     giveawayEnabled,
@@ -528,6 +536,7 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   } = req.body as {
     name?: string;
     eventDate?: string | null;
+    eventDates?: string[] | null;
     adminPassword?: string | null;
     mobilizeEventId?: string | null;
     giveawayEnabled?: boolean;
@@ -549,6 +558,16 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
       updates.eventDate = parsed;
     } else {
       updates.eventDate = null;
+    }
+  }
+  if (eventDates !== undefined) {
+    if (eventDates && eventDates.length > 1) {
+      updates.eventDates = JSON.stringify(eventDates);
+      // Keep eventDate in sync with the first date
+      const first = new Date(eventDates[0]);
+      if (!isNaN(first.getTime())) updates.eventDate = first;
+    } else {
+      updates.eventDates = null;
     }
   }
   if (adminPassword !== undefined) updates.adminPassword = adminPassword?.trim() || null;

@@ -33,6 +33,9 @@ export const eventsTable = pgTable("events", {
   isActive: boolean("is_active").notNull().default(true),
   // When true: day-1 check-in sends an SMS with a QR code link for re-entry on subsequent days
   smsReentryEnabled: boolean("sms_reentry_enabled").notNull().default(false),
+  // JSON array of "YYYY-MM-DD" strings for multi-day events, e.g. ["2026-04-01","2026-04-02"]
+  // null = single-day (use eventDate only)
+  eventDates: text("event_dates"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
