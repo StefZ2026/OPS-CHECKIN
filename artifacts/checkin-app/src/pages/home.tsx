@@ -290,14 +290,14 @@ export default function HomePage() {
             Ready to get started?
           </h2>
           <p className="text-white/90 mb-8 max-w-lg mx-auto">
-            Get your organization set up and your first event live. Reach out to request access.
+            Get your organization set up and your first event live.
           </p>
-          <a
-            href="mailto:info@opscheckin.com"
+          <Link
+            href="/login"
             className="inline-block bg-white text-foreground border-4 border-foreground font-display uppercase text-lg px-8 py-4 shadow-brutal hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_hsl(var(--foreground))] transition-all"
           >
-            Request Access →
-          </a>
+            Set Up Your Event →
+          </Link>
         </div>
       </section>
 
