@@ -171,10 +171,12 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
 type CreateEventFormProps = {
   orgSlug: string;
   orgName: string;
+  orgId: number;
+  orgUsers: UserRecord[];
   onCreated: () => void;
 };
 
-function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) {
+function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated }: CreateEventFormProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -186,6 +188,7 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
+  const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "clear" });
   const ALL_ROLES: NewRoleRow[] = [
     { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
     { roleKey: "medic",                  displayName: "Medic" },
@@ -250,7 +253,7 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
 
     const validRoles = roles.filter((r) => r.roleKey.trim() && r.displayName.trim());
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       orgSlug,
       name: name.trim(),
       slug: slug.trim(),
@@ -260,6 +263,8 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
       giveawayEnabled,
       roles: validRoles,
     };
+    if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
+    else if (managerSelection.type === "new" && managerSelection.name.trim() && managerSelection.email.trim()) payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
 
     setLoading(true);
     try {
@@ -411,6 +416,12 @@ function CreateEventForm({ orgSlug, orgName, onCreated }: CreateEventFormProps) 
                   ))}
                 </div>
               </div>
+
+              <EventManagerPicker
+                orgUsers={orgUsers}
+                currentManager={null}
+                onChange={setManagerSelection}
+              />
 
               {error && (
                 <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
@@ -617,15 +628,123 @@ function CreateUserForm({ orgs, events, onCreated }: CreateUserFormProps) {
   );
 }
 
+// ── Event Manager Picker ───────────────────────────────────────────────────────
+
+type ManagerMode = "keep" | "existing" | "new" | "clear";
+export type ManagerSelection =
+  | { type: "keep" }
+  | { type: "clear" }
+  | { type: "existing"; userId: number }
+  | { type: "new"; name: string; email: string };
+
+function EventManagerPicker({
+  orgUsers,
+  currentManager,
+  onChange,
+}: {
+  orgUsers: UserRecord[];
+  currentManager?: UserRecord | null;
+  onChange: (sel: ManagerSelection) => void;
+}) {
+  const [mode, setMode] = useState<ManagerMode>(currentManager ? "keep" : "clear");
+  const [selectedUserId, setSelectedUserId] = useState<number | "">(currentManager?.id ?? "");
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+
+  const switchMode = (m: ManagerMode) => {
+    setMode(m);
+    if (m === "keep") onChange({ type: "keep" });
+    else if (m === "clear") onChange({ type: "clear" });
+    else if (m === "existing" && selectedUserId) onChange({ type: "existing", userId: Number(selectedUserId) });
+    else if (m === "new") onChange({ type: "new", name: newName, email: newEmail });
+  };
+
+  const tabClass = (active: boolean, danger = false) =>
+    `px-3 py-1 rounded-full border-2 font-bold text-xs transition-colors ${
+      active
+        ? danger ? "bg-red-600 text-white border-red-600" : "bg-foreground text-white border-foreground"
+        : "border-foreground/30 hover:border-foreground"
+    }`;
+
+  return (
+    <div className="space-y-3 pt-2 border-t-2 border-foreground/10">
+      <label className="font-display text-xs uppercase tracking-wider block">
+        <Key className="w-3 h-3 inline mr-1" />Event Manager
+      </label>
+
+      {currentManager && mode === "keep" && (
+        <div className="flex items-center gap-2 text-sm bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 flex-wrap">
+          <span className="font-semibold">{currentManager.name}</span>
+          <span className="text-muted-foreground text-xs">{currentManager.email}</span>
+          <span className={`text-xs font-bold border rounded-full px-2 py-0.5 ml-auto ${currentManager.passwordSet ? "bg-green-100 text-green-800 border-green-400" : "bg-yellow-100 text-yellow-800 border-yellow-400"}`}>
+            {currentManager.passwordSet ? "Active" : "Pending first login"}
+          </span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {currentManager && (
+          <button type="button" onClick={() => switchMode("keep")} className={tabClass(mode === "keep")}>Keep current</button>
+        )}
+        <button type="button" onClick={() => switchMode("existing")} className={tabClass(mode === "existing")}>
+          {orgUsers.length === 0 ? "No existing users" : "Select existing user"}
+        </button>
+        <button type="button" onClick={() => switchMode("new")} className={tabClass(mode === "new")}>Add new user</button>
+        {currentManager && (
+          <button type="button" onClick={() => switchMode("clear")} className={tabClass(mode === "clear", true)}>Remove</button>
+        )}
+      </div>
+
+      {mode === "existing" && (
+        orgUsers.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">No users in this organization yet. Use "Add new user" to create one.</p>
+        ) : (
+          <select
+            value={selectedUserId}
+            onChange={(e) => {
+              const v = e.target.value ? Number(e.target.value) : "";
+              setSelectedUserId(v);
+              if (v) onChange({ type: "existing", userId: Number(v) });
+            }}
+            className="w-full border-4 border-foreground rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:border-primary bg-white"
+          >
+            <option value="">— Select a user —</option>
+            {orgUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.email}) — {u.role === "org_contact" ? "Org Contact" : "Event Manager"}
+              </option>
+            ))}
+          </select>
+        )
+      )}
+
+      {mode === "new" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider block mb-1">Name <span className="text-destructive">*</span></label>
+            <Input value={newName} onChange={(e) => { setNewName(e.target.value); onChange({ type: "new", name: e.target.value, email: newEmail }); }} placeholder="Full name" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider block mb-1">Email <span className="text-destructive">*</span></label>
+            <Input type="email" value={newEmail} onChange={(e) => { setNewEmail(e.target.value); onChange({ type: "new", name: newName, email: e.target.value }); }} placeholder="email@example.com" />
+          </div>
+          <p className="sm:col-span-2 text-xs text-muted-foreground">User will set their own password on first login.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Edit Event Form ────────────────────────────────────────────────────────────
 
 type EditEventFormProps = {
   event: EventRecord;
+  orgUsers: UserRecord[];
   onSaved: (event: EventRecord) => void;
   onCancel: () => void;
 };
 
-function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
+function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFormProps) {
   const [name, setName] = useState(event.name);
   const [eventDate, setEventDate] = useState(
     event.eventDate ? event.eventDate.slice(0, 10) : ""
@@ -634,14 +753,20 @@ function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
   const [mobilizeEventId, setMobilizeEventId] = useState(event.mobilizeEventId ?? "");
   const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
   const [isActive, setIsActive] = useState(event.isActive);
+  const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "keep" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { toast } = useToast();
+
+  const currentManager = orgUsers.find((u) => u.event?.id === event.id) ?? null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!name.trim()) { setError("Event name is required"); return; }
+    if (managerSelection.type === "new" && (!managerSelection.name.trim() || !managerSelection.email.trim())) {
+      setError("New event manager requires both a name and email"); return;
+    }
 
     const payload: Record<string, unknown> = {
       name: name.trim(),
@@ -650,9 +775,11 @@ function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
       giveawayEnabled,
       isActive,
     };
-    if (adminPassword.trim()) {
-      payload.adminPassword = adminPassword.trim();
-    }
+    if (adminPassword.trim()) payload.adminPassword = adminPassword.trim();
+
+    if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
+    else if (managerSelection.type === "new") payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
+    else if (managerSelection.type === "clear") payload.eventManagerId = null;
 
     setLoading(true);
     try {
@@ -759,6 +886,12 @@ function EditEventForm({ event, onSaved, onCancel }: EditEventFormProps) {
           </div>
         </div>
       </div>
+
+      <EventManagerPicker
+        orgUsers={orgUsers}
+        currentManager={currentManager}
+        onChange={setManagerSelection}
+      />
 
       {error && (
         <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
@@ -914,7 +1047,7 @@ function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }
   );
 }
 
-function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event: EventRecord) => void }) {
+function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -1048,6 +1181,7 @@ function EventCard({ event, onUpdated }: { event: EventRecord; onUpdated: (event
             {editing && (
               <EditEventForm
                 event={event}
+                orgUsers={orgUsers}
                 onSaved={handleSaved}
                 onCancel={() => setEditing(false)}
               />
@@ -1289,9 +1423,9 @@ export default function SuperadminPage() {
                   )}
                   {orgEvents.map((event) => (
                     <div key={event.id} className="space-y-0">
-                      <EventCard event={event} onUpdated={() => void fetchAll()} />
+                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} />
                       {/* Event managers for this event */}
-                      {users.filter((u) => u.role === "event_manager" && u.event?.id === event.id).map((u) => (
+                      {users.filter((u) => u.event?.id === event.id).map((u) => (
                         <div key={u.id} className="bg-purple-50 border-2 border-t-0 border-foreground/20 rounded-b-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">
                           <Key className="w-3.5 h-3.5 text-purple-600 shrink-0" />
                           <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
@@ -1311,7 +1445,7 @@ export default function SuperadminPage() {
 
                   {/* Add event for this org */}
                   <div className="pt-2">
-                    <CreateEventForm orgSlug={org.slug} orgName={org.name} onCreated={() => void fetchAll()} />
+                    <CreateEventForm orgSlug={org.slug} orgName={org.name} orgId={org.id} orgUsers={users.filter((u) => u.org?.id === org.id)} onCreated={() => void fetchAll()} />
                   </div>
                 </div>
               </div>

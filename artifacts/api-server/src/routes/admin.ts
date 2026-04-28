@@ -375,6 +375,8 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     mobilizeEventId,
     giveawayEnabled,
     roles,
+    eventManagerId,
+    newEventManager,
   } = req.body as {
     orgSlug?: string;
     name?: string;
@@ -384,6 +386,8 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     mobilizeEventId?: string;
     giveawayEnabled?: boolean;
     roles?: NewRoleInput[];
+    eventManagerId?: number;
+    newEventManager?: { name: string; email: string };
   };
 
   if (!name || !name.trim()) {
@@ -448,6 +452,19 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
       return { newEvent, insertedRoles };
     });
 
+    // Assign event manager if provided
+    if (eventManagerId) {
+      await db.update(usersTable).set({ eventId: newEvent.id }).where(eq(usersTable.id, eventManagerId));
+    } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
+      await db.insert(usersTable).values({
+        name: newEventManager.name.trim(),
+        email: newEventManager.email.trim().toLowerCase(),
+        role: "event_manager",
+        orgId: org.id,
+        eventId: newEvent.id,
+      });
+    }
+
     res.status(201).json({
       event: {
         ...newEvent,
@@ -455,7 +472,6 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    // Drizzle wraps PG errors in DrizzleQueryError; the original pg code is on .cause
     const pgCode =
       (err as { code?: string }).code ??
       (err as { cause?: { code?: string } }).cause?.code;
@@ -483,6 +499,8 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     mobilizeEventId,
     giveawayEnabled,
     isActive,
+    eventManagerId,
+    newEventManager,
   } = req.body as {
     name?: string;
     eventDate?: string | null;
@@ -490,71 +508,70 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
     mobilizeEventId?: string | null;
     giveawayEnabled?: boolean;
     isActive?: boolean;
+    eventManagerId?: number | null;
+    newEventManager?: { name: string; email: string };
   };
 
   const updates: Partial<typeof eventsTable.$inferInsert> = {};
 
   if (name !== undefined) {
-    if (!name.trim()) {
-      res.status(400).json({ error: "name cannot be empty" });
-      return;
-    }
+    if (!name.trim()) { res.status(400).json({ error: "name cannot be empty" }); return; }
     updates.name = name.trim();
   }
   if (eventDate !== undefined) {
     if (eventDate) {
       const parsed = new Date(eventDate);
-      if (isNaN(parsed.getTime())) {
-        res.status(400).json({ error: "Invalid eventDate — expected ISO date string or null" });
-        return;
-      }
+      if (isNaN(parsed.getTime())) { res.status(400).json({ error: "Invalid eventDate" }); return; }
       updates.eventDate = parsed;
     } else {
       updates.eventDate = null;
     }
   }
-  if (adminPassword !== undefined) {
-    updates.adminPassword = adminPassword?.trim() || null;
-  }
-  if (mobilizeEventId !== undefined) {
-    updates.mobilizeEventId = mobilizeEventId?.trim() || null;
-  }
-  if (giveawayEnabled !== undefined) {
-    updates.giveawayEnabled = giveawayEnabled;
-  }
-  if (isActive !== undefined) {
-    updates.isActive = isActive;
-  }
+  if (adminPassword !== undefined) updates.adminPassword = adminPassword?.trim() || null;
+  if (mobilizeEventId !== undefined) updates.mobilizeEventId = mobilizeEventId?.trim() || null;
+  if (giveawayEnabled !== undefined) updates.giveawayEnabled = giveawayEnabled;
+  if (isActive !== undefined) updates.isActive = isActive;
 
-  if (Object.keys(updates).length === 0) {
+  const hasManagerChange = eventManagerId !== undefined || newEventManager !== undefined;
+
+  if (Object.keys(updates).length === 0 && !hasManagerChange) {
     res.status(400).json({ error: "No fields to update" });
     return;
   }
 
   try {
-    const [updated] = await db
-      .update(eventsTable)
-      .set(updates)
-      .where(eq(eventsTable.id, id))
-      .returning();
-
-    if (!updated) {
-      res.status(404).json({ error: "Event not found" });
-      return;
+    let updated;
+    if (Object.keys(updates).length > 0) {
+      const rows = await db.update(eventsTable).set(updates).where(eq(eventsTable.id, id)).returning();
+      updated = rows[0];
+      if (!updated) { res.status(404).json({ error: "Event not found" }); return; }
+    } else {
+      const rows = await db.select().from(eventsTable).where(eq(eventsTable.id, id)).limit(1);
+      if (!rows[0]) { res.status(404).json({ error: "Event not found" }); return; }
+      updated = rows[0];
     }
 
-    const roles = await db
-      .select()
-      .from(eventRolesTable)
-      .where(eq(eventRolesTable.eventId, id))
-      .orderBy(eventRolesTable.sortOrder);
+    // Handle event manager assignment
+    if (hasManagerChange) {
+      // Clear any existing event_id assignments for this event
+      await db.update(usersTable).set({ eventId: null }).where(eq(usersTable.eventId, id));
+      if (eventManagerId) {
+        await db.update(usersTable).set({ eventId: id }).where(eq(usersTable.id, eventManagerId));
+      } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
+        await db.insert(usersTable).values({
+          name: newEventManager.name.trim(),
+          email: newEventManager.email.trim().toLowerCase(),
+          role: "event_manager",
+          orgId: updated.orgId,
+          eventId: id,
+        });
+      }
+    }
 
-    const orgRows = await db
-      .select()
-      .from(organizationsTable)
-      .where(eq(organizationsTable.id, updated.orgId))
-      .limit(1);
-
+    const [roles, orgRows] = await Promise.all([
+      db.select().from(eventRolesTable).where(eq(eventRolesTable.eventId, id)).orderBy(eventRolesTable.sortOrder),
+      db.select().from(organizationsTable).where(eq(organizationsTable.id, updated.orgId)).limit(1),
+    ]);
     const org = orgRows[0];
 
     res.json({
