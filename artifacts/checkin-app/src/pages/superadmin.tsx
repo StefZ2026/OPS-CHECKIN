@@ -1296,6 +1296,8 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+const AUTO_REFRESH_MS = 30_000;
+
 export default function SuperadminPage() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1306,6 +1308,8 @@ export default function SuperadminPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -1331,6 +1335,7 @@ export default function SuperadminPage() {
       setOrgs(orgsData.orgs);
       setUsers(usersData.users);
       setSuperadminUsername(meData.username);
+      setLastRefreshed(new Date());
     } catch {
       setLoadError("Could not load data. Check your connection and try again.");
     } finally {
@@ -1338,7 +1343,28 @@ export default function SuperadminPage() {
     }
   };
 
-  useEffect(() => { if (user?.role === "superadmin") void fetchAll(); }, [user?.role]);
+  const fetchCounts = async () => {
+    try {
+      const res = await fetch("/api/superadmin/events", { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json() as { events: EventRecord[] };
+      setEvents(data.events);
+      setLastRefreshed(new Date());
+    } catch {
+    }
+  };
+
+  useEffect(() => {
+    if (user?.role === "superadmin") void fetchAll();
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== "superadmin") return;
+    refreshTimerRef.current = setInterval(() => { void fetchCounts(); }, AUTO_REFRESH_MS);
+    return () => {
+      if (refreshTimerRef.current !== null) clearInterval(refreshTimerRef.current);
+    };
+  }, [user?.role]);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -1393,13 +1419,20 @@ export default function SuperadminPage() {
             <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
             <p className="text-lg text-gray-300 font-medium">OpsCheckIn · Platform Admin</p>
           </div>
-          <div className="flex gap-3 w-full md:w-auto flex-wrap">
-            <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
-              <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
-            </Button>
-            <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => void handleLogout()}>
-              <LogOut className="w-4 h-4 mr-2" />Sign Out
-            </Button>
+          <div className="flex flex-col items-end gap-2 w-full md:w-auto">
+            <div className="flex gap-3 flex-wrap justify-end">
+              <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
+                <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
+              </Button>
+              <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => void handleLogout()}>
+                <LogOut className="w-4 h-4 mr-2" />Sign Out
+              </Button>
+            </div>
+            {lastRefreshed && (
+              <p className="text-xs text-white/50 font-medium">
+                Counts auto-refresh every 30s · Last updated {lastRefreshed.toLocaleTimeString()}
+              </p>
+            )}
           </div>
         </div>
       </header>
