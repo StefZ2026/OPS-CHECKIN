@@ -272,11 +272,11 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
           </div>
           <div className="flex items-center gap-2">
             {isSuperadmin && (
-              <Link href="/superadmin">
+              <a href={`${import.meta.env.BASE_URL}superadmin`}>
                 <Button size="sm" variant="outline" className="bg-transparent border-white/40 text-white hover:bg-white/10 hover:text-white text-xs">
                   <Shield className="w-3 h-3 mr-1" /> Admin
                 </Button>
-              </Link>
+              </a>
             )}
             <Button size="sm" variant="outline" className="bg-transparent border-white/40 text-white hover:bg-white/10 hover:text-white" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
