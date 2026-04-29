@@ -1001,6 +1001,49 @@ function CreateOrgForm({ onCreated }: { onCreated: (org: OrgRecord) => void }) {
   );
 }
 
+// ── Edit Organization Form ─────────────────────────────────────────────────────
+
+function EditOrgForm({ org, onSaved, onCancel }: { org: OrgRecord; onSaved: (updated: OrgRecord) => void; onCancel: () => void }) {
+  const [name, setName] = useState(org.name);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError("");
+    try {
+      const res = await fetch(`/api/superadmin/orgs/${org.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSuperadminToken() ?? ""}` },
+        body: JSON.stringify({ name: name.trim(), slug: org.slug }),
+      });
+      const data = await res.json() as { org?: OrgRecord; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to update organization");
+      toast({ title: "Organization updated!" });
+      onSaved({ ...org, name: data.org!.name });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update organization");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+      <div>
+        <label className="font-display text-xs uppercase tracking-wider block mb-1 text-foreground">Organization Name <span className="text-destructive">*</span></label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} required />
+      </div>
+      {error && <p className="text-destructive font-bold text-sm">{error}</p>}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" isLoading={loading} className="flex-1">{loading ? "Saving..." : "Save Changes"}</Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
+      </div>
+    </form>
+  );
+}
+
 // ── Event card ─────────────────────────────────────────────────────────────────
 
 function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }) {
@@ -1209,6 +1252,7 @@ export default function SuperadminPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
+  const [editingOrgId, setEditingOrgId] = useState<number | null>(null);
 
   const impersonateAndOpen = async (userId: number, path: string) => {
     const token = getSuperadminToken() ?? "";
@@ -1429,18 +1473,40 @@ export default function SuperadminPage() {
                     <h2 className="font-display text-2xl">{org.name}</h2>
                     <p className="font-mono text-sm text-gray-400">/{org.slug} · {orgEvents.length} event{orgEvents.length !== 1 ? "s" : ""} · {orgEvents.reduce((s, e) => s + e.checkedInCount, 0)} checked in</p>
                   </div>
-                  {(() => {
-                    const orgContact = users.find((u) => u.role === "org_contact" && u.org?.id === org.id);
-                    return orgContact ? (
-                      <button
-                        onClick={() => void impersonateAndOpen(orgContact.id, "/org")}
-                        className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" /> Open Org Dashboard
-                      </button>
-                    ) : null;
-                  })()}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setEditingOrgId(editingOrgId === org.id ? null : org.id)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
+                      title="Edit organization"
+                    >
+                      <Pencil className="w-4 h-4" /> Edit
+                    </button>
+                    {(() => {
+                      const orgContact = users.find((u) => u.role === "org_contact" && u.org?.id === org.id);
+                      return orgContact ? (
+                        <button
+                          onClick={() => void impersonateAndOpen(orgContact.id, "/org")}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" /> Open Org Dashboard
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
                 </div>
+                {/* Inline org edit form */}
+                {editingOrgId === org.id && (
+                  <div className="border-b-2 border-foreground/20 bg-gray-50">
+                    <EditOrgForm
+                      org={org}
+                      onSaved={(updated) => {
+                        setOrgs((prev) => prev.map((o) => o.id === updated.id ? updated : o));
+                        setEditingOrgId(null);
+                      }}
+                      onCancel={() => setEditingOrgId(null)}
+                    />
+                  </div>
+                )}
 
                 {/* Org contacts for this org */}
                 {users.filter((u) => u.role === "org_contact" && u.org?.id === org.id).map((u) => (
