@@ -71,11 +71,12 @@ router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Respons
     return;
   }
 
-  const { name, slug, eventDate, eventDates, roles } = req.body as {
+  const { name, slug, eventDate, eventDates, smsReentryEnabled, roles } = req.body as {
     name?: string;
     slug?: string;
     eventDate?: string;
     eventDates?: string[];
+    smsReentryEnabled?: boolean;
     roles?: { roleKey: string; displayName: string }[];
   };
 
@@ -95,13 +96,21 @@ router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Respons
     return;
   }
 
+  // For multi-day events, eventDates is an array of YYYY-MM-DD strings.
+  // eventDate is the first day (display date); eventDates gates access per day.
+  const allDates = eventDates && eventDates.length > 0 ? eventDates : (eventDate ? [eventDate] : []);
+  const primaryDate = allDates[0] ? new Date(allDates[0]) : null;
+  const datesJson = allDates.length > 1 ? JSON.stringify(allDates) : null;
+
   const [event] = await db
     .insert(eventsTable)
     .values({
       name: name.trim(),
       slug: slugClean,
       orgId,
-      eventDate: eventDate ? new Date(eventDate) : null,
+      eventDate: primaryDate,
+      eventDates: datesJson,
+      smsReentryEnabled: smsReentryEnabled ?? false,
       isActive: true,
       giveawayEnabled: false,
     })

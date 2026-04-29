@@ -337,9 +337,9 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
                     </button>
                     <div>
                       <p className="font-display text-sm uppercase tracking-wider">
-                        SMS Re-Entry Wristbands
+                        SMS Re-Entry QR Codes
                       </p>
-                      <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR code sent via SMS after Day 1 check-in" : "Off"}</p>
+                      <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR code texted to attendee's phone after Day 1; scan or enter code for re-entry on Day 2+" : "Off"}</p>
                     </div>
                   </div>
                 </div>
@@ -976,7 +976,7 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
             </button>
             <div>
               <p className="font-display text-xs uppercase tracking-wider">SMS Re-Entry</p>
-              <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR wristband SMS enabled" : "Off"}</p>
+              <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR code texted to phone; scan or enter for re-entry" : "Off"}</p>
             </div>
           </div>
 

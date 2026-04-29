@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { Calendar, Users, ChevronRight, LogOut, Shield, Plus, ChevronDown, ChevronUp, Hash } from "lucide-react";
+import { Calendar, Users, ChevronRight, LogOut, Shield, Plus, ChevronDown, ChevronUp, Hash, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,7 +46,10 @@ function CreateEventForm({ orgId, onCreated }: { orgId: number; onCreated: (even
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [isMultiDay, setIsMultiDay] = useState(false);
   const [eventDate, setEventDate] = useState("");
+  const [extraDates, setExtraDates] = useState<string[]>([""]);
+  const [smsReentryEnabled, setSmsReentryEnabled] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
     new Set(DEFAULT_ROLES.map((r) => r.roleKey))
   );
@@ -78,6 +81,13 @@ function CreateEventForm({ orgId, onCreated }: { orgId: number; onCreated: (even
 
     const roles = DEFAULT_ROLES.filter((r) => selectedRoles.has(r.roleKey));
 
+    // Build dates payload — for multi-day events send the full dates array
+    let eventDates: string[] | undefined;
+    if (isMultiDay && eventDate) {
+      const allDates = [eventDate, ...extraDates.filter((d) => d.trim())];
+      if (allDates.length > 1) eventDates = allDates;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(`/api/orgs/${orgId}/events`, {
@@ -87,7 +97,8 @@ function CreateEventForm({ orgId, onCreated }: { orgId: number; onCreated: (even
         body: JSON.stringify({
           name: name.trim(),
           slug: slug.trim(),
-          eventDate: eventDate || undefined,
+          ...(eventDates ? { eventDates } : { eventDate: eventDate || undefined }),
+          smsReentryEnabled: isMultiDay ? smsReentryEnabled : false,
           roles,
         }),
       });
@@ -96,7 +107,7 @@ function CreateEventForm({ orgId, onCreated }: { orgId: number; onCreated: (even
 
       toast({ title: "Event created!", description: `"${data.event!.name}" is live.` });
       onCreated(data.event!);
-      setName(""); setSlug(""); setEventDate("");
+      setName(""); setSlug(""); setEventDate(""); setExtraDates([""]); setIsMultiDay(false); setSmsReentryEnabled(false);
       setSelectedRoles(new Set(DEFAULT_ROLES.map((r) => r.roleKey)));
       setOpen(false);
     } catch (err) {
@@ -152,15 +163,78 @@ function CreateEventForm({ orgId, onCreated }: { orgId: number; onCreated: (even
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Used in the URL: /{slug || "slug"}/check-in</p>
                 </div>
-                <div>
-                  <label className="font-display text-sm uppercase tracking-wider block mb-1">
-                    <Calendar className="w-4 h-4 inline mr-1" />Event Date
-                  </label>
+
+                {/* Date section — single or multi-day */}
+                <div className="sm:col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-display text-sm uppercase tracking-wider">
+                      <Calendar className="w-4 h-4 inline mr-1" />
+                      {isMultiDay ? "Event Dates" : "Event Date"}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setIsMultiDay((v) => !v); setExtraDates([""]); setSmsReentryEnabled(false); }}
+                      className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border-2 border-foreground transition-colors ${isMultiDay ? "bg-primary text-white" : "bg-white text-foreground"}`}
+                    >
+                      Multi-day
+                    </button>
+                  </div>
                   <Input
                     type="date"
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
+                    placeholder={isMultiDay ? "Day 1" : ""}
                   />
+                  {isMultiDay && (
+                    <div className="space-y-2">
+                      {extraDates.map((d, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                          <Input
+                            type="date"
+                            value={d}
+                            onChange={(ev) => {
+                              const updated = [...extraDates];
+                              updated[i] = ev.target.value;
+                              setExtraDates(updated);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setExtraDates((prev) => prev.filter((_, idx) => idx !== i))}
+                            className="p-1 rounded border-2 border-foreground hover:bg-destructive hover:text-white transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setExtraDates((prev) => [...prev, ""])}
+                        className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80"
+                      >
+                        <Plus className="w-3 h-3" /> Add another day
+                      </button>
+
+                      {/* SMS Re-entry — for consecutive multi-day events only */}
+                      <div className="flex items-center gap-3 pt-2 border-t border-foreground/10">
+                        <button
+                          type="button"
+                          onClick={() => setSmsReentryEnabled((v) => !v)}
+                          className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors flex-shrink-0 ${smsReentryEnabled ? "bg-primary" : "bg-gray-200"}`}
+                        >
+                          <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${smsReentryEnabled ? "translate-x-7" : "translate-x-1"}`} />
+                        </button>
+                        <div>
+                          <p className="font-display text-sm uppercase tracking-wider">SMS Re-Entry QR Codes</p>
+                          <p className="text-xs text-muted-foreground">
+                            {smsReentryEnabled
+                              ? "On — QR code texted to attendee's phone after Day 1; scan or enter code for re-entry on Day 2+"
+                              : "Off — attendees check in fresh each day (use for non-consecutive dates)"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
