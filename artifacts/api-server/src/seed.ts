@@ -74,13 +74,14 @@ export async function runSeed(): Promise<void> {
     // on next server restart without touching the DB manually.
     const adminEmail = process.env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
     const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD?.trim();
+    const adminUsername = process.env.SUPERADMIN_USERNAME?.trim() ?? null;
     if (adminEmail && adminPassword) {
       const passwordHash = await bcrypt.hash(adminPassword, 12);
       await client.query(
-        `INSERT INTO users (name, email, role, password_hash, password_set, org_id, event_id)
-         VALUES ('Platform Admin', $1, 'superadmin', $2, true, NULL, NULL)
-         ON CONFLICT (email) DO UPDATE SET password_hash = $2, password_set = true, role = 'superadmin'`,
-        [adminEmail, passwordHash],
+        `INSERT INTO users (name, email, username, role, password_hash, password_set, org_id, event_id)
+         VALUES ('Platform Admin', $1, $3, 'superadmin', $2, true, NULL, NULL)
+         ON CONFLICT (email) DO UPDATE SET password_hash = $2, password_set = true, role = 'superadmin', username = $3`,
+        [adminEmail, passwordHash, adminUsername],
       );
       console.log(`Seed: platform admin upserted for ${adminEmail}`);
     }

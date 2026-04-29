@@ -161,13 +161,13 @@ export default function LoginPage({ onLogin }: Props) {
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1">Email</label>
+            <label className="block text-xs font-bold uppercase tracking-wider mb-1">Email or Username</label>
             <Input
-              type="email"
+              type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
+              placeholder="you@example.com or username"
+              autoComplete="username"
               required
             />
           </div>

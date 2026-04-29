@@ -132,6 +132,7 @@ export const volunteerPreRegistrationsTable = pgTable("volunteer_pre_registratio
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
+  username: text("username").unique(),           // optional username for login (e.g. platform admin)
   passwordHash: text("password_hash"),           // null until first-time password is set
   name: text("name").notNull(),
   role: text("role").notNull(),                  // "superadmin" | "org_contact" | "event_manager"
