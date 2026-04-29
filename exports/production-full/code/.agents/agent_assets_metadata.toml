@@ -1,8 +1,0 @@
-uploads = []
-outputs = []
-
-[[generated]]
-id = "-RdB6FcwtCKBuadNmpeaf"
-uri = "file://artifacts/checkin-app/public/opscheckin-mark.png"
-type = "image"
-title = "opscheckin logo mark"
