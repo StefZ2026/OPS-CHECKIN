@@ -630,7 +630,7 @@ router.post("/superadmin/impersonate", requireSuperadminAuth, async (req, res) =
     const redirect = user.role === "event_manager" && eventSlug
       ? `/${eventSlug}/admin`
       : "/org";
-    res.json({ redirect });
+    res.json({ redirect, adminToken: expectedToken(), eventSlug });
   } catch (err) {
     console.error("POST /superadmin/impersonate error:", err);
     res.status(500).json({ error: "Failed to impersonate user" });

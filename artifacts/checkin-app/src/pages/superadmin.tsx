@@ -1224,6 +1224,11 @@ export default function SuperadminPage() {
         alert(err.error ?? "Failed to open dashboard");
         return;
       }
+      const data = await res.json() as { redirect?: string; adminToken?: string; eventSlug?: string | null };
+      if (data.adminToken) {
+        const slug = data.eventSlug ?? path.split("/").filter(Boolean)[0] ?? null;
+        if (slug) sessionStorage.setItem(`admin-token:${slug}`, data.adminToken);
+      }
       sessionStorage.setItem("sa_active", "1");
       window.location.href = path;
     } catch {
