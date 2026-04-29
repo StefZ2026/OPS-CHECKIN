@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle, Users, ClipboardCheck } from "lucide-react";
+import { UserPlus, Mail, Phone, Shield, Activity, HeartHandshake, Megaphone, CheckCircle, ArrowRight, ArrowLeft, PartyPopper, HardHat, Info, AlertCircle, Users, ClipboardCheck, CalendarX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -403,49 +403,74 @@ export default function CheckInFlow() {
       <main className="flex-1 w-full max-w-5xl mx-auto p-6 md:p-12 flex flex-col justify-center">
         <AnimatePresence mode="wait" initial={false}>
 
-          {/* HOME: Mode selection */}
+          {/* HOME: Mode selection — or Event Ended screen */}
           {step === "home" && (
-            <motion.div key="home" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-              className="w-full max-w-2xl mx-auto space-y-8">
-              <div className="text-center space-y-4 mb-8">
-                <h2 className="font-display text-5xl md:text-7xl text-primary">Welcome!</h2>
-                <p className="text-2xl md:text-3xl font-medium text-muted-foreground">How are you here today?</p>
-              </div>
+            config && !config.isActive ? (
+              <motion.div key="ended" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+                className="w-full max-w-2xl mx-auto space-y-8 text-center">
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl border-4 border-foreground bg-muted shadow-brutal mx-auto">
+                  <CalendarX className="w-12 h-12 text-muted-foreground" />
+                </div>
+                <div className="space-y-4">
+                  <h2 className="font-display text-5xl md:text-6xl">This Event Has Ended</h2>
+                  <p className="text-xl md:text-2xl font-medium text-muted-foreground">
+                    <strong>{eventTitle}</strong> is no longer accepting check-ins.
+                  </p>
+                  <p className="text-lg font-medium text-muted-foreground">
+                    Thank you for being part of it — we hope to see you at the next one!
+                  </p>
+                </div>
+                <div className="pt-4">
+                  <a href="/"
+                    className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl border-4 border-foreground bg-primary text-white font-display text-xl shadow-brutal hover:shadow-brutal-sm hover:translate-y-0.5 transition-all">
+                    <ArrowRight className="w-6 h-6" />
+                    Find Another Event
+                  </a>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div key="home" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                className="w-full max-w-2xl mx-auto space-y-8">
+                <div className="text-center space-y-4 mb-8">
+                  <h2 className="font-display text-5xl md:text-7xl text-primary">Welcome!</h2>
+                  <p className="text-2xl md:text-3xl font-medium text-muted-foreground">How are you here today?</p>
+                </div>
 
-              <div className="grid grid-cols-1 gap-5">
-                <button
-                  onClick={() => { setIsVolunteerMode(false); setStep("lookup"); }}
-                  className="group w-full p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-secondary/50 hover:border-primary transition-all text-left shadow-brutal space-y-3"
-                >
-                  <div className="flex items-center gap-5">
-                    <div className="flex-shrink-0 w-16 h-16 rounded-2xl border-4 border-foreground bg-secondary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                      <Users className="w-8 h-8" />
+                <div className="grid grid-cols-1 gap-5">
+                  <button
+                    onClick={() => { setIsVolunteerMode(false); setStep("lookup"); }}
+                    className="group w-full p-8 rounded-2xl border-4 border-foreground bg-white hover:bg-secondary/50 hover:border-primary transition-all text-left shadow-brutal space-y-3"
+                  >
+                    <div className="flex items-center gap-5">
+                      <div className="flex-shrink-0 w-16 h-16 rounded-2xl border-4 border-foreground bg-secondary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                        <Users className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <p className="font-display text-3xl md:text-4xl leading-tight">I'm an Attendee</p>
+                        <p className="text-lg font-medium text-muted-foreground mt-1">Here to rally today</p>
+                      </div>
+                      <ArrowRight className="w-8 h-8 ml-auto text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
-                    <div>
-                      <p className="font-display text-3xl md:text-4xl leading-tight">I'm an Attendee</p>
-                      <p className="text-lg font-medium text-muted-foreground mt-1">Here to rally today</p>
-                    </div>
-                    <ArrowRight className="w-8 h-8 ml-auto text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                  </div>
-                </button>
+                  </button>
 
-                <button
-                  onClick={() => { setIsVolunteerMode(true); setStep("lookup"); }}
-                  className="group w-full p-8 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/15 transition-all text-left shadow-brutal space-y-3"
-                >
-                  <div className="flex items-center gap-5">
-                    <div className="flex-shrink-0 w-16 h-16 rounded-2xl border-4 border-primary bg-primary flex items-center justify-center">
-                      <HardHat className="w-8 h-8 text-white" />
+                  <button
+                    onClick={() => { setIsVolunteerMode(true); setStep("lookup"); }}
+                    className="group w-full p-8 rounded-2xl border-4 border-primary bg-primary/5 hover:bg-primary/15 transition-all text-left shadow-brutal space-y-3"
+                  >
+                    <div className="flex items-center gap-5">
+                      <div className="flex-shrink-0 w-16 h-16 rounded-2xl border-4 border-primary bg-primary flex items-center justify-center">
+                        <HardHat className="w-8 h-8 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-display text-3xl md:text-4xl text-primary leading-tight">I'm a Volunteer</p>
+                        <p className="text-lg font-medium text-muted-foreground mt-1">On the team today</p>
+                      </div>
+                      <ArrowRight className="w-8 h-8 ml-auto text-primary group-hover:translate-x-1 transition-transform" />
                     </div>
-                    <div>
-                      <p className="font-display text-3xl md:text-4xl text-primary leading-tight">I'm a Volunteer</p>
-                      <p className="text-lg font-medium text-muted-foreground mt-1">On the team today</p>
-                    </div>
-                    <ArrowRight className="w-8 h-8 ml-auto text-primary group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </button>
-              </div>
-            </motion.div>
+                  </button>
+                </div>
+              </motion.div>
+            )
           )}
 
           {/* LOOKUP: Name + email form */}
