@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11", "postgresql-16"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [[artifacts]]
 id = "artifacts/api-server"
@@ -28,9 +28,10 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
+ADMIN_PASSWORD = "SylviBoo*2026"
+ADMIN_USERNAME = "SAZOPSCHECKIN08"
 CHECKIN_BASE_URL = "https://d703b720-1b7f-47a9-b40f-3ada67ffcb64-00-28oze2zk8h48b.worf.replit.dev/checkin-app"
 JWT_SECRET = "7d5df38297d028fa0918bed09298bfb53b5159bf682d2180b040dd76a2454c456afb0fa264465841a5a1d1b3cf2d308e"
-PLATFORM_ADMIN_EMAIL = "admin@opscheck.in"
 
 [nix]
 channel = "stable-25_05"

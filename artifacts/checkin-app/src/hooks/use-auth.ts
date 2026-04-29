@@ -45,7 +45,7 @@ export async function authLogout() {
 
 export function redirectByRole(user: AuthUser, setLocation: (to: string) => void) {
   if (user.role === "superadmin") {
-    setLocation("/platform");
+    setLocation("/superadmin");
   } else if (user.role === "org_contact") {
     setLocation("/org");
   } else if (user.role === "event_manager") {

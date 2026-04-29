@@ -8,8 +8,7 @@ async function runStartupMigrations() {
   try {
     // Indexes (idempotent)
     await client.query(`
-      DROP INDEX IF EXISTS attendees_email_unique;
-      CREATE UNIQUE INDEX IF NOT EXISTS attendees_event_email_unique ON attendees (event_id, email);
+      CREATE UNIQUE INDEX IF NOT EXISTS attendees_email_unique ON attendees (email);
       CREATE INDEX IF NOT EXISTS attendee_roles_attendee_id_idx ON attendee_roles (attendee_id);
       CREATE INDEX IF NOT EXISTS pre_registrations_email_idx ON pre_registrations (email);
     `);

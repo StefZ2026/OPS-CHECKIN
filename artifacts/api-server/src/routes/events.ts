@@ -1,9 +1,8 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { randomBytes } from "crypto";
+import { createHash, timingSafeEqual, randomBytes } from "crypto";
 import rateLimit from "express-rate-limit";
 import { sendSms } from "../lib/sms";
 import * as XLSX from "xlsx";
-import { verifyToken } from "./auth";
 import { db } from "@workspace/db";
 import {
   eventsTable, eventRolesTable, organizationsTable,
@@ -48,27 +47,10 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
     // Inactive events block public check-in routes, but allow:
     // - /admin/* (event managers need full access to attendee data/exports)
     // - /config (admin UI fetches this to display event name/status)
-    // - any authenticated user (org_contact, event_manager, superadmin) — they can
-    //   always view their event data; requireEventAuth handles proper role checks
     const isAdminOrConfig = req.path.startsWith("/admin") || req.path === "/config";
     if (!rows[0].event.isActive && !isAdminOrConfig) {
-      const jwtToken = req.cookies?.auth_token as string | undefined;
-      const isAuthenticated = jwtToken ? !!verifyToken(jwtToken) : false;
-      if (!isAuthenticated) {
-        res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — check-in is no longer available." });
-        return;
-      }
-    }
-    // For multi-day events: today must be one of the scheduled event dates.
-    // Single-day events (eventDates null) rely solely on isActive above.
-    if (!isAdminOrConfig && rows[0].event.eventDates) {
-      const todayISO = new Date().toISOString().slice(0, 10);
-      let validDates: string[] = [];
-      try { validDates = JSON.parse(rows[0].event.eventDates as string) as string[]; } catch { /* ignore */ }
-      if (validDates.length > 0 && !validDates.includes(todayISO)) {
-        res.status(403).json({ ok: false, state: "NOT_COVERED", error: "Check-in is not open today. Please come back on an event day." });
-        return;
-      }
+      res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — re-entry is no longer permitted." });
+      return;
     }
     res.locals.event = rows[0].event;
     res.locals.orgMobilizeApiKey = rows[0].mobilizeApiKey;
@@ -80,37 +62,41 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
 });
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
-// JWT-only event auth: accepts superadmin (any event), org_contact (their org's
-// events), or event_manager (their assigned event).
-function requireEventAuth(req: Request, res: Response, next: NextFunction): void {
-  const jwtToken = req.cookies?.auth_token as string | undefined;
-  if (!jwtToken) {
-    res.status(401).json({ error: "Not authenticated" });
-    return;
-  }
-  const payload = verifyToken(jwtToken);
-  if (!payload) {
-    res.status(401).json({ error: "Session expired" });
-    return;
-  }
-  if (payload.role === "superadmin") {
-    res.locals.authUser = payload;
-    next();
-    return;
-  }
-  const event = res.locals.event;
-  if (payload.role === "org_contact" && event && payload.orgId === event.orgId) {
-    res.locals.authUser = payload;
-    next();
-    return;
-  }
-  if (payload.role === "event_manager" && event && payload.eventId === event.id) {
-    res.locals.authUser = payload;
-    next();
-    return;
-  }
-  res.status(403).json({ error: "Forbidden" });
+function eventToken(adminPassword: string): string {
+  return createHash("sha256").update(adminPassword + ":icu-checkin-2026").digest("hex");
 }
+
+function requireEventAuth(req: Request, res: Response, next: NextFunction): void {
+  const event = res.locals.event;
+  if (!event.adminPassword) {
+    res.status(503).json({ error: "Admin auth is not configured for this event." });
+    return;
+  }
+  const auth = req.headers["authorization"] ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const expected = eventToken(event.adminPassword);
+  let valid = false;
+  try {
+    valid = token.length === expected.length &&
+      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: "Too many login attempts. Please wait 15 minutes and try again." },
+});
 
 // 120 check-in attempts per IP per 10 minutes (covers a whole event day at kiosks
 // while still blocking bots that hit hundreds of times per minute)
@@ -152,6 +138,18 @@ router.get("/config", async (_req: Request, res: Response): Promise<void> => {
     console.error("GET /config error:", err);
     res.status(500).json({ error: "Failed to load event config" });
   }
+});
+
+// ── Admin login ───────────────────────────────────────────────────────────────
+
+router.post("/admin/login", loginLimiter, (req: Request, res: Response): void => {
+  const event = res.locals.event;
+  const { password } = req.body as { password?: string };
+  if (!password || !event.adminPassword || password !== event.adminPassword) {
+    res.status(401).json({ error: "Invalid password" });
+    return;
+  }
+  res.json({ token: eventToken(event.adminPassword) });
 });
 
 // ── Pre-registrations (admin) ─────────────────────────────────────────────────

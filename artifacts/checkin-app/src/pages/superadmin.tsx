@@ -1,27 +1,42 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import {
-  Lock, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
+  Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
   Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil, QrCode, Download,
   Mail, UserPlus, ShieldCheck, Building2, ExternalLink,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, authLogout } from "@/hooks/use-auth";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+
+const SUPERADMIN_TOKEN_KEY = "superadmin-token";
+
+function getSuperadminToken(): string | null {
+  return sessionStorage.getItem(SUPERADMIN_TOKEN_KEY);
+}
+function setSuperadminToken(t: string) {
+  sessionStorage.setItem(SUPERADMIN_TOKEN_KEY, t);
+}
+function clearSuperadminToken() {
+  sessionStorage.removeItem(SUPERADMIN_TOKEN_KEY);
+}
+
+async function loginSuperadmin(username: string, password: string): Promise<string> {
+  const res = await fetch("/api/superadmin/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (res.status === 429) throw new Error("Too many attempts. Wait 15 minutes and try again.");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? "Invalid credentials");
+  }
+  const data = (await res.json()) as { token: string };
+  return data.token;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -31,16 +46,11 @@ type EventRecord = {
   name: string;
   slug: string;
   eventDate: string | null;
-  eventDates: string | null;
   giveawayEnabled: boolean;
-  smsReentryEnabled: boolean;
   mobilizeEventId: string | null;
   isActive: boolean;
   createdAt: string;
   checkedInCount: number;
-  volunteerCount: number;
-  attendeeCount: number;
-  managerEmail: string | null;
   org: { id: number; name: string | null; slug: string | null };
   roles: EventRole[];
 };
@@ -68,6 +78,94 @@ type UserRecord = {
   event: { id: number; name: string; slug: string } | null;
 };
 
+// ── Login gate ─────────────────────────────────────────────────────────────────
+
+function LoginGate({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const token = await loginSuperadmin(username.trim(), password);
+      setSuperadminToken(token);
+      onLogin();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid credentials. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
+      <Card className="w-full max-w-md border-4 border-primary shadow-brutal-lg">
+        <CardContent className="p-10">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-4 bg-primary text-white rounded-xl border-4 border-foreground shadow-brutal">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div>
+              <h1 className="font-display text-3xl leading-tight">OpsCheckIn</h1>
+              <p className="text-muted-foreground font-medium">Platform Admin</p>
+            </div>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Admin username"
+                autoFocus
+                autoComplete="username"
+                required
+                className="w-full border-4 border-foreground rounded-lg px-4 py-3 text-lg font-medium focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
+              <div className="relative">
+                <input
+                  type={show ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Admin password"
+                  autoComplete="current-password"
+                  required
+                  className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((p) => !p)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {show ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                </button>
+              </div>
+            </div>
+            {error && (
+              <p className="text-destructive font-bold text-base border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
+                {error}
+              </p>
+            )}
+            <Button type="submit" size="lg" className="w-full" isLoading={loading}>
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── Create Event Form ──────────────────────────────────────────────────────────
 
 type CreateEventFormProps = {
@@ -86,15 +184,32 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
-  const [isMultiDay, setIsMultiDay] = useState(false);
   const [eventDate, setEventDate] = useState("");
-  const [extraDates, setExtraDates] = useState<string[]>([""]);
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState("");
   const [giveawayEnabled, setGiveawayEnabled] = useState(false);
-  const [smsReentryEnabled, setSmsReentryEnabled] = useState(false);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "clear" });
-  const ALL_ROLES = PREDEFINED_ROLES;
+  const ALL_ROLES: NewRoleRow[] = [
+    { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
+    { roleKey: "medic",                  displayName: "Medic" },
+    { roleKey: "de_escalator",           displayName: "De-Escalator" },
+    { roleKey: "chant_lead",             displayName: "Chant Lead" },
+    { roleKey: "information_services",   displayName: "Info Services" },
+    { roleKey: "registration",           displayName: "Registration" },
+    { roleKey: "greeter",                displayName: "Greeter" },
+    { roleKey: "timekeeper",             displayName: "Timekeeper" },
+    { roleKey: "facilitator",            displayName: "Facilitator" },
+    { roleKey: "canvasser",              displayName: "Canvasser" },
+    { roleKey: "phone_banker",           displayName: "Phone Banker" },
+    { roleKey: "av_tech",                displayName: "AV / Tech" },
+    { roleKey: "photographer",           displayName: "Photographer / Videographer" },
+    { roleKey: "setup_teardown",         displayName: "Setup & Teardown" },
+    { roleKey: "childcare",              displayName: "Childcare" },
+    { roleKey: "interpreter",            displayName: "Interpreter / Translation" },
+    { roleKey: "accessibility_support",  displayName: "Accessibility Support" },
+    { roleKey: "social_media",           displayName: "Social Media" },
+    { roleKey: "outreach_coordinator",   displayName: "Outreach Coordinator" },
+  ];
 
   const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
     new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"])
@@ -138,49 +253,38 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
 
     const validRoles = roles.filter((r) => r.roleKey.trim() && r.displayName.trim());
 
-    // Build the dates array for multi-day events
-    let builtEventDates: string[] | undefined;
-    if (isMultiDay && eventDate) {
-      const allDates = [eventDate, ...extraDates.filter((d) => d.trim())];
-      if (allDates.length > 1) builtEventDates = allDates;
-    }
-
     const payload: Record<string, unknown> = {
       orgSlug,
       name: name.trim(),
       slug: slug.trim(),
+      eventDate: eventDate || undefined,
       adminPassword: adminPassword.trim() || undefined,
       mobilizeEventId: mobilizeEventId.trim() || undefined,
       giveawayEnabled,
-      smsReentryEnabled,
       roles: validRoles,
     };
-    if (builtEventDates) {
-      payload.eventDates = builtEventDates;
-      payload.eventDate = builtEventDates[0];
-    } else {
-      payload.eventDate = eventDate || undefined;
-    }
     if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
+    else if (managerSelection.type === "new" && managerSelection.name.trim() && managerSelection.email.trim()) payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
 
     setLoading(true);
     try {
       const res = await fetch("/api/superadmin/events", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
+        },
         body: JSON.stringify(payload),
       });
       const data = await res.json() as { event?: EventRecord; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to create event");
 
-      toast({ title: "Event created!", description: `"${data.event!.name}" is live at /${data.event!.slug}` });
+      toast({ title: "Event created!", description: `"${data.event!.name}" is ready at /api/events/${data.event!.slug}/...` });
       onCreated();
 
       setName(""); setSlug(""); setEventDate(""); setAdminPassword("");
-      setIsMultiDay(false); setExtraDates([""]);
       setSelectedRoleKeys(new Set(["safety_marshal", "medic", "de_escalator", "chant_lead"]));
-      setMobilizeEventId(""); setGiveawayEnabled(false); setSmsReentryEnabled(false);
+      setMobilizeEventId(""); setGiveawayEnabled(false);
       setCustomRoles([]); setCustomRoleInput("");
       setOpen(false);
     } catch (err) {
@@ -235,59 +339,17 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
                       title="Lowercase letters, numbers, and hyphens only"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Used in the URL: /<strong>{slug || "slug"}</strong></p>
+                  <p className="text-xs text-muted-foreground mt-1">Used in the URL: /api/events/<strong>{slug || "slug"}</strong>/...</p>
                 </div>
-                <div className="sm:col-span-2 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-display text-sm uppercase tracking-wider">
-                      <Calendar className="w-4 h-4 inline mr-1" />
-                      {isMultiDay ? "Event Dates" : "Event Date"}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => { setIsMultiDay((v) => !v); setExtraDates([""]); }}
-                      className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border-2 border-foreground transition-colors ${isMultiDay ? "bg-primary text-white" : "bg-white text-foreground"}`}
-                    >
-                      Multi-day
-                    </button>
-                  </div>
+                <div>
+                  <label className="font-display text-sm uppercase tracking-wider block mb-1">
+                    <Calendar className="w-4 h-4 inline mr-1" />Event Date
+                  </label>
                   <Input
                     type="date"
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
-                    placeholder={isMultiDay ? "Day 1" : ""}
                   />
-                  {isMultiDay && (
-                    <div className="space-y-2">
-                      {extraDates.map((d, i) => (
-                        <div key={i} className="flex gap-2 items-center">
-                          <Input
-                            type="date"
-                            value={d}
-                            onChange={(e) => {
-                              const updated = [...extraDates];
-                              updated[i] = e.target.value;
-                              setExtraDates(updated);
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setExtraDates((prev) => prev.filter((_, idx) => idx !== i))}
-                            className="p-1 rounded border-2 border-foreground hover:bg-destructive hover:text-white transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setExtraDates((prev) => [...prev, ""])}
-                        className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80"
-                      >
-                        <Plus className="w-3 h-3" /> Add another day
-                      </button>
-                    </div>
-                  )}
                 </div>
                 <div>
                   <label className="font-display text-sm uppercase tracking-wider block mb-1">
@@ -311,36 +373,19 @@ function CreateEventForm({ orgSlug, orgName, orgId: _orgId, orgUsers, onCreated 
                     placeholder="Leave blank if not using Mobilize"
                   />
                 </div>
-                <div className="sm:col-span-2 flex flex-col sm:flex-row gap-4 pt-2">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setGiveawayEnabled((v) => !v)}
-                      className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors ${giveawayEnabled ? "bg-primary" : "bg-gray-200"}`}
-                    >
-                      <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${giveawayEnabled ? "translate-x-7" : "translate-x-1"}`} />
-                    </button>
-                    <div>
-                      <p className="font-display text-sm uppercase tracking-wider">
-                        <Zap className="w-4 h-4 inline mr-1" />Giveaway
-                      </p>
-                      <p className="text-xs text-muted-foreground">{giveawayEnabled ? "Enabled" : "Disabled"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSmsReentryEnabled((v) => !v)}
-                      className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors ${smsReentryEnabled ? "bg-primary" : "bg-gray-200"}`}
-                    >
-                      <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${smsReentryEnabled ? "translate-x-7" : "translate-x-1"}`} />
-                    </button>
-                    <div>
-                      <p className="font-display text-sm uppercase tracking-wider">
-                        SMS Re-Entry QR Codes
-                      </p>
-                      <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR code texted to attendee's phone after Day 1; scan or enter code for re-entry on Day 2+" : "Off"}</p>
-                    </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setGiveawayEnabled((v) => !v)}
+                    className={`relative inline-flex h-7 w-14 items-center rounded-full border-4 border-foreground transition-colors ${giveawayEnabled ? "bg-primary" : "bg-gray-200"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 rounded-full bg-white border-2 border-foreground transform transition-transform ${giveawayEnabled ? "translate-x-7" : "translate-x-1"}`} />
+                  </button>
+                  <div>
+                    <p className="font-display text-sm uppercase tracking-wider">
+                      <Zap className="w-4 h-4 inline mr-1" />Giveaway
+                    </p>
+                    <p className="text-xs text-muted-foreground">{giveawayEnabled ? "Enabled" : "Disabled"}</p>
                   </div>
                 </div>
               </div>
@@ -434,8 +479,10 @@ function CreateUserForm({ orgs, events, onCreated }: CreateUserFormProps) {
     try {
       const res = await fetch("/api/superadmin/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
+        },
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
@@ -583,11 +630,12 @@ function CreateUserForm({ orgs, events, onCreated }: CreateUserFormProps) {
 
 // ── Event Manager Picker ───────────────────────────────────────────────────────
 
-type ManagerMode = "keep" | "existing" | "clear";
+type ManagerMode = "keep" | "existing" | "new" | "clear";
 export type ManagerSelection =
   | { type: "keep" }
   | { type: "clear" }
-  | { type: "existing"; userId: number };
+  | { type: "existing"; userId: number }
+  | { type: "new"; name: string; email: string };
 
 function EventManagerPicker({
   orgUsers,
@@ -600,12 +648,15 @@ function EventManagerPicker({
 }) {
   const [mode, setMode] = useState<ManagerMode>(currentManager ? "keep" : "clear");
   const [selectedUserId, setSelectedUserId] = useState<number | "">(currentManager?.id ?? "");
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
 
   const switchMode = (m: ManagerMode) => {
     setMode(m);
     if (m === "keep") onChange({ type: "keep" });
     else if (m === "clear") onChange({ type: "clear" });
     else if (m === "existing" && selectedUserId) onChange({ type: "existing", userId: Number(selectedUserId) });
+    else if (m === "new") onChange({ type: "new", name: newName, email: newEmail });
   };
 
   const tabClass = (active: boolean, danger = false) =>
@@ -635,9 +686,10 @@ function EventManagerPicker({
         {currentManager && (
           <button type="button" onClick={() => switchMode("keep")} className={tabClass(mode === "keep")}>Keep current</button>
         )}
-        <button type="button" onClick={() => switchMode("existing")} className={tabClass(mode === "existing")} disabled={orgUsers.length === 0}>
-          Select org user
+        <button type="button" onClick={() => switchMode("existing")} className={tabClass(mode === "existing")}>
+          {orgUsers.length === 0 ? "No existing users" : "Select existing user"}
         </button>
+        <button type="button" onClick={() => switchMode("new")} className={tabClass(mode === "new")}>Add new user</button>
         {currentManager && (
           <button type="button" onClick={() => switchMode("clear")} className={tabClass(mode === "clear", true)}>Remove</button>
         )}
@@ -645,7 +697,7 @@ function EventManagerPicker({
 
       {mode === "existing" && (
         orgUsers.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No users in this organization yet. Add a user to this org first, then assign them as event manager.</p>
+          <p className="text-xs text-muted-foreground italic">No users in this organization yet. Use "Add new user" to create one.</p>
         ) : (
           <select
             value={selectedUserId}
@@ -665,6 +717,20 @@ function EventManagerPicker({
           </select>
         )
       )}
+
+      {mode === "new" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider block mb-1">Name <span className="text-destructive">*</span></label>
+            <Input value={newName} onChange={(e) => { setNewName(e.target.value); onChange({ type: "new", name: e.target.value, email: newEmail }); }} placeholder="Full name" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider block mb-1">Email <span className="text-destructive">*</span></label>
+            <Input type="email" value={newEmail} onChange={(e) => { setNewEmail(e.target.value); onChange({ type: "new", name: newName, email: e.target.value }); }} placeholder="email@example.com" />
+          </div>
+          <p className="sm:col-span-2 text-xs text-muted-foreground">User will set their own password on first login.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -678,162 +744,54 @@ type EditEventFormProps = {
   onCancel: () => void;
 };
 
-const EDIT_ALL_ROLES: NewRoleRow[] = [
-  { roleKey: "safety_marshal",         displayName: "Safety Marshal" },
-  { roleKey: "medic",                  displayName: "Medic" },
-  { roleKey: "de_escalator",           displayName: "De-Escalator" },
-  { roleKey: "chant_lead",             displayName: "Chant Lead" },
-  { roleKey: "information_services",   displayName: "Info Services" },
-  { roleKey: "registration",           displayName: "Registration" },
-  { roleKey: "greeter",                displayName: "Greeter" },
-  { roleKey: "timekeeper",             displayName: "Timekeeper" },
-  { roleKey: "facilitator",            displayName: "Facilitator" },
-  { roleKey: "canvasser",              displayName: "Canvasser" },
-  { roleKey: "phone_banker",           displayName: "Phone Banker" },
-  { roleKey: "av_tech",                displayName: "AV / Tech" },
-  { roleKey: "photographer",           displayName: "Photographer / Videographer" },
-  { roleKey: "setup_teardown",         displayName: "Setup & Teardown" },
-  { roleKey: "childcare",              displayName: "Childcare" },
-  { roleKey: "interpreter",            displayName: "Interpreter / Translation" },
-  { roleKey: "accessibility_support",  displayName: "Accessibility Support" },
-  { roleKey: "social_media",           displayName: "Social Media" },
-  { roleKey: "outreach_coordinator",   displayName: "Outreach Coordinator" },
-  { roleKey: "merchandise_sales",      displayName: "Merchandise Sales" },
-  { roleKey: "emcee",                  displayName: "Emcee" },
-];
-const EDIT_ALL_ROLES_KEY_SET = new Set(EDIT_ALL_ROLES.map((r) => r.roleKey));
-
 function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFormProps) {
   const [name, setName] = useState(event.name);
-  const parsedDates: string[] = event.eventDates ? (JSON.parse(event.eventDates) as string[]) : [];
-  const [isMultiDay, setIsMultiDay] = useState(parsedDates.length > 1);
   const [eventDate, setEventDate] = useState(
-    parsedDates.length > 0 ? parsedDates[0] : (event.eventDate ? event.eventDate.slice(0, 10) : "")
+    event.eventDate ? event.eventDate.slice(0, 10) : ""
   );
-  const [extraDates, setExtraDates] = useState<string[]>(parsedDates.length > 1 ? parsedDates.slice(1) : [""]);
   const [adminPassword, setAdminPassword] = useState("");
   const [mobilizeEventId, setMobilizeEventId] = useState(event.mobilizeEventId ?? "");
   const [giveawayEnabled, setGiveawayEnabled] = useState(event.giveawayEnabled);
-  const [smsReentryEnabled, setSmsReentryEnabled] = useState(event.smsReentryEnabled);
   const [isActive, setIsActive] = useState(event.isActive);
-  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
-  const [deactivateCount, setDeactivateCount] = useState(0);
-  const [fetchingStats, setFetchingStats] = useState(false);
   const [managerSelection, setManagerSelection] = useState<ManagerSelection>({ type: "keep" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { toast } = useToast();
 
-  // Roles state — initialise from current event roles
-  const [selectedRoleKeys, setSelectedRoleKeys] = useState<Set<string>>(
-    () => new Set(event.roles.map((r) => r.roleKey))
-  );
-  const [customRoles, setCustomRoles] = useState<NewRoleRow[]>(
-    () => event.roles
-      .filter((r) => !EDIT_ALL_ROLES_KEY_SET.has(r.roleKey))
-      .map((r) => ({ roleKey: r.roleKey, displayName: r.displayName }))
-  );
-  const [customRoleInput, setCustomRoleInput] = useState("");
-  const [rolesWithCheckins, setRolesWithCheckins] = useState<string[]>([]);
+  const currentManager = orgUsers.find((u) => u.event?.id === event.id) ?? null;
 
-  const toggleRole = (key: string) =>
-    setSelectedRoleKeys((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-
-  const addCustomRole = () => {
-    const display = customRoleInput.trim();
-    if (!display) return;
-    const key = display.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    if (selectedRoleKeys.has(key) || customRoles.some((r) => r.roleKey === key)) return;
-    setCustomRoles((prev) => [...prev, { roleKey: key, displayName: display }]);
-    setSelectedRoleKeys((prev) => new Set([...prev, key]));
-    setCustomRoleInput("");
-  };
-
-  const removeCustomRole = (key: string) => {
-    setCustomRoles((prev) => prev.filter((r) => r.roleKey !== key));
-    setSelectedRoleKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
-  };
-
-  const handleActiveToggle = async () => {
-    if (isActive) {
-      setFetchingStats(true);
-      try {
-        const res = await fetch(`/api/superadmin/events/${event.id}/stats`, { credentials: "include" });
-        if (!res.ok) {
-          toast({ title: "Could not check event stats", description: "Unable to verify check-in count. The event has not been deactivated.", variant: "destructive" });
-          return;
-        }
-        const data = await res.json() as { checkedInCount?: number };
-        const count = data.checkedInCount ?? 0;
-        if (count > 0) {
-          setDeactivateCount(count);
-          setConfirmDeactivate(true);
-        } else {
-          setIsActive(false);
-        }
-      } catch {
-        toast({ title: "Could not check event stats", description: "A network error occurred. The event has not been deactivated.", variant: "destructive" });
-      } finally {
-        setFetchingStats(false);
-      }
-    } else {
-      setIsActive(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) { setError("Event name is required"); return; }
+    if (managerSelection.type === "new" && (!managerSelection.name.trim() || !managerSelection.email.trim())) {
+      setError("New event manager requires both a name and email"); return;
     }
-  };
 
-  const currentManager = orgUsers.find((u) => u.event?.id === event.id)
-    ?? (event.managerEmail ? orgUsers.find((u) => u.email.toLowerCase() === event.managerEmail!.toLowerCase()) : null)
-    ?? null;
-
-  const buildPayload = (forceDeleteRoles: boolean): Record<string, unknown> => {
-    let builtEventDates: string[] | undefined;
-    if (isMultiDay && eventDate) {
-      const allDates = [eventDate, ...extraDates.filter((d) => d.trim())];
-      if (allDates.length > 1) builtEventDates = allDates;
-    }
-    const selectedFromList = EDIT_ALL_ROLES.filter((r) => selectedRoleKeys.has(r.roleKey));
-    const allRoles: NewRoleRow[] = [...selectedFromList, ...customRoles];
     const payload: Record<string, unknown> = {
       name: name.trim(),
+      eventDate: eventDate || null,
       mobilizeEventId: mobilizeEventId.trim() || null,
       giveawayEnabled,
-      smsReentryEnabled,
       isActive,
-      roles: allRoles,
     };
-    if (forceDeleteRoles) payload.forceDeleteRoles = true;
-    if (builtEventDates) {
-      payload.eventDates = builtEventDates;
-      payload.eventDate = builtEventDates[0];
-    } else {
-      payload.eventDate = eventDate || null;
-      payload.eventDates = null;
-    }
     if (adminPassword.trim()) payload.adminPassword = adminPassword.trim();
-    if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
-    else if (managerSelection.type === "clear") payload.eventManagerId = null;
-    return payload;
-  };
 
-  const submitPayload = async (payload: Record<string, unknown>) => {
+    if (managerSelection.type === "existing") payload.eventManagerId = managerSelection.userId;
+    else if (managerSelection.type === "new") payload.newEventManager = { name: managerSelection.name, email: managerSelection.email };
+    else if (managerSelection.type === "clear") payload.eventManagerId = null;
+
     setLoading(true);
-    setRolesWithCheckins([]);
     try {
       const res = await fetch(`/api/superadmin/events/${event.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getSuperadminToken() ?? ""}`,
+        },
         body: JSON.stringify(payload),
       });
-      const data = await res.json() as { event?: EventRecord; error?: string; rolesWithCheckins?: string[] };
-      if (res.status === 422 && data.rolesWithCheckins && data.rolesWithCheckins.length > 0) {
-        setRolesWithCheckins(data.rolesWithCheckins);
-        return;
-      }
+      const data = await res.json() as { event?: EventRecord; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to update event");
       toast({ title: "Event updated", description: `"${data.event!.name}" has been saved.` });
       onSaved(data.event!);
@@ -842,18 +800,6 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    if (!name.trim()) { setError("Event name is required"); return; }
-    await submitPayload(buildPayload(false));
-  };
-
-  const handleForceDeleteRoles = async () => {
-    setError("");
-    await submitPayload(buildPayload(true));
   };
 
   return (
@@ -875,56 +821,15 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           />
         </div>
 
-        <div className="sm:col-span-2 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="font-display text-xs uppercase tracking-wider">
-              <Calendar className="w-3 h-3 inline mr-1" />
-              {isMultiDay ? "Event Dates" : "Event Date"}
-            </label>
-            <button
-              type="button"
-              onClick={() => { setIsMultiDay((v) => !v); setExtraDates([""]); }}
-              className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border-2 border-foreground transition-colors ${isMultiDay ? "bg-primary text-white" : "bg-white text-foreground"}`}
-            >
-              Multi-day
-            </button>
-          </div>
+        <div>
+          <label className="font-display text-xs uppercase tracking-wider block mb-1">
+            <Calendar className="w-3 h-3 inline mr-1" />Event Date
+          </label>
           <Input
             type="date"
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
           />
-          {isMultiDay && (
-            <div className="space-y-2">
-              {extraDates.map((d, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <Input
-                    type="date"
-                    value={d}
-                    onChange={(e) => {
-                      const updated = [...extraDates];
-                      updated[i] = e.target.value;
-                      setExtraDates(updated);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setExtraDates((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="p-1 rounded border-2 border-foreground hover:bg-destructive hover:text-white transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setExtraDates((prev) => [...prev, ""])}
-                className="flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80"
-              >
-                <Plus className="w-3 h-3" /> Add another day
-              </button>
-            </div>
-          )}
         </div>
 
         <div>
@@ -951,7 +856,7 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           />
         </div>
 
-        <div className="sm:col-span-2 flex flex-wrap items-start gap-6 pt-1">
+        <div className="flex items-start gap-6 pt-1">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -969,147 +874,24 @@ function EditEventForm({ event, orgUsers = [], onSaved, onCancel }: EditEventFor
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setSmsReentryEnabled((v) => !v)}
-              className={`relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${smsReentryEnabled ? "bg-primary" : "bg-gray-200"}`}
-            >
-              <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${smsReentryEnabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
-            <div>
-              <p className="font-display text-xs uppercase tracking-wider">SMS Re-Entry</p>
-              <p className="text-xs text-muted-foreground">{smsReentryEnabled ? "On — QR code texted to phone; scan or enter for re-entry" : "Off"}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={handleActiveToggle}
-              disabled={fetchingStats}
-              className={`mt-0.5 relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors disabled:opacity-60 ${isActive ? "bg-green-500" : "bg-gray-200"}`}
+              onClick={() => setIsActive((v) => !v)}
+              className={`relative inline-flex h-6 w-12 items-center rounded-full border-4 border-foreground transition-colors ${isActive ? "bg-green-500" : "bg-gray-200"}`}
             >
               <span className={`inline-block h-3 w-3 rounded-full bg-white border-2 border-foreground transform transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
             </button>
             <div>
               <p className="font-display text-xs uppercase tracking-wider">Active</p>
-              <p className="text-xs text-muted-foreground">{fetchingStats ? "Checking..." : isActive ? "Yes — accepting check-ins" : "No — check-in page disabled"}</p>
+              <p className="text-xs text-muted-foreground">{isActive ? "Yes" : "No"}</p>
             </div>
           </div>
         </div>
       </div>
-
-      <div>
-        <label className="font-display text-xs uppercase tracking-wider block mb-3">
-          <Users className="w-3 h-3 inline mr-1" />Volunteer Roles
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          {EDIT_ALL_ROLES.map((role) => (
-            <button
-              key={role.roleKey}
-              type="button"
-              onClick={() => toggleRole(role.roleKey)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border-4 text-left font-bold text-xs transition-all ${
-                selectedRoleKeys.has(role.roleKey)
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-foreground/20 bg-white text-muted-foreground hover:border-foreground/60"
-              }`}
-            >
-              <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                selectedRoleKeys.has(role.roleKey) ? "border-primary bg-primary" : "border-foreground/30"
-              }`}>
-                {selectedRoleKeys.has(role.roleKey) && <CheckCircle2 className="w-3 h-3 text-white" />}
-              </span>
-              {role.displayName}
-            </button>
-          ))}
-        </div>
-
-        {customRoles.length > 0 && (
-          <div className="mt-3 space-y-1">
-            {customRoles.map((r) => (
-              <div key={r.roleKey} className="flex items-center gap-2 px-3 py-2 rounded-xl border-4 border-primary bg-primary/10">
-                <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
-                <span className="text-xs font-bold text-primary flex-1">{r.displayName}</span>
-                <button
-                  type="button"
-                  onClick={() => removeCustomRole(r.roleKey)}
-                  className="p-0.5 rounded hover:bg-destructive hover:text-white transition-colors text-muted-foreground"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-3 flex gap-2">
-          <Input
-            value={customRoleInput}
-            onChange={(e) => setCustomRoleInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomRole(); } }}
-            placeholder="Add custom role…"
-            className="text-xs h-8"
-          />
-          <Button type="button" size="sm" variant="outline" onClick={addCustomRole} className="h-8 px-3 text-xs">
-            <Plus className="w-3 h-3 mr-1" />Add
-          </Button>
-        </div>
-      </div>
-
-      <AlertDialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
-        <AlertDialogContent className="border-4 border-foreground">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-display text-xl">Deactivate this event?</AlertDialogTitle>
-            <AlertDialogDescription className="text-base text-foreground">
-              This event has <strong>{deactivateCount} check-in{deactivateCount !== 1 ? "s" : ""}</strong>. Deactivating it will prevent event admins from accessing the check-in flow. Are you sure you want to deactivate it?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmDeactivate(false)}>Keep Active</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90 border-2 border-foreground"
-              onClick={() => { setIsActive(false); setConfirmDeactivate(false); }}
-            >
-              Yes, Deactivate
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <EventManagerPicker
         orgUsers={orgUsers}
         currentManager={currentManager}
         onChange={setManagerSelection}
       />
-
-      {rolesWithCheckins.length > 0 && (
-        <div className="border-4 border-yellow-500 rounded-lg p-4 bg-yellow-50 space-y-3">
-          <p className="font-bold text-sm text-yellow-800">
-            The following roles have existing check-in data and cannot be removed without confirmation:
-          </p>
-          <ul className="list-disc list-inside text-sm text-yellow-800 space-y-0.5">
-            {rolesWithCheckins.map((name) => <li key={name}>{name}</li>)}
-          </ul>
-          <p className="text-xs text-yellow-700">Check-in records referencing these roles will remain in the database but the roles will no longer be selectable for new check-ins.</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => { void handleForceDeleteRoles(); }}
-              className="bg-yellow-600 hover:bg-yellow-700 text-white border-yellow-700"
-            >
-              Remove Anyway
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setRolesWithCheckins([])}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
 
       {error && (
         <p className="text-destructive font-bold text-sm border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
@@ -1152,8 +934,7 @@ function CreateOrgForm({ onCreated }: { onCreated: (org: OrgRecord) => void }) {
     try {
       const res = await fetch("/api/superadmin/orgs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getSuperadminToken() ?? ""}` },
         body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
       });
       const data = await res.json() as { org?: OrgRecord; error?: string };
@@ -1266,7 +1047,7 @@ function QrModal({ event, onClose }: { event: EventRecord; onClose: () => void }
   );
 }
 
-function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void }) {
+function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: EventRecord; orgUsers: UserRecord[]; onUpdated: (event: EventRecord) => void; onImpersonate: (userId: number, path: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -1300,7 +1081,7 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
               </div>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="font-mono text-sm text-muted-foreground bg-gray-100 px-2 py-0.5 rounded">
-                  /{event.slug}
+                  /api/events/{event.slug}/
                 </span>
                 {event.eventDate && (
                   <span className="text-sm text-muted-foreground">
@@ -1311,17 +1092,7 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
                 <span className="text-sm font-bold text-foreground">
                   <Users className="w-4 h-4 inline mr-1" />
                   {event.checkedInCount} checked in
-                  {event.checkedInCount > 0 && (
-                    <span className="font-normal text-muted-foreground ml-1">
-                      ({event.volunteerCount} volunteer{event.volunteerCount !== 1 ? "s" : ""} · {event.attendeeCount} attendee{event.attendeeCount !== 1 ? "s" : ""})
-                    </span>
-                  )}
                 </span>
-                {event.volunteerCount > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    ({event.attendeeCount} attendees · {event.volunteerCount} volunteers)
-                  </span>
-                )}
               </div>
             </div>
             {expanded ? <ChevronUp className="w-5 h-5 flex-shrink-0 mt-1 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 flex-shrink-0 mt-1 text-muted-foreground" />}
@@ -1363,7 +1134,10 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
 
             {showQR && <QrModal event={event} onClose={() => setShowQR(false)} />}
 
-            <div className="flex gap-3 flex-wrap">
+            {(() => {
+              const adminUser = orgUsers.find((u) => u.event?.id === event.id) ?? orgUsers.find((u) => u.role === "org_contact") ?? null;
+              return (
+                <div className="flex gap-3 flex-wrap">
                   <a
                     href={`/${event.slug}`}
                     target="_blank"
@@ -1373,20 +1147,22 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
                   >
                     <Users className="w-5 h-5" /> Open Check-In
                   </a>
-                  <a
-                    href={`/${event.slug}/admin`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal"
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (adminUser) onImpersonate(adminUser.id, `/${event.slug}/admin`); }}
+                    disabled={!adminUser}
+                    className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-primary bg-primary text-white hover:bg-primary/90 font-display text-base transition-colors shadow-brutal disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Lock className="w-5 h-5" /> Open Event Admin
-                  </a>
-                <button
+                  </button>
+                  <button
                     onClick={(e) => { e.stopPropagation(); setShowQR(true); }}
                     className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-4 border-foreground bg-secondary hover:bg-secondary/70 font-display text-base transition-colors shadow-brutal"
                   >
                     <QrCode className="w-5 h-5" /> QR Code
                   </button>
                 </div>
+              );
+            })()}
 
             <div className="p-3 bg-gray-50 border-2 border-gray-200 rounded-lg">
               <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Check-in URL</p>
@@ -1397,7 +1173,7 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
               <div>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+                  onClick={() => setEditing(true)}
                   className="flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
                 >
                   <Pencil className="w-4 h-4" /> Edit Event
@@ -1422,11 +1198,8 @@ function EventCard({ event, orgUsers, onUpdated }: { event: EventRecord; orgUser
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
-const AUTO_REFRESH_MS = 30_000;
-
 export default function SuperadminPage() {
-  const { user, loading: authLoading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [authed, setAuthed] = useState(!!getSuperadminToken());
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [orgs, setOrgs] = useState<OrgRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -1434,19 +1207,46 @@ export default function SuperadminPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">("all");
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const impersonateAndOpen = async (userId: number, path: string) => {
+    const token = getSuperadminToken() ?? "";
+    try {
+      const res = await fetch("/api/superadmin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        alert(err.error ?? "Failed to open dashboard");
+        return;
+      }
+      window.location.href = path;
+    } catch {
+      alert("Network error — could not open dashboard");
+    }
+  };
 
   const fetchAll = async () => {
     setLoading(true);
     setLoadError("");
+    const token = getSuperadminToken() ?? "";
     try {
       const [eventsRes, orgsRes, usersRes, meRes] = await Promise.all([
-        fetch("/api/superadmin/events", { credentials: "include" }),
-        fetch("/api/superadmin/orgs", { credentials: "include" }),
-        fetch("/api/superadmin/users", { credentials: "include" }),
-        fetch("/api/superadmin/me", { credentials: "include" }),
+        fetch("/api/superadmin/events", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/orgs", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/users", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/superadmin/me", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
+      if (eventsRes.status === 401 || orgsRes.status === 401) {
+        clearSuperadminToken();
+        setAuthed(false);
+        return;
+      }
+      if (eventsRes.status === 503 || orgsRes.status === 503) {
+        throw new Error("Server configuration error: SUPERADMIN_PASSWORD is not set. Add it in the Replit Secrets panel and restart the API server.");
+      }
       if (!eventsRes.ok || !orgsRes.ok) {
         const errBody = await (eventsRes.ok ? orgsRes : eventsRes).json().catch(() => ({})) as { error?: string };
         throw new Error(errBody.error ?? "Server returned an error. Try refreshing.");
@@ -1461,7 +1261,6 @@ export default function SuperadminPage() {
       setOrgs(orgsData.orgs);
       setUsers(usersData.users);
       setSuperadminUsername(meData.username);
-      setLastRefreshed(new Date());
     } catch {
       setLoadError("Could not load data. Check your connection and try again.");
     } finally {
@@ -1469,53 +1268,14 @@ export default function SuperadminPage() {
     }
   };
 
-  const fetchCounts = async () => {
-    try {
-      const res = await fetch("/api/superadmin/events", { credentials: "include" });
-      if (!res.ok) return;
-      const data = await res.json() as { events: EventRecord[] };
-      setEvents(data.events);
-      setLastRefreshed(new Date());
-    } catch {
-    }
-  };
+  useEffect(() => { if (authed) void fetchAll(); }, [authed]);
 
-  useEffect(() => {
-    if (user?.role === "superadmin") void fetchAll();
-  }, [user?.role]);
-
-  useEffect(() => {
-    if (user?.role !== "superadmin") return;
-    refreshTimerRef.current = setInterval(() => { void fetchCounts(); }, AUTO_REFRESH_MS);
-    return () => {
-      if (refreshTimerRef.current !== null) clearInterval(refreshTimerRef.current);
-    };
-  }, [user?.role]);
-
-  useEffect(() => {
-    if (!authLoading && (!user || user.role !== "superadmin")) {
-      if (user?.role === "org_contact") setLocation("/org");
-      else if (user?.role === "event_manager") setLocation("/admin");
-      else setLocation("/login");
-      return;
-    }
-  }, [authLoading, user]);
-
-  const handleLogout = async () => {
-    await authLogout();
-    setEvents([]); setOrgs([]); setUsers([]);
-    setLocation("/login");
-  };
+  const handleLogout = () => { clearSuperadminToken(); setAuthed(false); setEvents([]); setOrgs([]); setUsers([]); };
 
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
 
-  if (authLoading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center"><div className="text-muted-foreground text-lg">Loading…</div></div>;
-  }
-  if (!user || user.role !== "superadmin") {
-    return null;
-  }
+  if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
 
   // Group events by org slug
   const eventsByOrg = new Map<string, EventRecord[]>();
@@ -1542,21 +1302,15 @@ export default function SuperadminPage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
+            <p className="text-lg text-gray-300 font-medium">OpsCheckIn · Platform Admin</p>
           </div>
-          <div className="flex flex-col items-end gap-2 w-full md:w-auto">
-            <div className="flex gap-3 flex-wrap justify-end">
-              <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
-                <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
-              </Button>
-              <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => void handleLogout()}>
-                <LogOut className="w-4 h-4 mr-2" />Sign Out
-              </Button>
-            </div>
-            {lastRefreshed && (
-              <p className="text-xs text-white/50 font-medium">
-                Counts auto-refresh every 30s · Last updated {lastRefreshed.toLocaleTimeString()}
-              </p>
-            )}
+          <div className="flex gap-3 w-full md:w-auto flex-wrap">
+            <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
+              <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
+            </Button>
+            <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />Sign Out
+            </Button>
           </div>
         </div>
       </header>
@@ -1666,12 +1420,17 @@ export default function SuperadminPage() {
                     <h2 className="font-display text-2xl">{org.name}</h2>
                     <p className="font-mono text-sm text-gray-400">/{org.slug} · {orgEvents.length} event{orgEvents.length !== 1 ? "s" : ""} · {orgEvents.reduce((s, e) => s + e.checkedInCount, 0)} checked in</p>
                   </div>
-                  <a
-                    href={`${import.meta.env.BASE_URL}org/${org.id}`}
-                    className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" /> Open Org Dashboard
-                  </a>
+                  {(() => {
+                    const orgContact = users.find((u) => u.role === "org_contact" && u.org?.id === org.id);
+                    return orgContact ? (
+                      <button
+                        onClick={() => void impersonateAndOpen(orgContact.id, "/org")}
+                        className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/40 bg-white/10 hover:bg-white/20 text-white font-display text-sm transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" /> Open Org Dashboard
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Org contacts for this org */}
@@ -1698,7 +1457,7 @@ export default function SuperadminPage() {
                   )}
                   {orgEvents.map((event) => (
                     <div key={event.id} className="space-y-0">
-                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} />
+                      <EventCard event={event} orgUsers={users.filter((u) => u.org?.id === org.id)} onUpdated={() => void fetchAll()} onImpersonate={impersonateAndOpen} />
                       {/* Event managers for this event */}
                       {users.filter((u) => u.event?.id === event.id).map((u) => (
                         <div key={u.id} className="bg-purple-50 border-2 border-t-0 border-foreground/20 rounded-b-xl px-5 py-2.5 flex items-center gap-3 flex-wrap">

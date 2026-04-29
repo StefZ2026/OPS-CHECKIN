@@ -1,53 +1,100 @@
+import { createHash, timingSafeEqual } from "crypto";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import * as XLSX from "xlsx";
 import { db } from "@workspace/db";
 import { attendeesTable, attendeeRolesTable, preRegistrationsTable, volunteerPreRegistrationsTable, eventsTable, eventRolesTable, organizationsTable, usersTable } from "@workspace/db/schema";
-import { eq, inArray, count, countDistinct, and } from "drizzle-orm";
-import { signToken, verifyToken, type AuthPayload } from "./auth";
+import { eq, inArray, count } from "drizzle-orm";
+import { signToken, type AuthPayload } from "./auth";
 
 const router: IRouter = Router();
 
-// JWT-only admin auth — accepts superadmin on any route.
-// Org contacts and event managers are checked by requireEventAuth in events.ts
-// (which has event context). Here we only allow superadmin for the flat
-// /admin/* and /superadmin/* routes which have no event scope.
+function expectedToken(): string {
+  const password = process.env.ADMIN_PASSWORD ?? "";
+  return createHash("sha256").update(password + ":opscheckin-admin-2026").digest("hex");
+}
+
+function expectedSuperadminToken(): string {
+  const password = process.env.SUPERADMIN_PASSWORD ?? "";
+  return createHash("sha256").update(password + ":icu-superadmin-2026").digest("hex");
+}
+
+function checkBearer(token: string, expected: string): boolean {
+  try {
+    return token.length === expected.length &&
+      timingSafeEqual(Buffer.from(token, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
-  const jwtToken = req.cookies?.auth_token as string | undefined;
-  if (!jwtToken) {
-    res.status(401).json({ error: "Not authenticated" });
+  if (!process.env.ADMIN_PASSWORD) {
+    res.status(503).json({ error: "Admin auth is not configured on this server." });
     return;
   }
-  const payload = verifyToken(jwtToken);
-  if (!payload) {
-    res.status(401).json({ error: "Session expired" });
+  const auth = req.headers["authorization"] ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!checkBearer(token, expectedToken())) {
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  if (payload.role === "superadmin") {
-    res.locals.user = payload;
-    next();
-    return;
-  }
-  res.status(403).json({ error: "Forbidden" });
+  next();
 }
 
 function requireSuperadminAuth(req: Request, res: Response, next: NextFunction): void {
-  const jwtToken = req.cookies?.auth_token as string | undefined;
-  if (!jwtToken) {
-    res.status(401).json({ error: "Not authenticated" });
+  if (!process.env.SUPERADMIN_PASSWORD) {
+    res.status(503).json({ error: "Superadmin auth is not configured on this server." });
     return;
   }
-  const payload = verifyToken(jwtToken);
-  if (!payload) {
-    res.status(401).json({ error: "Session expired" });
+  const auth = req.headers["authorization"] ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!checkBearer(token, expectedSuperadminToken())) {
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  if (payload.role === "superadmin") {
-    res.locals.user = payload;
-    next();
-    return;
-  }
-  res.status(403).json({ error: "Forbidden" });
+  next();
 }
+
+// 20 failed attempts per IP per 15 minutes
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: "Too many login attempts. Please wait 15 minutes and try again." },
+});
+
+router.post("/admin/login", loginLimiter, (req, res) => {
+  const { username, password } = req.body as { username?: string; password?: string };
+  if (!password || !process.env.ADMIN_PASSWORD || !username) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+  const expectedUsername = process.env.ADMIN_USERNAME ?? "";
+  if (username !== expectedUsername || password !== process.env.ADMIN_PASSWORD) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+  res.json({ token: expectedToken() });
+});
+
+router.post("/superadmin/login", loginLimiter, (req, res) => {
+  const { username, password } = req.body as { username?: string; password?: string };
+  if (!username || !password || !process.env.SUPERADMIN_PASSWORD || !process.env.SUPERADMIN_USERNAME) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+  if (
+    username.trim().toLowerCase() !== process.env.SUPERADMIN_USERNAME.trim().toLowerCase() ||
+    password.trim() !== process.env.SUPERADMIN_PASSWORD.trim()
+  ) {
+    res.status(401).json({ error: "Invalid credentials" });
+    return;
+  }
+  res.json({ token: expectedSuperadminToken() });
+});
 
 // Returns all pre-registrations (regular + volunteer) for full export
 router.get("/admin/pre-registrations", requireAdminAuth, async (_req, res) => {
@@ -248,7 +295,7 @@ router.post("/superadmin/orgs", requireSuperadminAuth, async (req, res) => {
 });
 
 // ── Superadmin: Event Management ──────────────────────────────────────────────
-// All routes below require a valid superadmin JWT cookie (set via /api/auth/login).
+// Protected by the dedicated SUPERADMIN_PASSWORD env var, separate from ADMIN_PASSWORD.
 
 // List all events with their orgs and roles
 router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
@@ -259,32 +306,23 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
         name: eventsTable.name,
         slug: eventsTable.slug,
         eventDate: eventsTable.eventDate,
-        eventDates: eventsTable.eventDates,
         giveawayEnabled: eventsTable.giveawayEnabled,
-        smsReentryEnabled: eventsTable.smsReentryEnabled,
         mobilizeEventId: eventsTable.mobilizeEventId,
         isActive: eventsTable.isActive,
         createdAt: eventsTable.createdAt,
         orgId: eventsTable.orgId,
         orgName: organizationsTable.name,
         orgSlug: organizationsTable.slug,
-        managerEmail: eventsTable.managerEmail,
       })
       .from(eventsTable)
       .leftJoin(organizationsTable, eq(eventsTable.orgId, organizationsTable.id))
       .orderBy(eventsTable.createdAt);
 
-    const [allRoles, attendeeCounts, volunteerCounts] = await Promise.all([
+    const [allRoles, attendeeCounts] = await Promise.all([
       db.select().from(eventRolesTable).orderBy(eventRolesTable.sortOrder),
       db
         .select({ eventId: attendeesTable.eventId, checkedInCount: count() })
         .from(attendeesTable)
-        .groupBy(attendeesTable.eventId),
-      db
-        .select({ eventId: attendeesTable.eventId, volunteerCount: countDistinct(attendeeRolesTable.attendeeId) })
-        .from(attendeeRolesTable)
-        .innerJoin(attendeesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
-        .where(eq(attendeeRolesTable.wantsToServeToday, true))
         .groupBy(attendeesTable.eventId),
     ]);
 
@@ -299,39 +337,24 @@ router.get("/superadmin/events", requireSuperadminAuth, async (_req, res) => {
       if (row.eventId !== null) countMap.set(row.eventId, row.checkedInCount);
     }
 
-    const volunteerMap = new Map<number, number>();
-    for (const row of volunteerCounts) {
-      if (row.eventId !== null) volunteerMap.set(row.eventId, row.volunteerCount);
-    }
-
-    const result = events.map((e) => {
-      const checkedInCount = countMap.get(e.id) ?? 0;
-      const volunteerCount = volunteerMap.get(e.id) ?? 0;
-      const attendeeCount = checkedInCount - volunteerCount;
-      return {
-        id: e.id,
-        name: e.name,
-        slug: e.slug,
-        eventDate: e.eventDate,
-        eventDates: e.eventDates,
-        giveawayEnabled: e.giveawayEnabled,
-        smsReentryEnabled: e.smsReentryEnabled,
-        mobilizeEventId: e.mobilizeEventId,
-        isActive: e.isActive,
-        createdAt: e.createdAt,
-        checkedInCount,
-        volunteerCount,
-        attendeeCount,
-        managerEmail: e.managerEmail ?? null,
-        org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
-        roles: (rolesMap.get(e.id) ?? []).map((r) => ({
-          id: r.id,
-          roleKey: r.roleKey,
-          displayName: r.displayName,
-          sortOrder: r.sortOrder,
-        })),
-      };
-    });
+    const result = events.map((e) => ({
+      id: e.id,
+      name: e.name,
+      slug: e.slug,
+      eventDate: e.eventDate,
+      giveawayEnabled: e.giveawayEnabled,
+      mobilizeEventId: e.mobilizeEventId,
+      isActive: e.isActive,
+      createdAt: e.createdAt,
+      checkedInCount: countMap.get(e.id) ?? 0,
+      org: { id: e.orgId, name: e.orgName, slug: e.orgSlug },
+      roles: (rolesMap.get(e.id) ?? []).map((r) => ({
+        id: r.id,
+        roleKey: r.roleKey,
+        displayName: r.displayName,
+        sortOrder: r.sortOrder,
+      })),
+    }));
 
     res.json({ events: result });
   } catch (err) {
@@ -349,25 +372,23 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     name,
     slug,
     eventDate,
-    eventDates,
     adminPassword,
     mobilizeEventId,
     giveawayEnabled,
-    smsReentryEnabled,
     roles,
     eventManagerId,
+    newEventManager,
   } = req.body as {
     orgSlug?: string;
     name?: string;
     slug?: string;
     eventDate?: string;
-    eventDates?: string[];
     adminPassword?: string;
     mobilizeEventId?: string;
     giveawayEnabled?: boolean;
-    smsReentryEnabled?: boolean;
     roles?: NewRoleInput[];
     eventManagerId?: number;
+    newEventManager?: { name: string; email: string };
   };
 
   if (!name || !name.trim()) {
@@ -408,20 +429,16 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
     // Wrap event + role creation in a transaction so a role insert failure
     // doesn't leave a partially-configured event behind.
     const { newEvent, insertedRoles } = await db.transaction(async (tx) => {
-      const allDates = eventDates && eventDates.length > 0 ? eventDates : (eventDate ? [eventDate] : []);
-      const primaryDate = allDates[0] ? new Date(allDates[0]) : (eventDate ? new Date(eventDate) : null);
       const [newEvent] = await tx
         .insert(eventsTable)
         .values({
           orgId: org.id,
           name: name.trim(),
           slug: slug.trim(),
-          eventDate: primaryDate,
-          eventDates: allDates.length > 1 ? JSON.stringify(allDates) : null,
+          eventDate: eventDate ? new Date(eventDate) : null,
           adminPassword: adminPassword?.trim() || null,
           mobilizeEventId: mobilizeEventId?.trim() || null,
           giveawayEnabled: giveawayEnabled ?? false,
-          smsReentryEnabled: smsReentryEnabled ?? false,
           isActive: true,
         })
         .returning();
@@ -436,9 +453,17 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
       return { newEvent, insertedRoles };
     });
 
-    // Assign event manager if provided (must be an existing org user)
+    // Assign event manager if provided
     if (eventManagerId) {
       await db.update(usersTable).set({ eventId: newEvent.id }).where(eq(usersTable.id, eventManagerId));
+    } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
+      await db.insert(usersTable).values({
+        name: newEventManager.name.trim(),
+        email: newEventManager.email.trim().toLowerCase(),
+        role: "event_manager",
+        orgId: org.id,
+        eventId: newEvent.id,
+      });
     }
 
     res.status(201).json({
@@ -460,25 +485,6 @@ router.post("/superadmin/events", requireSuperadminAuth, async (req, res) => {
   }
 });
 
-// Get stats (check-in count) for a single event — used before deactivation confirmation
-router.get("/superadmin/events/:id/stats", requireSuperadminAuth, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid event id" });
-    return;
-  }
-  try {
-    const [row] = await db
-      .select({ checkedInCount: count() })
-      .from(attendeesTable)
-      .where(eq(attendeesTable.eventId, id));
-    res.json({ checkedInCount: row?.checkedInCount ?? 0 });
-  } catch (err) {
-    console.error("GET /superadmin/events/:id/stats error:", err);
-    res.status(500).json({ error: "Failed to load event stats" });
-  }
-});
-
 // Update an existing event (name, date, password, mobilize ID, giveaway, active status)
 router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -490,29 +496,21 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   const {
     name,
     eventDate,
-    eventDates,
     adminPassword,
     mobilizeEventId,
     giveawayEnabled,
-    smsReentryEnabled,
     isActive,
     eventManagerId,
     newEventManager,
-    roles,
-    forceDeleteRoles,
   } = req.body as {
     name?: string;
     eventDate?: string | null;
-    eventDates?: string[] | null;
     adminPassword?: string | null;
     mobilizeEventId?: string | null;
     giveawayEnabled?: boolean;
-    smsReentryEnabled?: boolean;
     isActive?: boolean;
     eventManagerId?: number | null;
     newEventManager?: { name: string; email: string };
-    roles?: NewRoleInput[] | null;
-    forceDeleteRoles?: boolean;
   };
 
   const updates: Partial<typeof eventsTable.$inferInsert> = {};
@@ -530,26 +528,14 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
       updates.eventDate = null;
     }
   }
-  if (eventDates !== undefined) {
-    if (eventDates && eventDates.length > 1) {
-      updates.eventDates = JSON.stringify(eventDates);
-      // Keep eventDate in sync with the first date
-      const first = new Date(eventDates[0]);
-      if (!isNaN(first.getTime())) updates.eventDate = first;
-    } else {
-      updates.eventDates = null;
-    }
-  }
   if (adminPassword !== undefined) updates.adminPassword = adminPassword?.trim() || null;
   if (mobilizeEventId !== undefined) updates.mobilizeEventId = mobilizeEventId?.trim() || null;
   if (giveawayEnabled !== undefined) updates.giveawayEnabled = giveawayEnabled;
-  if (smsReentryEnabled !== undefined) updates.smsReentryEnabled = smsReentryEnabled;
   if (isActive !== undefined) updates.isActive = isActive;
 
   const hasManagerChange = eventManagerId !== undefined || newEventManager !== undefined;
-  const hasRolesChange = roles !== undefined;
 
-  if (Object.keys(updates).length === 0 && !hasManagerChange && !hasRolesChange) {
+  if (Object.keys(updates).length === 0 && !hasManagerChange) {
     res.status(400).json({ error: "No fields to update" });
     return;
   }
@@ -568,108 +554,32 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
 
     // Handle event manager assignment
     if (hasManagerChange) {
+      // Clear any existing event_id assignments for this event
       await db.update(usersTable).set({ eventId: null }).where(eq(usersTable.eventId, id));
       if (eventManagerId) {
-        const [assignedUser] = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, eventManagerId)).limit(1);
         await db.update(usersTable).set({ eventId: id }).where(eq(usersTable.id, eventManagerId));
-        if (assignedUser) {
-          await db.update(eventsTable).set({ managerEmail: assignedUser.email }).where(eq(eventsTable.id, id));
-        }
       } else if (newEventManager?.name?.trim() && newEventManager?.email?.trim()) {
-        const newEmail = newEventManager.email.trim().toLowerCase();
         await db.insert(usersTable).values({
           name: newEventManager.name.trim(),
-          email: newEmail,
+          email: newEventManager.email.trim().toLowerCase(),
           role: "event_manager",
           orgId: updated.orgId,
           eventId: id,
         });
-        await db.update(eventsTable).set({ managerEmail: newEmail }).where(eq(eventsTable.id, id));
-      } else {
-        await db.update(eventsTable).set({ managerEmail: null }).where(eq(eventsTable.id, id));
       }
     }
 
-    // Handle volunteer roles update — preflight check happens before mutations
-    if (hasRolesChange) {
-      const validNewRoles = (roles ?? [])
-        .filter((r) => r.roleKey?.trim() && r.displayName?.trim())
-        .map((r, i) => ({
-          roleKey: r.roleKey.trim(),
-          displayName: r.displayName.trim(),
-          sortOrder: r.sortOrder ?? i + 1,
-        }));
-      const newRoleKeySet = new Set(validNewRoles.map((r) => r.roleKey));
-
-      const currentRoles = await db
-        .select()
-        .from(eventRolesTable)
-        .where(eq(eventRolesTable.eventId, id));
-      const removedRoleKeys = currentRoles.map((r) => r.roleKey).filter((k) => !newRoleKeySet.has(k));
-
-      // Warn before deleting roles that have existing check-in data
-      if (removedRoleKeys.length > 0 && !forceDeleteRoles) {
-        const checkedInRoleRows = await db
-          .selectDistinct({ roleName: attendeeRolesTable.roleName })
-          .from(attendeeRolesTable)
-          .innerJoin(attendeesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
-          .where(
-            and(
-              eq(attendeesTable.eventId, id),
-              inArray(attendeeRolesTable.roleName, removedRoleKeys)
-            )
-          );
-        const blockedKeys = new Set(checkedInRoleRows.map((r) => r.roleName));
-        if (blockedKeys.size > 0) {
-          const blockedDisplayNames = currentRoles
-            .filter((r) => blockedKeys.has(r.roleKey))
-            .map((r) => r.displayName);
-          res.status(422).json({
-            error: "Some roles being removed have existing check-in data.",
-            rolesWithCheckins: blockedDisplayNames,
-          });
-          return;
-        }
-      }
-
-      if (removedRoleKeys.length > 0) {
-        await db
-          .delete(eventRolesTable)
-          .where(and(eq(eventRolesTable.eventId, id), inArray(eventRolesTable.roleKey, removedRoleKeys)));
-      }
-
-      for (const role of validNewRoles) {
-        await db
-          .insert(eventRolesTable)
-          .values({ eventId: id, roleKey: role.roleKey, displayName: role.displayName, sortOrder: role.sortOrder })
-          .onConflictDoUpdate({
-            target: [eventRolesTable.eventId, eventRolesTable.roleKey],
-            set: { displayName: role.displayName, sortOrder: role.sortOrder },
-          });
-      }
-    }
-
-    const [updatedRoles, orgRows, totalCount, volCount] = await Promise.all([
+    const [roles, orgRows] = await Promise.all([
       db.select().from(eventRolesTable).where(eq(eventRolesTable.eventId, id)).orderBy(eventRolesTable.sortOrder),
       db.select().from(organizationsTable).where(eq(organizationsTable.id, updated.orgId)).limit(1),
-      db.select({ total: count() }).from(attendeesTable).where(eq(attendeesTable.eventId, id)),
-      db.select({ vol: countDistinct(attendeesTable.id) })
-        .from(attendeesTable)
-        .innerJoin(attendeeRolesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
-        .where(eq(attendeesTable.eventId, id)),
     ]);
     const org = orgRows[0];
-    const total = totalCount[0]?.total ?? 0;
-    const volunteers = volCount[0]?.vol ?? 0;
 
     res.json({
       event: {
         ...updated,
-        checkedInCount: total,
-        volunteerCount: volunteers,
-        attendeeCount: total - volunteers,
         org: { id: org?.id ?? updated.orgId, name: org?.name ?? null, slug: org?.slug ?? null },
-        roles: updatedRoles.map((r) => ({ id: r.id, roleKey: r.roleKey, displayName: r.displayName, sortOrder: r.sortOrder })),
+        roles: roles.map((r) => ({ id: r.id, roleKey: r.roleKey, displayName: r.displayName, sortOrder: r.sortOrder })),
       },
     });
   } catch (err) {
@@ -678,10 +588,9 @@ router.patch("/superadmin/events/:id", requireSuperadminAuth, async (req, res) =
   }
 });
 
-// GET /api/superadmin/me — returns the platform admin's identity from JWT
-router.get("/superadmin/me", requireSuperadminAuth, (_req, res) => {
-  const user = res.locals.user as AuthPayload | undefined;
-  res.json({ username: user?.name ?? "Platform Admin", email: user?.email ?? "" });
+// GET /api/superadmin/me — returns the platform admin's username
+router.get("/superadmin/me", requireSuperadminAuth, (req, res) => {
+  res.json({ username: process.env.SUPERADMIN_USERNAME ?? "Platform Admin" });
 });
 
 // POST /api/superadmin/impersonate — issue a JWT session for any platform user

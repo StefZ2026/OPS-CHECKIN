@@ -5,15 +5,14 @@ import {
   Search, Users, UserCheck, UserPlus, RefreshCw,
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
-  Download, LogOut, Upload, QrCode, Printer, CheckCircle2,
-  Trash2, Info, HardHat, AlertTriangle, Pencil, X,
+  Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
+  Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle, Pencil, X,
   ToggleLeft, ToggleRight,
 } from "lucide-react";
-import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, authLogout } from "@/hooks/use-auth";
+import { getAdminToken, setAdminToken, clearAdminToken, loginAdmin } from "@/hooks/use-admin-auth";
 import { useEventConfig } from "@/hooks/use-event-config";
 import { eventApiBase, getEventSlug } from "@/lib/event-slug";
 import { Input } from "@/components/ui/input";
@@ -39,6 +38,79 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
   return sortDir === "asc"
     ? <ChevronUp className="w-4 h-4 inline ml-1" />
     : <ChevronDown className="w-4 h-4 inline ml-1" />;
+}
+
+function LoginGate({ onLogin }: { onLogin: () => void }) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { data: eventConfig } = useEventConfig();
+  const loginSubtitle = eventConfig?.name ? `ICU ${eventConfig.name}` : "ICU Check-In";
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const token = await loginAdmin(password);
+      setAdminToken(token);
+      onLogin();
+    } catch {
+      setError("Incorrect password. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
+      <Card className="w-full max-w-md border-4 border-primary shadow-brutal-lg">
+        <CardContent className="p-10">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-4 bg-primary text-white rounded-xl border-4 border-foreground shadow-brutal">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div>
+              <h1 className="font-display text-3xl leading-tight">Admin Access</h1>
+              <p className="text-muted-foreground font-medium">{loginSubtitle}</p>
+            </div>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="font-display text-lg uppercase tracking-wider block mb-2">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  autoFocus
+                  className="w-full border-4 border-foreground rounded-lg px-4 py-3 pr-14 text-lg font-medium focus:outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                </button>
+              </div>
+            </div>
+            {error && (
+              <p className="text-destructive font-bold text-base border-2 border-destructive rounded-lg px-4 py-2 bg-red-50">
+                {error}
+              </p>
+            )}
+            <Button type="submit" size="lg" className="w-full" isLoading={loading}>
+              {loading ? "Checking..." : "Unlock Dashboard"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 type NameConflict = {
@@ -73,8 +145,7 @@ function CsvUploadSection() {
     try {
       const res = await fetch(`${eventApiBase()}/admin/upload-registrations`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ csv: csvText }),
       });
       if (!res.ok) {
@@ -99,8 +170,7 @@ function CsvUploadSection() {
     try {
       await fetch(`${eventApiBase()}/admin/upload-registrations/resolve-name`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ email: conflict.email, firstName: pick.firstName, lastName: pick.lastName }),
       });
       setNameConflicts(prev => prev.filter(c => c.email !== conflict.email));
@@ -114,8 +184,7 @@ function CsvUploadSection() {
     try {
       await fetch(`${eventApiBase()}/admin/upload-registrations/accept-both`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ email: conflict.email, option1: conflict.option1, option2: conflict.option2 }),
       });
       setNameConflicts(prev => prev.filter(c => c.email !== conflict.email));
@@ -343,8 +412,7 @@ function VolunteerUploadSection() {
     try {
       const res = await fetch(`${eventApiBase()}/admin/upload-volunteers`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ rows }),
       });
       const d = await res.json() as { inserted?: number; skipped?: number; totalInDatabase?: number; error?: string; invalidRows?: number[]; roleConflicts?: RoleConflict[] };
@@ -367,8 +435,7 @@ function VolunteerUploadSection() {
     try {
       await fetch(`${eventApiBase()}/admin/upload-volunteers/resolve-role`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ firstName: conflict.firstName, lastName: conflict.lastName, roleName: chosenRoleName }),
       });
       setRoleConflicts(prev => prev.filter(c => !(c.firstName === conflict.firstName && c.lastName === conflict.lastName)));
@@ -527,7 +594,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     try {
       const res = await fetch(`${eventApiBase()}/admin/status`, {
         method: "PATCH",
-        credentials: "include",
+        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
       });
       if (!res.ok) throw new Error("Failed");
       refetch();
@@ -548,7 +615,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     setIsExporting(true);
     try {
       const res = await fetch(`${eventApiBase()}/admin/export-xlsx`, {
-        credentials: "include",
+        headers: { Authorization: `Bearer ${getAdminToken() ?? ""}` },
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const blob = await res.blob();
@@ -574,8 +641,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     try {
       await fetch(`${eventApiBase()}/admin/attendee-roles/${roleId}/trained`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
         body: JSON.stringify({ isTrained: !current }),
       });
       refetch();
@@ -585,6 +651,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   const handleLogout = () => {
+    clearAdminToken();
     onLogout();
   };
 
@@ -609,12 +676,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     if (!editingAttendee) return;
     setEditSaving(true);
     try {
-      const jsonH = { "Content-Type": "application/json" };
+      const auth = `Bearer ${getAdminToken() ?? ""}`;
+      const jsonH = { "Content-Type": "application/json", Authorization: auth };
 
       const res = await fetch(`${eventApiBase()}/admin/attendees/${editingAttendee.id}`, {
         method: "PATCH",
         headers: jsonH,
-        credentials: "include",
         body: JSON.stringify({
           firstName: editForm.firstName,
           lastName: editForm.lastName,
@@ -626,12 +693,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       for (const role of editForm.roles) {
         if (role.isDeleted && role.id) {
-          await fetch(`${eventApiBase()}/admin/attendee-roles/${role.id}`, { method: "DELETE", credentials: "include" });
+          await fetch(`${eventApiBase()}/admin/attendee-roles/${role.id}`, { method: "DELETE", headers: { Authorization: auth } });
         } else if (role.isNew) {
           await fetch(`${eventApiBase()}/admin/attendees/${editingAttendee.id}/roles`, {
             method: "POST",
             headers: jsonH,
-            credentials: "include",
             body: JSON.stringify({ roleName: role.roleName, wantsToServeToday: role.wantsToServeToday, isTrained: role.isTrained, hasServed: role.hasServed }),
           });
         } else if (role.id) {
@@ -641,7 +707,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             await fetch(`${eventApiBase()}/admin/attendee-roles/${role.id}`, {
               method: "PUT",
               headers: jsonH,
-              credentials: "include",
               body: JSON.stringify({ roleName: role.roleName, wantsToServeToday: role.wantsToServeToday, isTrained: role.isTrained, hasServed: role.hasServed }),
             });
           }
@@ -663,8 +728,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
     try {
       const res = await fetch(`${eventApiBase()}/admin/attendees`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getAdminToken() ?? ""}`,
+        },
         body: JSON.stringify({ emails: [email] }),
       });
       if (res.ok) refetch();
@@ -769,28 +836,6 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
       </header>
-
-      {/* Deactivated event banner */}
-      {eventConfig?.isActive === false && (
-        <div className="bg-yellow-400 border-b-4 border-yellow-600 px-6 py-4">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-6 h-6 text-yellow-900 flex-shrink-0" />
-              <div>
-                <p className="font-display text-xl text-yellow-900">This event is deactivated — public check-in is off.</p>
-                <p className="text-sm text-yellow-800">All data is still accessible. Reactivate to re-open check-in.</p>
-              </div>
-            </div>
-            <Button
-              onClick={handleStatusToggle}
-              disabled={statusToggling}
-              className="bg-yellow-900 hover:bg-yellow-800 text-white border-0 flex-shrink-0"
-            >
-              {statusToggling ? "Reactivating…" : "Reactivate Event"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       <main className="max-w-7xl mx-auto p-6 md:p-12 space-y-10">
 
@@ -1226,28 +1271,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 }
 
 export default function AdminDashboard() {
-  const { user, loading: authLoading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [authed, setAuthed] = useState(() => !!getAdminToken());
 
-  const canAccess =
-    !authLoading &&
-    !!user &&
-    (user.role === "superadmin" ||
-      user.role === "org_contact" ||
-      user.role === "event_manager");
+  if (!authed) {
+    return <LoginGate onLogin={() => setAuthed(true)} />;
+  }
 
-  useEffect(() => {
-    if (!authLoading && !canAccess) {
-      setLocation("/login");
-    }
-  }, [authLoading, canAccess]);
-
-  if (authLoading || !canAccess) return null;
-
-  const handleLogout = async () => {
-    await authLogout();
-    setLocation("/login");
-  };
-
-  return <Dashboard onLogout={handleLogout} />;
+  return <Dashboard onLogout={() => setAuthed(false)} />;
 }

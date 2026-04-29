@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { organizationsTable, eventsTable, attendeesTable, attendeeRolesTable, eventRolesTable } from "@workspace/db/schema";
-import { eq, sql, inArray, count, countDistinct } from "drizzle-orm";
+import { organizationsTable, eventsTable, attendeesTable, eventRolesTable } from "@workspace/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { requireUserAuth } from "./auth";
 
 const router = Router();
@@ -22,7 +22,7 @@ router.get("/:orgId", requireUserAuth, async (req: Request, res: Response): Prom
   res.json(rows[0]);
 });
 
-// GET /api/orgs/:orgId/events — list org events with check-in + volunteer counts
+// GET /api/orgs/:orgId/events — list org events with check-in counts
 router.get("/:orgId/events", requireUserAuth, async (req: Request, res: Response): Promise<void> => {
   const orgId = parseInt(req.params.orgId);
   const user = res.locals.user;
@@ -33,30 +33,16 @@ router.get("/:orgId/events", requireUserAuth, async (req: Request, res: Response
   }
 
   const events = await db.select().from(eventsTable).where(eq(eventsTable.orgId, orgId));
-  if (events.length === 0) { res.json([]); return; }
 
-  const eventIds = events.map(e => e.id);
-
-  const [totalCounts, volCounts] = await Promise.all([
-    db.select({ eventId: attendeesTable.eventId, total: count() })
-      .from(attendeesTable)
-      .where(inArray(attendeesTable.eventId, eventIds))
-      .groupBy(attendeesTable.eventId),
-    db.select({ eventId: attendeesTable.eventId, volunteers: countDistinct(attendeesTable.id) })
-      .from(attendeesTable)
-      .innerJoin(attendeeRolesTable, eq(attendeeRolesTable.attendeeId, attendeesTable.id))
-      .where(inArray(attendeesTable.eventId, eventIds))
-      .groupBy(attendeesTable.eventId),
-  ]);
-
-  const totalMap = new Map(totalCounts.map(r => [r.eventId, r.total]));
-  const volMap = new Map(volCounts.map(r => [r.eventId, r.volunteers]));
-
-  const withCounts = events.map(e => {
-    const total = totalMap.get(e.id) ?? 0;
-    const volunteers = volMap.get(e.id) ?? 0;
-    return { ...e, checkedInCount: total, volunteerCount: volunteers, attendeeCount: total - volunteers };
-  });
+  const withCounts = await Promise.all(
+    events.map(async (e) => {
+      const countRow = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(attendeesTable)
+        .where(eq(attendeesTable.eventId, e.id));
+      return { ...e, checkedInCount: countRow[0]?.count ?? 0 };
+    })
+  );
 
   res.json(withCounts);
 });
@@ -71,12 +57,10 @@ router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Respons
     return;
   }
 
-  const { name, slug, eventDate, eventDates, smsReentryEnabled, roles } = req.body as {
+  const { name, slug, eventDate, roles } = req.body as {
     name?: string;
     slug?: string;
     eventDate?: string;
-    eventDates?: string[];
-    smsReentryEnabled?: boolean;
     roles?: { roleKey: string; displayName: string }[];
   };
 
@@ -96,21 +80,13 @@ router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Respons
     return;
   }
 
-  // For multi-day events, eventDates is an array of YYYY-MM-DD strings.
-  // eventDate is the first day (display date); eventDates gates access per day.
-  const allDates = eventDates && eventDates.length > 0 ? eventDates : (eventDate ? [eventDate] : []);
-  const primaryDate = allDates[0] ? new Date(allDates[0]) : null;
-  const datesJson = allDates.length > 1 ? JSON.stringify(allDates) : null;
-
   const [event] = await db
     .insert(eventsTable)
     .values({
       name: name.trim(),
       slug: slugClean,
       orgId,
-      eventDate: primaryDate,
-      eventDates: datesJson,
-      smsReentryEnabled: smsReentryEnabled ?? false,
+      eventDate: eventDate ? new Date(eventDate) : null,
       isActive: true,
       giveawayEnabled: false,
     })

@@ -67,14 +67,7 @@ function Router() {
         )}
       </Route>
 
-      {/* Org dashboard — /org for org_contact, /org/:orgId for superadmin */}
-      <Route path="/org/:orgId">
-        {user && (user.role === "org_contact" || user.role === "superadmin") ? (
-          <OrgDashboard currentUser={user} onLogout={handleLogout} />
-        ) : (
-          <LoginPage onLogin={handleLogin} />
-        )}
-      </Route>
+      {/* Org dashboard */}
       <Route path="/org">
         {user && (user.role === "org_contact" || user.role === "superadmin") ? (
           <OrgDashboard currentUser={user} onLogout={handleLogout} />
@@ -83,8 +76,8 @@ function Router() {
         )}
       </Route>
 
-      {/* Platform admin */}
-      <Route path="/platform" component={SuperadminPage} />
+      {/* Superadmin */}
+      <Route path="/superadmin" component={SuperadminPage} />
 
       {/* Event admin */}
       <Route path="/admin" component={AdminDashboard} />

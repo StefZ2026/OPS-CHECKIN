@@ -403,25 +403,8 @@ export default function CheckInFlow() {
       <main className="flex-1 w-full max-w-5xl mx-auto p-6 md:p-12 flex flex-col justify-center">
         <AnimatePresence mode="wait" initial={false}>
 
-          {/* HOME: Event ended screen (shown when event is inactive) */}
-          {step === "home" && config?.isActive === false && (
-            <motion.div key="ended" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="w-full max-w-2xl mx-auto text-center space-y-6 py-8">
-              <div className="inline-flex items-center justify-center w-24 h-24 bg-gray-200 rounded-full border-4 border-gray-400 mb-2">
-                <AlertCircle className="w-12 h-12 text-gray-500" />
-              </div>
-              <h2 className="font-display text-4xl md:text-6xl text-gray-700">This event has ended.</h2>
-              <p className="text-xl font-medium text-muted-foreground">
-                {eventTitle} check-in is no longer available.
-              </p>
-              <p className="text-base text-muted-foreground">
-                If you believe this is an error, please contact an event organizer.
-              </p>
-            </motion.div>
-          )}
-
-          {/* HOME: Mode selection (only when event is confirmed active) */}
-          {step === "home" && config && config.isActive !== false && (
+          {/* HOME: Mode selection */}
+          {step === "home" && (
             <motion.div key="home" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
               className="w-full max-w-2xl mx-auto space-y-8">
               <div className="text-center space-y-4 mb-8">

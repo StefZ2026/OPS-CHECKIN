@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import { db } from "@workspace/db";
 import { usersTable, eventsTable } from "@workspace/db/schema";
-import { eq, or, ilike } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 router.use(cookieParser());
@@ -70,18 +70,14 @@ export function requireUserAuth(req: Request, res: Response, next: () => void): 
 router.post("/login", async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
-    res.status(400).json({ error: "Username/email and password are required" });
+    res.status(400).json({ error: "Email and password are required" });
     return;
   }
 
-  const identifier = email.trim();
   const rows = await db
     .select()
     .from(usersTable)
-    .where(or(
-      ilike(usersTable.email, identifier.toLowerCase()),
-      ilike(usersTable.username, identifier)
-    ))
+    .where(eq(usersTable.email, email.trim().toLowerCase()))
     .limit(1);
 
   const user = rows[0];
