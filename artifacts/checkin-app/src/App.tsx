@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation, Link } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -36,8 +37,15 @@ function FloatingAdminButton() {
   );
 }
 
-function Router() {
+function RedirectToRole({ user }: { user: AuthUser }) {
   const [, setLocation] = useLocation();
+  useEffect(() => {
+    redirectByRole(user, setLocation);
+  }, [user, setLocation]);
+  return null;
+}
+
+function Router() {
   const { user, loading, refetch } = useAuth();
 
   const handleLogin = (_u: AuthUser) => {
@@ -60,11 +68,7 @@ function Router() {
     <Switch>
       {/* Homepage — redirect if already logged in */}
       <Route path="/">
-        {user ? (
-          (() => { redirectByRole(user, setLocation); return null; })()
-        ) : (
-          <HomePage />
-        )}
+        {user ? <RedirectToRole user={user} /> : <HomePage />}
       </Route>
 
       {/* Static named pages — must come before /:eventSlug wildcard */}
@@ -73,11 +77,7 @@ function Router() {
 
       {/* Auth */}
       <Route path="/login">
-        {user ? (
-          (() => { redirectByRole(user, setLocation); return null; })()
-        ) : (
-          <LoginPage onLogin={handleLogin} />
-        )}
+        {user ? <RedirectToRole user={user} /> : <LoginPage onLogin={handleLogin} />}
       </Route>
 
       {/* Org dashboard */}
