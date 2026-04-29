@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation, Link } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Shield } from "lucide-react";
 import LoginPage from "@/pages/login";
 import HomePage from "@/pages/home";
 import OrgDashboard from "@/pages/org-dashboard";
@@ -23,11 +23,24 @@ const queryClient = new QueryClient({
   },
 });
 
+function FloatingAdminButton() {
+  const { user } = useAuth();
+  if (user?.role !== "superadmin") return null;
+  return (
+    <Link href="/superadmin">
+      <button className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-foreground text-white pl-3 pr-4 py-2.5 rounded-full border-2 border-primary shadow-lg hover:bg-foreground/80 font-display text-sm transition-all">
+        <Shield className="w-4 h-4 text-primary" />
+        Platform Admin
+      </button>
+    </Link>
+  );
+}
+
 function Router() {
   const [, setLocation] = useLocation();
   const { user, loading, refetch } = useAuth();
 
-  const handleLogin = (u: AuthUser) => {
+  const handleLogin = (_u: AuthUser) => {
     refetch().catch(() => {});
   };
 
@@ -99,6 +112,7 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Router />
+          <FloatingAdminButton />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

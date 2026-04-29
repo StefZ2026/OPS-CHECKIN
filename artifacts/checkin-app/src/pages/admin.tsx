@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { format } from "date-fns";
 import QRCode from "qrcode";
+import { Link } from "wouter";
 import {
   Search, Users, UserCheck, UserPlus, RefreshCw,
   ChevronUp, ChevronDown, ChevronsUpDown,
   Shield, Activity, HeartHandshake, Megaphone,
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
   Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle, Pencil, X,
-  ToggleLeft, ToggleRight,
+  ToggleLeft, ToggleRight, ArrowLeft,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
@@ -789,6 +790,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             </div>
           </div>
           <div className="flex gap-3 w-full md:w-auto flex-wrap">
+            <Link href="/org">
+              <Button
+                variant="outline"
+                className="bg-transparent border-white/40 text-white hover:bg-white/10 hover:text-white"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </Link>
             <Button
               variant="outline"
               className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white"
