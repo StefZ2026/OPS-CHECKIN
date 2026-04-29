@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Lock, Shield, Eye, EyeOff } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authLogin, authSetPassword, redirectByRole, type AuthUser } from "@/hooks/use-auth";
 import Logo from "@/components/Logo";
+import SiteShell from "@/components/SiteShell";
 
 interface Props {
   onLogin: (user: AuthUser) => void;
@@ -109,109 +110,105 @@ export default function LoginPage({ onLogin }: Props) {
 
   if (firstLogin) {
     return (
-      <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
-        <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <Logo className="w-10 h-10" />
-            <div>
-              <h1 className="font-display text-xl">Welcome, {firstLoginName}</h1>
-              <p className="text-sm text-muted-foreground">Set your password to continue</p>
+      <SiteShell>
+        <div className="flex-1 bg-foreground flex items-center justify-center p-6 min-h-[calc(100vh-8rem)]">
+          <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <Logo className="w-10 h-10" />
+              <div>
+                <h1 className="font-display text-xl">Welcome, {firstLoginName}</h1>
+                <p className="text-sm text-muted-foreground">Set your password to continue</p>
+              </div>
             </div>
+            <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-blue-800">
+              You've been added to OpsCheckIn. Please set a password to activate your account.
+            </p>
+            <form onSubmit={handleSetPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">New Password</label>
+                <PasswordInput
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">Confirm Password</label>
+                <PasswordInput
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter password"
+                  autoComplete="new-password"
+                />
+              </div>
+              {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Setting password…" : "Set Password & Sign In"}
+              </Button>
+            </form>
           </div>
-          <p className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-blue-800">
-            You've been added to OpsCheckIn. Please set a password to activate your account.
-          </p>
-          <form onSubmit={handleSetPassword} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-1">New Password</label>
-              <PasswordInput
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min. 8 characters"
-                autoComplete="new-password"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-1">Confirm Password</label>
-              <PasswordInput
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-enter password"
-                autoComplete="new-password"
-              />
-            </div>
-            {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Setting password…" : "Set Password & Sign In"}
-            </Button>
-          </form>
         </div>
-      </div>
+      </SiteShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
-      <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md p-8">
-        <div className="flex items-center gap-3 mb-8">
-          <Link href="/">
-            <Logo className="w-12 h-12 cursor-pointer" />
-          </Link>
-          <div>
-            <Link href="/">
-              <h1 className="font-display text-2xl hover:text-primary transition-colors">OpsCheckIn</h1>
-            </Link>
-            <p className="text-sm text-muted-foreground">Sign in to your account</p>
+    <SiteShell>
+      <div className="bg-foreground flex items-center justify-center p-6 min-h-[calc(100vh-8rem)]">
+        <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md p-8">
+          <div className="mb-8">
+            <h1 className="font-display text-2xl mb-1">Sign In</h1>
+            <p className="text-sm text-muted-foreground">Access your OpsCheckIn account</p>
           </div>
-        </div>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1">Email or Username</label>
-            <Input
-              type="text"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com or username"
-              autoComplete="username"
-              required
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold uppercase tracking-wider">Password</label>
-              <a
-                href="mailto:info@opscheckin.com?subject=Password%20Reset%20Request"
-                className="text-xs text-muted-foreground hover:text-primary transition-colors underline"
-              >
-                Forgot your password?
-              </a>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1">Email or Username</label>
+              <Input
+                type="text"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com or username"
+                autoComplete="username"
+                required
+              />
             </div>
-            <PasswordInput
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your password"
-              autoComplete="current-password"
-            />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold uppercase tracking-wider">Password</label>
+                <a
+                  href="mailto:info@opscheckin.com?subject=Password%20Reset%20Request"
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors underline"
+                >
+                  Forgot your password?
+                </a>
+              </div>
+              <PasswordInput
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your password"
+                autoComplete="current-password"
+              />
+            </div>
+            {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
+            <Button type="submit" className="w-full" disabled={loading}>
+              <Lock className="w-4 h-4 mr-2" />
+              {loading ? "Signing in…" : "Sign In"}
+            </Button>
+          </form>
+          <p className="text-xs text-center text-muted-foreground mt-6">
+            Checking in to an event?{" "}
+            <Link href="/" className="underline">Enter your event code</Link>
+          </p>
+          <div className="mt-4 pt-4 border-t border-gray-100 flex justify-center">
+            <Link href="/superadmin">
+              <button className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                Platform Admin access
+              </button>
+            </Link>
           </div>
-          {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            <Lock className="w-4 h-4 mr-2" />
-            {loading ? "Signing in…" : "Sign In"}
-          </Button>
-        </form>
-        <p className="text-xs text-center text-muted-foreground mt-6">
-          Checking in to an event?{" "}
-          <Link href="/" className="underline">Enter your event code</Link>
-        </p>
-        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-center">
-          <Link href="/superadmin">
-            <button className="flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-              <Shield className="w-3 h-3" />
-              Platform Admin
-            </button>
-          </Link>
         </div>
       </div>
-    </div>
+    </SiteShell>
   );
 }

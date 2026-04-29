@@ -1,9 +1,8 @@
 import { useEffect } from "react";
-import { Switch, Route, Router as WouterRouter, useLocation, Link } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Shield } from "lucide-react";
 import LoginPage from "@/pages/login";
 import HomePage from "@/pages/home";
 import OrgDashboard from "@/pages/org-dashboard";
@@ -23,23 +22,6 @@ const queryClient = new QueryClient({
     mutations: { retry: 1 },
   },
 });
-
-function FloatingAdminButton() {
-  const { user } = useAuth();
-  // Show if JWT superadmin OR if they have a superadmin session token (set when logged into /superadmin)
-  const isSuperadmin = user?.role === "superadmin"
-    || !!sessionStorage.getItem("superadmin-token")
-    || !!sessionStorage.getItem("sa_active");
-  if (!isSuperadmin) return null;
-  return (
-    <Link href="/superadmin">
-      <button className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-foreground text-white pl-3 pr-4 py-2.5 rounded-full border-2 border-primary shadow-lg hover:bg-foreground/80 font-display text-sm transition-all">
-        <Shield className="w-4 h-4 text-primary" />
-        Platform Admin
-      </button>
-    </Link>
-  );
-}
 
 function RedirectToRole({ user }: { user: AuthUser }) {
   const [, setLocation] = useLocation();
@@ -70,17 +52,13 @@ function Router() {
 
   return (
     <Switch>
-      {/* Homepage — always accessible */}
       <Route path="/" component={HomePage} />
 
-      {/* Static named pages — must come before /:eventSlug wildcard */}
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
 
-      {/* Auth */}
       <Route path="/login" component={() => <LoginPage onLogin={handleLogin} />} />
 
-      {/* Org dashboard */}
       <Route path="/org">
         {user && (user.role === "org_contact" || user.role === "superadmin") ? (
           <OrgDashboard currentUser={user} onLogout={handleLogout} />
@@ -89,13 +67,10 @@ function Router() {
         )}
       </Route>
 
-      {/* Superadmin */}
       <Route path="/superadmin" component={SuperadminPage} />
 
-      {/* Event admin */}
       <Route path="/admin" component={AdminDashboard} />
 
-      {/* Event-scoped routes — wildcard last */}
       <Route path="/:eventSlug/entry/:token" component={EntryPage} />
       <Route path="/:eventSlug/scan" component={ScanPage} />
       <Route path="/:eventSlug/admin" component={AdminDashboard} />
@@ -112,7 +87,6 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <Router />
-          <FloatingAdminButton />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

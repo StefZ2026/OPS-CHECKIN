@@ -1,18 +1,9 @@
-import { Link } from "wouter";
-import Logo from "../components/Logo";
+import SiteShell from "@/components/SiteShell";
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-background font-sans">
-      <nav className="border-b-4 border-foreground bg-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center">
-          <Link href="/">
-            <Logo className="h-9 w-auto" variant="color" />
-          </Link>
-        </div>
-      </nav>
-
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-16">
+    <SiteShell>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16">
         <h1 className="font-display text-4xl uppercase mb-2">Privacy Policy</h1>
         <p className="text-foreground/50 text-sm mb-10">Effective: April 2025</p>
 
@@ -70,15 +61,7 @@ export default function PrivacyPage() {
             </p>
           </section>
         </div>
-      </main>
-
-      <footer className="bg-foreground border-t-4 border-foreground mt-16">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 text-center">
-          <p className="text-white/50 text-xs">
-            © {new Date().getFullYear()} OpsCheckIn — Show Up. Check In. Get to Work.
-          </p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </SiteShell>
   );
 }

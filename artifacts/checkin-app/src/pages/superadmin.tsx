@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import {
-  Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, LogOut, RefreshCw,
+  Lock, Eye, EyeOff, Plus, ChevronDown, ChevronUp, RefreshCw,
   Calendar, Key, Hash, Zap, Users, Trash2, CheckCircle2, X, Pencil, QrCode, Download,
   Mail, UserPlus, ShieldCheck, Building2, ExternalLink,
 } from "lucide-react";
+import SiteShell from "@/components/SiteShell";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,7 +105,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
+    <div className="bg-foreground flex items-center justify-center p-6 min-h-[calc(100vh-4rem)]">
       <Card className="w-full max-w-md border-4 border-primary shadow-brutal-lg">
         <CardContent className="p-10">
           <div className="flex items-center gap-4 mb-8">
@@ -1277,7 +1278,11 @@ export default function SuperadminPage() {
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
 
-  if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
+  if (!authed) return (
+    <SiteShell>
+      <LoginGate onLogin={() => setAuthed(true)} />
+    </SiteShell>
+  );
 
   // Group events by org slug
   const eventsByOrg = new Map<string, EventRecord[]>();
@@ -1299,23 +1304,19 @@ export default function SuperadminPage() {
   const allOrgs = [...orgs, ...extraOrgs];
 
   return (
+    <SiteShell>
     <div className="min-h-screen bg-background">
-      <header className="bg-foreground text-white py-6 px-6 md:px-12 sticky top-0 z-20 border-b-8 border-primary">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="border-b-4 border-foreground px-6 md:px-12 py-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
-            <p className="text-lg text-gray-300 font-medium">OpsCheckIn · Platform Admin</p>
+            <h1 className="font-display text-3xl md:text-5xl">Command Center</h1>
+            <p className="text-muted-foreground font-medium">Platform Admin{superadminUsername ? ` · ${superadminUsername}` : ""}</p>
           </div>
-          <div className="flex gap-3 w-full md:w-auto flex-wrap">
-            <Button variant="outline" className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white" onClick={() => void fetchAll()} disabled={loading}>
-              <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
-            </Button>
-            <Button variant="outline" className="bg-transparent border-white/40 text-white/70 hover:bg-white/10 hover:text-white" onClick={handleLogout}>
-              <LogOut className="w-4 h-4 mr-2" />Sign Out
-            </Button>
-          </div>
+          <Button variant="outline" onClick={() => void fetchAll()} disabled={loading}>
+            <RefreshCw className={`w-5 h-5 mr-2 ${loading ? "animate-spin" : ""}`} />Refresh
+          </Button>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-7xl mx-auto p-6 md:p-12 space-y-10">
 
@@ -1490,5 +1491,6 @@ export default function SuperadminPage() {
         </div>
       </main>
     </div>
+    </SiteShell>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
-import Logo from "../components/Logo";
+import SiteShell from "@/components/SiteShell";
 
 const FEATURES = [
   {
@@ -92,22 +92,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background font-sans">
-      {/* ── Nav ── */}
-      <nav className="border-b-4 border-foreground bg-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Logo className="h-9 w-auto" variant="color" />
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="bg-foreground text-white font-display text-sm uppercase tracking-wider px-5 py-2 border-2 border-foreground shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-all"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </nav>
-
+    <SiteShell>
       {/* ── Hero ── */}
       <section className="bg-primary border-b-4 border-foreground">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
@@ -125,9 +110,7 @@ export default function HomePage() {
             that run events — from community gatherings to large-scale campaigns.
           </p>
 
-          {/* Entry cards */}
           <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
-            {/* Attendee/Volunteer */}
             <div className="bg-background border-4 border-foreground shadow-brutal p-7 text-left">
               <p className="font-display text-base uppercase tracking-widest text-foreground mb-4">
                 Attendee or Volunteer?
@@ -149,7 +132,6 @@ export default function HomePage() {
               </form>
             </div>
 
-            {/* Org / Event Manager */}
             <div className="bg-secondary border-4 border-foreground shadow-brutal p-7 text-left">
               <p className="font-display text-base uppercase tracking-widest text-foreground mb-4">
                 Event or Campaign Manager?
@@ -269,7 +251,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Dots */}
           <div className="flex justify-center gap-3 mt-8">
             {TESTIMONIALS.map((_, i) => (
               <button
@@ -300,33 +281,6 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
-
-      {/* ── Footer ── */}
-      <footer className="bg-foreground border-t-4 border-foreground">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <Logo className="h-7 w-auto" variant="white" />
-          <p className="text-white/50 text-xs text-center">
-            Show Up. Check In. Get to Work. © {new Date().getFullYear()} OpsCheckIn
-          </p>
-          <div className="flex gap-4 text-xs">
-            <a
-              href="mailto:info@opscheckin.com"
-              className="text-white/60 hover:text-white transition-colors"
-            >
-              Contact
-            </a>
-            <Link href="/privacy" className="text-white/60 hover:text-white transition-colors">
-              Privacy
-            </Link>
-            <Link href="/terms" className="text-white/60 hover:text-white transition-colors">
-              Terms
-            </Link>
-            <Link href="/superadmin" className="text-white/30 hover:text-white/60 transition-colors">
-              Platform Admin
-            </Link>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </SiteShell>
   );
 }
