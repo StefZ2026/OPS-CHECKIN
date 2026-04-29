@@ -5,8 +5,24 @@
 import { pool } from "@workspace/db";
 import seedConfig from "./seed-config";
 
+const SEED_RETRIES = 8;
+const SEED_RETRY_DELAY_MS = 3000;
+
+async function waitForDb(): Promise<import("pg").PoolClient> {
+  for (let attempt = 1; attempt <= SEED_RETRIES; attempt++) {
+    try {
+      return await pool.connect();
+    } catch (err) {
+      if (attempt === SEED_RETRIES) throw err;
+      console.warn(`[seed] DB not ready (attempt ${attempt}/${SEED_RETRIES}), retrying in ${SEED_RETRY_DELAY_MS}ms…`);
+      await new Promise((r) => setTimeout(r, SEED_RETRY_DELAY_MS));
+    }
+  }
+  throw new Error("DB unreachable after all retries");
+}
+
 export async function runSeed(): Promise<void> {
-  const client = await pool.connect();
+  const client = await waitForDb();
   try {
     const org = seedConfig;
 

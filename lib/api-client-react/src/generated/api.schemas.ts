@@ -44,6 +44,10 @@ export const AttendeeRoleRoleName = {
   de_escalator: "de_escalator",
   chant_lead: "chant_lead",
   information_services: "information_services",
+  registration: "registration",
+  emcee: "emcee",
+  merchandise_sales: "merchandise_sales",
+  facilitator: "facilitator",
 } as const;
 
 export interface AttendeeRole {

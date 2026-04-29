@@ -9,6 +9,7 @@ import {
   Download, LogOut, Lock, Upload, QrCode, Printer, CheckCircle2,
   Eye, EyeOff, Trash2, Info, HardHat, AlertTriangle, Pencil, X,
   ToggleLeft, ToggleRight, ArrowLeft,
+  ClipboardList, Mic, ShoppingBag, Presentation,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useAttendees } from "@/hooks/use-attendees";
@@ -25,14 +26,21 @@ type SortKey = "name" | "email" | "type" | "checkedInAt";
 type SortDir = "asc" | "desc";
 
 const ROLE_META: Record<AttendeeRoleRoleName, { label: string; Icon: React.ElementType; color: string }> = {
-  safety_marshal:       { label: "Safety Marshal",       Icon: Shield,        color: "bg-blue-100 text-blue-800 border-blue-800" },
-  medic:                { label: "Medic",                Icon: Activity,      color: "bg-red-100 text-red-800 border-red-800" },
-  de_escalator:         { label: "De-escalator",         Icon: HeartHandshake,color: "bg-purple-100 text-purple-800 border-purple-800" },
-  chant_lead:           { label: "Chant Lead",           Icon: Megaphone,     color: "bg-yellow-100 text-yellow-800 border-yellow-800" },
-  information_services: { label: "Info Services",        Icon: Info,          color: "bg-green-100 text-green-800 border-green-800" },
+  safety_marshal:       { label: "Safety Marshal",    Icon: Shield,        color: "bg-blue-100 text-blue-800 border-blue-800" },
+  medic:                { label: "Medic",              Icon: Activity,      color: "bg-red-100 text-red-800 border-red-800" },
+  de_escalator:         { label: "De-escalator",       Icon: HeartHandshake,color: "bg-purple-100 text-purple-800 border-purple-800" },
+  chant_lead:           { label: "Chant Lead",         Icon: Megaphone,     color: "bg-yellow-100 text-yellow-800 border-yellow-800" },
+  information_services: { label: "Info Services",      Icon: Info,          color: "bg-green-100 text-green-800 border-green-800" },
+  registration:         { label: "Registration",       Icon: ClipboardList, color: "bg-teal-100 text-teal-800 border-teal-800" },
+  emcee:                { label: "Emcee",              Icon: Mic,           color: "bg-orange-100 text-orange-800 border-orange-800" },
+  merchandise_sales:    { label: "Merchandise Sales",  Icon: ShoppingBag,   color: "bg-pink-100 text-pink-800 border-pink-800" },
+  facilitator:          { label: "Facilitator",        Icon: Presentation,  color: "bg-indigo-100 text-indigo-800 border-indigo-800" },
 };
 
-const ALL_ROLES: AttendeeRoleRoleName[] = ["safety_marshal", "medic", "de_escalator", "chant_lead", "information_services"];
+const ALL_ROLES: AttendeeRoleRoleName[] = [
+  "safety_marshal", "medic", "de_escalator", "chant_lead", "information_services",
+  "registration", "emcee", "merchandise_sales", "facilitator",
+];
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <ChevronsUpDown className="w-4 h-4 opacity-40 inline ml-1" />;

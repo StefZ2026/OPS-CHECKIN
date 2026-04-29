@@ -10,10 +10,15 @@ import { useToast } from "@/hooks/use-toast";
 import SiteShell from "@/components/SiteShell";
 
 const DEFAULT_ROLES = [
-  { roleKey: "safety_marshal", displayName: "Safety Marshal" },
-  { roleKey: "medic", displayName: "Medic" },
-  { roleKey: "de_escalator", displayName: "De-Escalator" },
-  { roleKey: "chant_lead", displayName: "Chant Lead" },
+  { roleKey: "safety_marshal",    displayName: "Safety Marshal" },
+  { roleKey: "medic",             displayName: "Medic" },
+  { roleKey: "de_escalator",      displayName: "De-Escalator" },
+  { roleKey: "chant_lead",        displayName: "Chant Lead" },
+  { roleKey: "information_services", displayName: "Info Services" },
+  { roleKey: "registration",      displayName: "Registration" },
+  { roleKey: "emcee",             displayName: "Emcee" },
+  { roleKey: "merchandise_sales", displayName: "Merchandise Sales" },
+  { roleKey: "facilitator",       displayName: "Facilitator" },
 ];
 
 interface OrgEvent {
