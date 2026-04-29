@@ -294,6 +294,32 @@ router.post("/superadmin/orgs", requireSuperadminAuth, async (req, res) => {
   }
 });
 
+// Update an existing organization
+router.patch("/superadmin/orgs/:id", requireSuperadminAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid org id" }); return; }
+  const { name, slug } = req.body as { name?: string; slug?: string };
+  if (!name?.trim()) { res.status(400).json({ error: "name is required" }); return; }
+  const updates: Partial<typeof organizationsTable.$inferInsert> = { name: name.trim() };
+  if (slug?.trim()) {
+    if (!/^[a-z0-9-]+$/.test(slug.trim())) {
+      res.status(400).json({ error: "slug must be lowercase letters, numbers, and hyphens only" });
+      return;
+    }
+    updates.slug = slug.trim();
+  }
+  try {
+    const [org] = await db.update(organizationsTable).set(updates).where(eq(organizationsTable.id, id)).returning();
+    if (!org) { res.status(404).json({ error: "Organization not found" }); return; }
+    res.json({ org: { id: org.id, name: org.name, slug: org.slug, eventCount: 0, createdAt: org.createdAt } });
+  } catch (err) {
+    const pgCode = (err as { code?: string }).code ?? (err as { cause?: { code?: string } }).cause?.code;
+    if (pgCode === "23505") { res.status(409).json({ error: `Slug already in use` }); return; }
+    console.error("PATCH /superadmin/orgs error:", err);
+    res.status(500).json({ error: "Failed to update organization" });
+  }
+});
+
 // ── Superadmin: Event Management ──────────────────────────────────────────────
 // Protected by the dedicated SUPERADMIN_PASSWORD env var, separate from ADMIN_PASSWORD.
 
