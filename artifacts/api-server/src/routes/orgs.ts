@@ -71,10 +71,11 @@ router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Respons
     return;
   }
 
-  const { name, slug, eventDate, roles } = req.body as {
+  const { name, slug, eventDate, eventDates, roles } = req.body as {
     name?: string;
     slug?: string;
     eventDate?: string;
+    eventDates?: string[];
     roles?: { roleKey: string; displayName: string }[];
   };
 
