@@ -1542,7 +1542,6 @@ export default function SuperadminPage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <h1 className="font-display text-3xl md:text-5xl mb-1 text-white">Command Center</h1>
-            <p className="text-lg text-gray-300 font-medium">OpsCheckIn · Platform Admin</p>
           </div>
           <div className="flex flex-col items-end gap-2 w-full md:w-auto">
             <div className="flex gap-3 flex-wrap justify-end">

@@ -343,7 +343,6 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
             <Logo className="w-9 h-9" />
             <div>
               <h1 className="font-display text-2xl">{org?.name ?? "Organization"}</h1>
-              <p className="text-gray-400 text-sm">{currentUser.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
