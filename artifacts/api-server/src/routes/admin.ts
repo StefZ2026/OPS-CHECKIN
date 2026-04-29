@@ -593,9 +593,13 @@ router.get("/superadmin/me", requireSuperadminAuth, (req, res) => {
   res.json({ username: process.env.SUPERADMIN_USERNAME ?? "Platform Admin" });
 });
 
+function eventToken(adminPassword: string): string {
+  return createHash("sha256").update(adminPassword + ":icu-checkin-2026").digest("hex");
+}
+
 // POST /api/superadmin/impersonate — issue a JWT session for any platform user
 router.post("/superadmin/impersonate", requireSuperadminAuth, async (req, res) => {
-  const { userId } = req.body as { userId?: number };
+  const { userId, eventSlug: reqEventSlug } = req.body as { userId?: number; eventSlug?: string };
   if (!userId) {
     res.status(400).json({ error: "userId required" });
     return;
@@ -630,7 +634,14 @@ router.post("/superadmin/impersonate", requireSuperadminAuth, async (req, res) =
     const redirect = user.role === "event_manager" && eventSlug
       ? `/${eventSlug}/admin`
       : "/org";
-    res.json({ redirect, adminToken: expectedToken(), eventSlug });
+    // Look up the event admin token for the target event
+    const targetSlug = reqEventSlug ?? eventSlug;
+    let adminToken: string | null = null;
+    if (targetSlug) {
+      const evRows = await db.select({ adminPassword: eventsTable.adminPassword }).from(eventsTable).where(eq(eventsTable.slug, targetSlug)).limit(1);
+      if (evRows[0]?.adminPassword) adminToken = eventToken(evRows[0].adminPassword);
+    }
+    res.json({ redirect, adminToken, eventSlug: targetSlug });
   } catch (err) {
     console.error("POST /superadmin/impersonate error:", err);
     res.status(500).json({ error: "Failed to impersonate user" });

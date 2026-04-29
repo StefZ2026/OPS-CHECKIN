@@ -1213,10 +1213,11 @@ export default function SuperadminPage() {
   const impersonateAndOpen = async (userId: number, path: string) => {
     const token = getSuperadminToken() ?? "";
     try {
+      const slug = path.split("/").filter(Boolean)[0] ?? null;
       const res = await fetch("/api/superadmin/impersonate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, eventSlug: slug }),
         credentials: "include",
       });
       if (!res.ok) {
