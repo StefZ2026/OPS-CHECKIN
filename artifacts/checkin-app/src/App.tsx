@@ -26,7 +26,9 @@ const queryClient = new QueryClient({
 
 function FloatingAdminButton() {
   const { user } = useAuth();
-  if (user?.role !== "superadmin") return null;
+  // Show if JWT superadmin OR if they have a superadmin session token (set when logged into /superadmin)
+  const isSuperadmin = user?.role === "superadmin" || !!sessionStorage.getItem("superadmin-token");
+  if (!isSuperadmin) return null;
   return (
     <Link href="/superadmin">
       <button className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-foreground text-white pl-3 pr-4 py-2.5 rounded-full border-2 border-primary shadow-lg hover:bg-foreground/80 font-display text-sm transition-all">

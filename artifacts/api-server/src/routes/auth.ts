@@ -74,6 +74,26 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  // Check superadmin credentials first (username OR email match)
+  const saUser = process.env.SUPERADMIN_USERNAME;
+  const saPass = process.env.SUPERADMIN_PASSWORD;
+  if (saUser && saPass &&
+      email.trim().toLowerCase() === saUser.trim().toLowerCase() &&
+      password.trim() === saPass.trim()) {
+    const payload: AuthPayload = {
+      userId: 0,
+      email: saUser,
+      name: "Platform Admin",
+      role: "superadmin",
+      orgId: null,
+      eventId: null,
+      eventSlug: null,
+    };
+    res.cookie(COOKIE_NAME, signToken(payload), COOKIE_OPTS);
+    res.json({ ok: true, user: payload });
+    return;
+  }
+
   const rows = await db
     .select()
     .from(usersTable)
@@ -82,7 +102,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 
   const user = rows[0];
   if (!user) {
-    res.status(401).json({ error: "Invalid email or password" });
+    res.status(401).json({ error: "Invalid credentials" });
     return;
   }
 
