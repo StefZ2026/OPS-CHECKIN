@@ -589,6 +589,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [editSaving, setEditSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [statusToggling, setStatusToggling] = useState(false);
+  const [smsReentryToggling, setSmsReentryToggling] = useState(false);
 
   const handleStatusToggle = async () => {
     if (!window.confirm(
@@ -653,6 +654,30 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       refetch();
     } finally {
       setTogglingRoleId(null);
+    }
+  };
+
+  const handleSmsReentryToggle = async () => {
+    const next = !eventConfig?.smsReentryEnabled;
+    if (!window.confirm(
+      next
+        ? "Enable multi-day re-entry? Attendees who provide a phone number will receive an SMS with a QR code link when they check in. Gate staff can scan these to admit attendees on subsequent days."
+        : "Disable multi-day re-entry? New check-ins will no longer receive an SMS QR code."
+    )) return;
+    setSmsReentryToggling(true);
+    try {
+      const res = await fetch(`${eventApiBase()}/admin/sms-reentry`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAdminToken() ?? ""}` },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      refetch();
+      toast({ title: next ? "Multi-day re-entry enabled" : "Multi-day re-entry disabled" });
+    } catch {
+      toast({ title: "Could not update setting", variant: "destructive" });
+    } finally {
+      setSmsReentryToggling(false);
     }
   };
 
@@ -881,6 +906,73 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <p className="font-display text-6xl md:text-7xl">{isLoading ? "—" : data?.walkInCount}</p>
               </div>
               <UserPlus className="w-16 h-16 opacity-20" />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Multi-Day Re-Entry + Gate Scanner */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="border-4 border-foreground shadow-brutal">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 bg-primary text-white rounded-lg border-2 border-foreground">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <h3 className="font-display text-lg">Multi-Day Re-Entry</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                When enabled, attendees who provide a phone number receive an SMS with a personal QR code on day one. Gate staff scan these on subsequent days to admit returning attendees.
+              </p>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border-2 border-foreground mb-4">
+                <span className="font-bold text-sm">
+                  {eventConfig?.smsReentryEnabled ? "Enabled" : "Disabled"}
+                </span>
+                <Button
+                  size="sm"
+                  variant={eventConfig?.smsReentryEnabled ? "outline" : "default"}
+                  onClick={() => void handleSmsReentryToggle()}
+                  isLoading={smsReentryToggling}
+                >
+                  {eventConfig?.smsReentryEnabled
+                    ? <><ToggleRight className="w-4 h-4 mr-1.5" />Turn Off</>
+                    : <><ToggleLeft className="w-4 h-4 mr-1.5" />Turn On</>
+                  }
+                </Button>
+              </div>
+              {eventConfig?.smsReentryEnabled && (
+                <p className="text-xs text-green-700 font-medium bg-green-50 border border-green-300 rounded-lg px-3 py-2">
+                  Active — new check-ins with a phone number will receive an SMS QR code.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-4 border-foreground shadow-brutal">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 bg-foreground text-white rounded-lg border-2 border-foreground">
+                  <Eye className="w-5 h-5" />
+                </div>
+                <h3 className="font-display text-lg">Gate Scanner</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Open the camera-based scanner on a gate staff device. Point it at an attendee's re-entry QR code to instantly verify and admit them.
+              </p>
+              <div className="flex flex-col gap-2">
+                <a
+                  href={`/${getEventSlug()}/scan`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline" className="w-full">
+                    <QrCode className="w-4 h-4 mr-2" />
+                    Open Gate Scanner
+                  </Button>
+                </a>
+                <p className="text-xs text-muted-foreground text-center">
+                  Opens at <span className="font-mono">/{getEventSlug()}/scan</span> — share this link with gate staff
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>

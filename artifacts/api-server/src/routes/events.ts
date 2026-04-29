@@ -129,6 +129,7 @@ router.get("/config", async (_req: Request, res: Response): Promise<void> => {
       eventDate: event.eventDate,
       giveawayEnabled: event.giveawayEnabled,
       isActive: event.isActive,
+      smsReentryEnabled: event.smsReentryEnabled,
       roles: roles.map((r) => ({
         key: r.roleKey,
         displayName: r.displayName,
@@ -891,6 +892,27 @@ router.patch("/admin/status", requireEventAuth, async (_req: Request, res: Respo
   } catch (err) {
     console.error("PATCH /admin/status error:", err);
     res.status(500).json({ error: "Failed to update status" });
+  }
+});
+
+// ── Admin: toggle SMS re-entry QR code feature ───────────────────────────────
+router.patch("/admin/sms-reentry", requireEventAuth, async (req: Request, res: Response): Promise<void> => {
+  const event = res.locals.event;
+  const { enabled } = req.body as { enabled?: boolean };
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled (boolean) is required" });
+    return;
+  }
+  try {
+    const updated = await db
+      .update(eventsTable)
+      .set({ smsReentryEnabled: enabled })
+      .where(eq(eventsTable.id, event.id))
+      .returning({ smsReentryEnabled: eventsTable.smsReentryEnabled });
+    res.json({ smsReentryEnabled: updated[0].smsReentryEnabled });
+  } catch (err) {
+    console.error("PATCH /admin/sms-reentry error:", err);
+    res.status(500).json({ error: "Failed to update SMS re-entry setting" });
   }
 });
 

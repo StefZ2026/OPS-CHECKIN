@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Calendar, Users, ChevronRight, Plus, ChevronDown, ChevronUp, Hash } from "lucide-react";
+import { Calendar, Users, ChevronRight, Plus, ChevronDown, ChevronUp, Hash, Settings, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ interface OrgInfo {
   slug: string;
   contactName: string | null;
   contactEmail: string | null;
+  logoUrl: string | null;
 }
 
 interface Props {
@@ -213,9 +214,28 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
       <div className="bg-gray-50 min-h-full">
         <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
 
-          <div>
-            <h2 className="font-display text-4xl mb-1">{org?.name ?? "Your Organization"}</h2>
-            <p className="text-muted-foreground text-sm font-medium">{currentUser.name}</p>
+          <div className="flex items-start gap-5">
+            {org?.logoUrl ? (
+              <img
+                src={org.logoUrl}
+                alt={org.name}
+                className="w-20 h-20 rounded-2xl object-contain border-4 border-foreground shadow-brutal flex-shrink-0 bg-white"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-2xl border-4 border-foreground shadow-brutal bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-8 h-8 text-muted-foreground" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h2 className="font-display text-4xl mb-1">{org?.name ?? "Your Organization"}</h2>
+              <p className="text-muted-foreground text-sm font-medium">{currentUser.name}</p>
+            </div>
+            <Link href="/org/settings">
+              <Button variant="outline" size="sm" className="flex-shrink-0">
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </Button>
+            </Link>
           </div>
 
           <div className="h-px bg-foreground/10" />

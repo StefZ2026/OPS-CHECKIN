@@ -14,6 +14,7 @@ export type EventConfig = {
   eventDate: string | null;
   giveawayEnabled: boolean;
   isActive: boolean;
+  smsReentryEnabled: boolean;
   roles: EventRole[];
 };
 

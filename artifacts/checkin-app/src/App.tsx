@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import LoginPage from "@/pages/login";
 import HomePage from "@/pages/home";
 import OrgDashboard from "@/pages/org-dashboard";
+import OrgSettings from "@/pages/org-settings";
 import CheckInFlow from "@/pages/checkin";
 import AdminDashboard from "@/pages/admin";
 import SuperadminPage from "@/pages/superadmin";
@@ -58,6 +59,14 @@ function Router() {
       <Route path="/terms" component={TermsPage} />
 
       <Route path="/login" component={() => <LoginPage onLogin={handleLogin} />} />
+
+      <Route path="/org/settings">
+        {user && (user.role === "org_contact" || user.role === "superadmin") ? (
+          <OrgSettings currentUser={user} />
+        ) : (
+          <LoginPage onLogin={handleLogin} />
+        )}
+      </Route>
 
       <Route path="/org">
         {user && (user.role === "org_contact" || user.role === "superadmin") ? (

@@ -11,7 +11,6 @@ router.get("/:orgId", requireUserAuth, async (req: Request, res: Response): Prom
   const orgId = parseInt(req.params.orgId);
   const user = res.locals.user;
 
-  // Only allow access to their own org (or superadmin)
   if (user.role !== "superadmin" && user.orgId !== orgId) {
     res.status(403).json({ error: "Access denied" });
     return;
@@ -20,6 +19,70 @@ router.get("/:orgId", requireUserAuth, async (req: Request, res: Response): Prom
   const rows = await db.select().from(organizationsTable).where(eq(organizationsTable.id, orgId)).limit(1);
   if (!rows[0]) { res.status(404).json({ error: "Org not found" }); return; }
   res.json(rows[0]);
+});
+
+// PATCH /api/orgs/:orgId/settings — update org profile (org_contact or superadmin)
+router.patch("/:orgId/settings", requireUserAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = parseInt(req.params.orgId);
+  const user = res.locals.user;
+
+  if (user.role !== "superadmin" && user.orgId !== orgId) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  const {
+    name, contactName, contactEmail,
+    phone, address, city, state, zip,
+    website, instagramUrl, twitterUrl, facebookUrl,
+    logoUrl,
+  } = req.body as Partial<{
+    name: string; contactName: string; contactEmail: string;
+    phone: string; address: string; city: string; state: string; zip: string;
+    website: string; instagramUrl: string; twitterUrl: string; facebookUrl: string;
+    logoUrl: string;
+  }>;
+
+  // At least one field required
+  const hasAnyField = [name, contactName, contactEmail, phone, address, city, state, zip, website, instagramUrl, twitterUrl, facebookUrl, logoUrl].some((v) => v !== undefined);
+  if (!hasAnyField) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
+  if (name !== undefined && !name.trim()) {
+    res.status(400).json({ error: "Name cannot be empty" });
+    return;
+  }
+
+  const patch: Record<string, string | null> = {};
+  if (name !== undefined) patch.name = name.trim();
+  if (contactName !== undefined) patch.contactName = contactName.trim() || null;
+  if (contactEmail !== undefined) patch.contactEmail = contactEmail.trim().toLowerCase() || null;
+  if (phone !== undefined) patch.phone = phone.trim() || null;
+  if (address !== undefined) patch.address = address.trim() || null;
+  if (city !== undefined) patch.city = city.trim() || null;
+  if (state !== undefined) patch.state = state.trim() || null;
+  if (zip !== undefined) patch.zip = zip.trim() || null;
+  if (website !== undefined) patch.website = website.trim() || null;
+  if (instagramUrl !== undefined) patch.instagramUrl = instagramUrl.trim() || null;
+  if (twitterUrl !== undefined) patch.twitterUrl = twitterUrl.trim() || null;
+  if (facebookUrl !== undefined) patch.facebookUrl = facebookUrl.trim() || null;
+  if (logoUrl !== undefined) patch.logoUrl = logoUrl || null;
+
+  try {
+    const [updated] = await db
+      .update(organizationsTable)
+      .set(patch)
+      .where(eq(organizationsTable.id, orgId))
+      .returning();
+
+    if (!updated) { res.status(404).json({ error: "Org not found" }); return; }
+    res.json(updated);
+  } catch (err) {
+    console.error("PATCH /orgs/:orgId/settings error:", err);
+    res.status(500).json({ error: "Failed to update org settings" });
+  }
 });
 
 // GET /api/orgs/:orgId/events — list org events with check-in counts

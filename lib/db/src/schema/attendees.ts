@@ -12,6 +12,16 @@ export const organizationsTable = pgTable("organizations", {
   mobilizeApiKey: text("mobilize_api_key"),
   contactName: text("contact_name"),
   contactEmail: text("contact_email"),
+  phone: text("phone"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+  website: text("website"),
+  instagramUrl: text("instagram_url"),
+  twitterUrl: text("twitter_url"),
+  facebookUrl: text("facebook_url"),
+  logoUrl: text("logo_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
