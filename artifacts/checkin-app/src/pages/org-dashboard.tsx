@@ -247,7 +247,7 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
   const handleLogout = async () => {
     await authLogout();
     onLogout();
-    setLocation("/login");
+    setLocation("/");
   };
 
   const handleEventCreated = (event: OrgEvent) => {
@@ -260,7 +260,9 @@ export default function OrgDashboard({ currentUser, onLogout }: Props) {
       <header className="bg-foreground text-white px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Logo className="w-9 h-9" />
+            <Link href="/">
+              <Logo className="w-9 h-9 cursor-pointer" />
+            </Link>
             <div>
               <h1 className="font-display text-2xl">{org?.name ?? "Organization"}</h1>
               <p className="text-gray-400 text-sm">{currentUser.name}</p>

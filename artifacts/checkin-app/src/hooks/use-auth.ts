@@ -41,6 +41,8 @@ export async function authSetPassword(email: string, password: string) {
 
 export async function authLogout() {
   await apiFetch("/api/auth/logout", { method: "POST" });
+  sessionStorage.removeItem("sa_active");
+  sessionStorage.removeItem("superadmin-token");
 }
 
 export function redirectByRole(user: AuthUser, setLocation: (to: string) => void) {

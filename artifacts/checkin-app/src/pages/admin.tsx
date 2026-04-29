@@ -108,6 +108,11 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
               {loading ? "Checking..." : "Unlock Dashboard"}
             </Button>
           </form>
+          <div className="mt-6 text-center">
+            <Link href="/org" className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1">
+              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

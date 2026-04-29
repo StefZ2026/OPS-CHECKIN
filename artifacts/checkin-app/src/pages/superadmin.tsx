@@ -94,6 +94,7 @@ function LoginGate({ onLogin }: { onLogin: () => void }) {
     try {
       const token = await loginSuperadmin(username.trim(), password);
       setSuperadminToken(token);
+      sessionStorage.setItem("sa_active", "1");
       onLogin();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid credentials. Try again.");
@@ -1222,6 +1223,7 @@ export default function SuperadminPage() {
         alert(err.error ?? "Failed to open dashboard");
         return;
       }
+      sessionStorage.setItem("sa_active", "1");
       window.location.href = path;
     } catch {
       alert("Network error — could not open dashboard");

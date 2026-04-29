@@ -27,7 +27,9 @@ const queryClient = new QueryClient({
 function FloatingAdminButton() {
   const { user } = useAuth();
   // Show if JWT superadmin OR if they have a superadmin session token (set when logged into /superadmin)
-  const isSuperadmin = user?.role === "superadmin" || !!sessionStorage.getItem("superadmin-token");
+  const isSuperadmin = user?.role === "superadmin"
+    || !!sessionStorage.getItem("superadmin-token")
+    || !!sessionStorage.getItem("sa_active");
   if (!isSuperadmin) return null;
   return (
     <Link href="/superadmin">
@@ -68,19 +70,15 @@ function Router() {
 
   return (
     <Switch>
-      {/* Homepage — redirect if already logged in */}
-      <Route path="/">
-        {user ? <RedirectToRole user={user} /> : <HomePage />}
-      </Route>
+      {/* Homepage — always accessible */}
+      <Route path="/" component={HomePage} />
 
       {/* Static named pages — must come before /:eventSlug wildcard */}
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
 
       {/* Auth */}
-      <Route path="/login">
-        {user ? <RedirectToRole user={user} /> : <LoginPage onLogin={handleLogin} />}
-      </Route>
+      <Route path="/login" component={() => <LoginPage onLogin={handleLogin} />} />
 
       {/* Org dashboard */}
       <Route path="/org">

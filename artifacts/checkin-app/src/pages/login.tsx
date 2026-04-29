@@ -75,6 +75,7 @@ export default function LoginPage({ onLogin }: Props) {
         return;
       }
       const user = data.user as AuthUser;
+      if (user.role === "superadmin") sessionStorage.setItem("sa_active", "1");
       onLogin(user);
       redirectByRole(user, setLocation);
     } catch {
@@ -153,9 +154,13 @@ export default function LoginPage({ onLogin }: Props) {
     <div className="min-h-screen bg-foreground flex items-center justify-center p-6">
       <div className="bg-white border-4 border-foreground rounded-2xl shadow-brutal-lg w-full max-w-md p-8">
         <div className="flex items-center gap-3 mb-8">
-          <Logo className="w-12 h-12" />
+          <Link href="/">
+            <Logo className="w-12 h-12 cursor-pointer" />
+          </Link>
           <div>
-            <h1 className="font-display text-2xl">OpsCheckIn</h1>
+            <Link href="/">
+              <h1 className="font-display text-2xl hover:text-primary transition-colors">OpsCheckIn</h1>
+            </Link>
             <p className="text-sm text-muted-foreground">Sign in to your account</p>
           </div>
         </div>
