@@ -770,6 +770,28 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
+      {/* Deactivated event banner */}
+      {eventConfig?.isActive === false && (
+        <div className="bg-yellow-400 border-b-4 border-yellow-600 px-6 py-4">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-6 h-6 text-yellow-900 flex-shrink-0" />
+              <div>
+                <p className="font-display text-xl text-yellow-900">This event is deactivated — public check-in is off.</p>
+                <p className="text-sm text-yellow-800">All data is still accessible. Reactivate to re-open check-in.</p>
+              </div>
+            </div>
+            <Button
+              onClick={handleStatusToggle}
+              disabled={statusToggling}
+              className="bg-yellow-900 hover:bg-yellow-800 text-white border-0 flex-shrink-0"
+            >
+              {statusToggling ? "Reactivating…" : "Reactivate Event"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto p-6 md:p-12 space-y-10">
 
         {/* Attendance Stats */}

@@ -48,10 +48,16 @@ router.use(async (req: Request, res: Response, next: NextFunction): Promise<void
     // Inactive events block public check-in routes, but allow:
     // - /admin/* (event managers need full access to attendee data/exports)
     // - /config (admin UI fetches this to display event name/status)
+    // - any authenticated user (org_contact, event_manager, superadmin) — they can
+    //   always view their event data; requireEventAuth handles proper role checks
     const isAdminOrConfig = req.path.startsWith("/admin") || req.path === "/config";
     if (!rows[0].event.isActive && !isAdminOrConfig) {
-      res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — re-entry is no longer permitted." });
-      return;
+      const jwtToken = req.cookies?.auth_token as string | undefined;
+      const isAuthenticated = jwtToken ? !!verifyToken(jwtToken) : false;
+      if (!isAuthenticated) {
+        res.status(403).json({ ok: false, state: "NOT_COVERED", error: "This event has ended — check-in is no longer available." });
+        return;
+      }
     }
     // For multi-day events: today must be one of the scheduled event dates.
     // Single-day events (eventDates null) rely solely on isActive above.
