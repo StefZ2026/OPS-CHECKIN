@@ -17,3 +17,15 @@ id = "N_cn2d6cu70zH6Mp7HnDk"
 uri = "file://exports/replit-dev-backup.tar.gz"
 type = "unspecified"
 title = "Replit Dev Environment Backup (same data, app connection)"
+
+[[outputs]]
+id = "JGI26C5B4M_ku6tMwXIth"
+uri = "file://exports/PRODUCTION-full-backup.tar.gz"
+type = "unspecified"
+title = "PRODUCTION — Live site code (pre-rollback) + Neon database data"
+
+[[outputs]]
+id = "R8GiNSBcHwP1ypdeXxHvv"
+uri = "file://exports/DEVELOPMENT-full-backup.tar.gz"
+type = "unspecified"
+title = "DEVELOPMENT — Current code (Supabase) + all 230 attendees + migration guide"

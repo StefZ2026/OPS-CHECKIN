@@ -1,0 +1,33 @@
+This is really helpful context. Here's what I'm seeing architecturally, and then I have a few questions that will change the scope:
+
+The structure I'd propose:
+
+Organization (ICU)
+  └── Event: NK3 (March 28th) — existing data migrated here
+  └── Event: Building Bridges #1 (Candidate A, Date X)
+  └── Event: Building Bridges #2 (Candidate B, Date Y)
+  └── Event: ...
+
+Each event gets its own:
+
+Unique URL slug (/bb-cafe-1/checkin, /nk3/checkin)
+Admin password (for the event manager)
+Pre-reg list (Mobilize event ID + API key, OR uploaded CSV)
+Volunteer roles (configured per event — no more hardcoded list)
+Giveaway on/off toggle
+All NK3 data stays exactly as-is, just tagged to the NK3 event. Nothing moves, nothing breaks.
+
+The one significant technical change underneath: volunteer role names are currently hardcoded in the database as an enum (safety_marshal, medic, etc.). To make roles configurable per event, I'd need to change that to plain text. The data stays identical — it just unlocks "Canvasser", "Greeter", "Timekeeper", whatever each event needs.
+
+Three questions before I plan the work:
+
+Building Bridges Cafe Series — is each session (different candidate, different date) a fully separate event with its own check-in URL and attendee list? Or one event with multiple time slots?
+
+NK3 — should it stay live and accessible as a historical record, or is that data only needed for the export you already ran?
+
+Mobilize — does ICU use one API key across all their events, or does each event have its own? (This affects where we store the credential.)
+
+each event is different
+NK3 should stay live and accessible
+ICU uses one API key for mobilize. different events links for each mobilize event (so we may need to program in which event so it knows which event to access the registration list for), but one API key. The reason this didn't work is that NK3 was an exception. NK events are run out of our natonal office and used National's mobilize to register attendees - so our API key wouldn't have been helpful.
+Also - my goal is to extend usage of this app to other indivisible groups - and to other organizations - possibly the democratic party. So to be able to eventually sell this as a subscription product - but for now - I'm starting small

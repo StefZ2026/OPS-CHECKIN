@@ -1,0 +1,109 @@
+import { Router, type Request, type Response } from "express";
+import { db } from "@workspace/db";
+import { organizationsTable, eventsTable, attendeesTable, eventRolesTable } from "@workspace/db/schema";
+import { eq, sql } from "drizzle-orm";
+import { requireUserAuth } from "./auth";
+
+const router = Router();
+
+// GET /api/orgs/:orgId — get org info (auth required)
+router.get("/:orgId", requireUserAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = parseInt(req.params.orgId);
+  const user = res.locals.user;
+
+  // Only allow access to their own org (or superadmin)
+  if (user.role !== "superadmin" && user.orgId !== orgId) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  const rows = await db.select().from(organizationsTable).where(eq(organizationsTable.id, orgId)).limit(1);
+  if (!rows[0]) { res.status(404).json({ error: "Org not found" }); return; }
+  res.json(rows[0]);
+});
+
+// GET /api/orgs/:orgId/events — list org events with check-in counts
+router.get("/:orgId/events", requireUserAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = parseInt(req.params.orgId);
+  const user = res.locals.user;
+
+  if (user.role !== "superadmin" && user.orgId !== orgId) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  const events = await db.select().from(eventsTable).where(eq(eventsTable.orgId, orgId));
+
+  const withCounts = await Promise.all(
+    events.map(async (e) => {
+      const countRow = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(attendeesTable)
+        .where(eq(attendeesTable.eventId, e.id));
+      return { ...e, checkedInCount: countRow[0]?.count ?? 0 };
+    })
+  );
+
+  res.json(withCounts);
+});
+
+// POST /api/orgs/:orgId/events — create a new event for this org (org_contact or superadmin)
+router.post("/:orgId/events", requireUserAuth, async (req: Request, res: Response): Promise<void> => {
+  const orgId = parseInt(req.params.orgId);
+  const user = res.locals.user;
+
+  if (user.role !== "superadmin" && user.orgId !== orgId) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  const { name, slug, eventDate, roles } = req.body as {
+    name?: string;
+    slug?: string;
+    eventDate?: string;
+    roles?: { roleKey: string; displayName: string }[];
+  };
+
+  if (!name?.trim() || !slug?.trim()) {
+    res.status(400).json({ error: "name and slug are required" });
+    return;
+  }
+
+  const slugClean = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const existing = await db
+    .select({ id: eventsTable.id })
+    .from(eventsTable)
+    .where(eq(eventsTable.slug, slugClean))
+    .limit(1);
+  if (existing[0]) {
+    res.status(409).json({ error: "An event with this slug already exists. Choose a different one." });
+    return;
+  }
+
+  const [event] = await db
+    .insert(eventsTable)
+    .values({
+      name: name.trim(),
+      slug: slugClean,
+      orgId,
+      eventDate: eventDate ? new Date(eventDate) : null,
+      isActive: true,
+      giveawayEnabled: false,
+    })
+    .returning();
+
+  if (roles && roles.length > 0) {
+    await db.insert(eventRolesTable).values(
+      roles.map((r, i) => ({
+        eventId: event.id,
+        roleKey: r.roleKey,
+        displayName: r.displayName,
+        sortOrder: i,
+      }))
+    );
+  }
+
+  res.status(201).json({ event });
+});
+
+export default router;

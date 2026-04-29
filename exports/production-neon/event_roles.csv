@@ -1,0 +1,6 @@
+id,event_id,role_key,display_name,sort_order
+1,1,safety_marshal,Safety Marshal,1
+2,1,medic,Medic,2
+3,1,de_escalator,De-escalator,3
+4,1,chant_lead,Chant Lead,4
+5,1,information_services,Info Services,5
