@@ -1494,7 +1494,10 @@ export default function SuperadminPage() {
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== "superadmin")) {
-      setLocation("/login");
+      if (user?.role === "org_contact") setLocation("/org");
+      else if (user?.role === "event_manager") setLocation("/admin");
+      else setLocation("/login");
+      return;
     }
   }, [authLoading, user]);
 
@@ -1507,7 +1510,10 @@ export default function SuperadminPage() {
   const totalCheckedIn = events.reduce((sum, e) => sum + (e.checkedInCount ?? 0), 0);
   const activeEvents = events.filter((e) => e.isActive).length;
 
-  if (authLoading || !user || user.role !== "superadmin") {
+  if (authLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><div className="text-muted-foreground text-lg">Loading…</div></div>;
+  }
+  if (!user || user.role !== "superadmin") {
     return null;
   }
 

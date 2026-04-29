@@ -83,8 +83,8 @@ function Router() {
         )}
       </Route>
 
-      {/* Superadmin */}
-      <Route path="/superadmin" component={SuperadminPage} />
+      {/* Platform admin */}
+      <Route path="/platform" component={SuperadminPage} />
 
       {/* Event admin */}
       <Route path="/admin" component={AdminDashboard} />
