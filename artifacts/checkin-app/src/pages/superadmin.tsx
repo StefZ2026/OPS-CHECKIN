@@ -1137,7 +1137,7 @@ function EventCard({ event, orgUsers, onUpdated, onImpersonate }: { event: Event
             {showQR && <QrModal event={event} onClose={() => setShowQR(false)} />}
 
             {(() => {
-              const adminUser = orgUsers.find((u) => u.event?.id === event.id) ?? orgUsers.find((u) => u.role === "org_contact") ?? null;
+              const adminUser = orgUsers.find((u) => u.event?.id === event.id) ?? orgUsers.find((u) => u.role === "org_contact") ?? orgUsers[0] ?? null;
               return (
                 <div className="flex gap-3 flex-wrap">
                   <a
